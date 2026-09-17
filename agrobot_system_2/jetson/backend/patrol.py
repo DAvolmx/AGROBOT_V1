@@ -53,7 +53,7 @@ COOLDOWN_DETECCION_S = 30.0
 # Grabación automática del recorrido: un punto cada tanto avance. La
 # distancia la fija la config (`autonomia.distancia_puntos_m`, 0,50 m); este
 # valor solo se usa si esa clave no estuviera.
-DISTANCIA_AUTO_M = 0.50
+DISTANCIA_AUTO_CM = 50
 TICK_AUTO_S = 0.2
 
 
@@ -66,7 +66,7 @@ class PatrolController:
 
     def __init__(self, *, send_nav_goal, cancel_nav_goal, estado_meta, get_pose,
                  trigger_scan, is_scanning, on_event, ruta_waypoints: Path,
-                 distancia_puntos=lambda: DISTANCIA_AUTO_M):
+                 distancia_puntos=lambda: DISTANCIA_AUTO_CM):
         self._distancia_puntos = distancia_puntos
         self._send_nav_goal = send_nav_goal      # (x, y, theta_deg) -> bool
         self._cancel_nav_goal = cancel_nav_goal  # ()
@@ -156,10 +156,10 @@ class PatrolController:
         self._emitir({"evento": "punto_auto", "total": len(self.waypoints)})
         if self._tarea_auto is None or self._tarea_auto.done():
             self._tarea_auto = asyncio.create_task(self._bucle_auto())
-        return True, f"grabando un punto cada {self._distancia_puntos():g} m"
+        return True, f"grabando un punto cada {self._distancia_puntos():g} cm"
 
     async def _bucle_auto(self):
-        """Suelta un punto cada DISTANCIA_AUTO_M recorridos. Mide sobre la
+        """Suelta un punto cada `autonomia.distancia_puntos_cm`. Mide sobre la
         pose del mapa, no sobre el tiempo: parado no acumula puntos."""
         try:
             while self.auto_activa:
@@ -168,7 +168,7 @@ class PatrolController:
                 if pose is None or self._auto_ultima is None:
                     continue
                 if math.hypot(pose["x"] - self._auto_ultima[0],
-                              pose["y"] - self._auto_ultima[1]) >= self._distancia_puntos():
+                              pose["y"] - self._auto_ultima[1]) >= self._distancia_puntos() / 100.0:
                     self._auto_ultima = (pose["x"], pose["y"])
                     self.agregar_waypoint(pose["x"], pose["y"], pose.get("theta_deg", 0.0))
                     self._emitir({"evento": "punto_auto", "total": len(self.waypoints)})

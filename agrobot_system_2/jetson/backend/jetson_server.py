@@ -575,9 +575,12 @@ def _ros_on_scan_points(points: list[dict]):
     cfg = state.config["slam"]
     _schedule(state.broadcast({"type": "lidar_scan",
                                "data": _decimar(points, RADAR_MAX_PUNTOS)}))
+    # Al dashboard en CENTÍMETROS: a estas distancias es lo que se entiende
+    # de un vistazo, y es como se configuran los umbrales.
+    d = lidar_reactive.distancias(cfg)
     _schedule(state.broadcast({"type": "lidar_distancias", "data": {
-        **lidar_reactive.distancias(cfg),
-        "margen_m": cfg["obstacle_margen_m"],
+        **{lado: (None if v is None else round(v * 100)) for lado, v in d.items()},
+        "umbral_cm": cfg["margen_parada_cm"] + cfg["deslizamiento_cm"],
     }}))
 
 
@@ -1797,7 +1800,7 @@ async def start_background(app: web.Application):
         is_scanning=_patrol_is_scanning,
         on_event=_patrol_event,
         ruta_waypoints=WAYPOINTS_PATH,
-        distancia_puntos=lambda: state.config["autonomia"]["distancia_puntos_m"],
+        distancia_puntos=lambda: state.config["autonomia"]["distancia_puntos_cm"],
     )
     print(f"[patrulla] lista — {len(patrol.waypoints)} waypoints grabados")
 
@@ -1811,6 +1814,7 @@ async def start_background(app: web.Application):
         on_event=lambda d: _evento("exploracion", d),
         grabar_recorrido=lambda activa: patrol.grabacion_auto(activa),
         edad_scan=lidar_reactive.edad_scan_s,
+        get_config=lambda: state.config["autonomia"],
     )
 
     pose_estimator.gyro_weight = state.config["slam"]["pose_gyro_trust"]

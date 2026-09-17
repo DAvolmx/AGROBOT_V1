@@ -87,20 +87,17 @@ class PoseEstimator:
 
 # Sin scan fresco no se sabe qué hay delante ni detrás.
 SCAN_VIEJO_S = 0.6
-# Holgura del corredor a cada lado de la carrocería.
-MARGEN_CORREDOR_M = 0.05
 
 
 class LidarReactive:
     """Frenado reactivo a partir del scan 2D. No mapea, solo mide y frena.
 
-    Mide dentro de un CORREDOR del ancho del robot, no dentro de un cono.
-    Antes era un cono de ±21° y tenía los dos defectos de un cono:
-      · de cerca es más estrecho que el robot: a 35 cm cubría ±13 cm, y las
-        esquinas chocaban contra lo que el cono no veía;
-      · de lejos se abre: en un pasillo estrecho ve las hileras de plantas
-        de los lados como si estuvieran delante y frena sin motivo.
-    Un corredor mira exactamente por donde va a pasar la carrocería.
+    Mide por SECTORES angulares configurables (ver `distancias`). Historia,
+    para no volver atrás: primero fue un cono fijo de ±21°, demasiado
+    estrecho para cubrir el ancho del robot de cerca; luego un corredor del
+    ancho de la carrocería, que en pasillos estrechos metía las paredes
+    laterales dentro del sector frontal y paraba el robot sin tener nada
+    delante. Ahora los ángulos los elige el operador desde el dashboard.
     """
 
     def __init__(self):
@@ -116,43 +113,52 @@ class LidarReactive:
         return math.inf if self.last_scan_at is None else time.time() - self.last_scan_at
 
     def distancias(self, cfg: dict) -> dict:
-        """Hueco libre desde cada cara de la carrocería hasta lo más cercano.
+        """Hueco libre desde cada cara de la carrocería, en METROS.
 
-        Ejes del robot: x adelante, y a la izquierda (convención de ROS). El
-        LIDAR está en el centro de base_link. None = nada a la vista en ese
-        lado. Se calcula una vez por scan: el actuador lo pide a 20 Hz y el
-        scan llega a 10.
+        Por SECTORES angulares configurables, no por un corredor del ancho
+        del robot. El corredor tenía un defecto que se notó en campo: en un
+        pasillo estrecho las paredes laterales caían dentro de él (el robot
+        mide 35 cm y el corredor 45), se contaban como obstáculo de FRENTE y
+        el robot se paraba sin tener nada delante.
+
+        Sectores (0° = adelante, + = izquierda, como en ROS):
+          adelante  : ±`cono_frontal_deg`/2
+          atras     : el espejo del frontal, alrededor de 180°
+          izquierda : ±`cono_lateral_deg`/2 alrededor de +90°
+          derecha   : lo mismo alrededor de -90°
+
+        A cada distancia se le resta media carrocería, así el número es lo
+        que falta para que TOQUE, no la distancia al centro del robot.
+        None = nada a la vista en ese sector.
         """
-        clave = (self.last_scan_at, cfg["robot_largo_m"], cfg["robot_ancho_m"])
+        clave = (self.last_scan_at, cfg["robot_largo_cm"], cfg["robot_ancho_cm"],
+                 cfg["cono_frontal_deg"], cfg["cono_lateral_deg"])
         if self._cache is not None and self._cache[0] == clave:
             return self._cache[1]
 
-        ml = cfg["robot_largo_m"] / 2
-        ma = cfg["robot_ancho_m"] / 2
-        m = MARGEN_CORREDOR_M
+        ml = cfg["robot_largo_cm"] / 200.0      # media carrocería, en metros
+        ma = cfg["robot_ancho_cm"] / 200.0
+        semi_frontal = cfg["cono_frontal_deg"] / 2.0
+        semi_lateral = cfg["cono_lateral_deg"] / 2.0
         adelante = atras = izquierda = derecha = math.inf
 
         for p in self.last_scan:
             d = p["distance_m"]
             if not (0.05 < d < math.inf):
                 continue
-            a = math.radians(p["angle_deg"])
-            x, y = d * math.cos(a), d * math.sin(a)
-            if abs(x) <= ml and abs(y) <= ma:
-                continue            # dentro de la carrocería: es el propio robot
-            if abs(y) <= ma + m:
-                if x > ml:
-                    adelante = min(adelante, x - ml)
-                elif x < -ml:
-                    atras = min(atras, -x - ml)
-            if abs(x) <= ml + m:
-                if y > ma:
-                    izquierda = min(izquierda, y - ma)
-                elif y < -ma:
-                    derecha = min(derecha, -y - ma)
+            a = _wrap180(p["angle_deg"])
+            abs_a = abs(a)
+            if abs_a <= semi_frontal:
+                adelante = min(adelante, d - ml)
+            elif abs_a >= 180.0 - semi_frontal:
+                atras = min(atras, d - ml)
+            elif abs(a - 90.0) <= semi_lateral:
+                izquierda = min(izquierda, d - ma)
+            elif abs(a + 90.0) <= semi_lateral:
+                derecha = min(derecha, d - ma)
 
         def _fin(v):
-            return None if v == math.inf else round(v, 3)
+            return None if v == math.inf else round(max(0.0, v), 3)
 
         res = {"adelante": _fin(adelante), "atras": _fin(atras),
                "izquierda": _fin(izquierda), "derecha": _fin(derecha)}
@@ -171,7 +177,7 @@ class LidarReactive:
           · al parar deja las ruedas sueltas y el robot desliza unos 80 cm
             (medido por el usuario el 2026-09-17).
         Así que hay que cortar con todo ese deslizamiento de antelación:
-            parar si  hueco <= margen + deslizamiento
+            parar si  hueco <= margen_parada_cm + deslizamiento_cm
 
         Sin datos del LIDAR no se permite avanzar ni retroceder: con 80 cm de
         deslizamiento y sin ver, no hay velocidad segura.
@@ -190,8 +196,13 @@ class LidarReactive:
         if hueco is None:
             return v, None
 
-        umbral = cfg["obstacle_margen_m"] + cfg["obstacle_deslizamiento_m"]
+        umbral = (cfg["margen_parada_cm"] + cfg["deslizamiento_cm"]) / 100.0
         if hueco > umbral:
             return v, None
         return 0.0, {"motivo": "obstaculo", "lado": lado, "distancia_m": hueco,
                      "umbral_m": round(umbral, 2)}
+
+
+def _wrap180(angulo_deg: float) -> float:
+    """Ángulo a (-180, 180]."""
+    return (angulo_deg + 180.0) % 360.0 - 180.0

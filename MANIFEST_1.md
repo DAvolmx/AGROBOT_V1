@@ -3657,3 +3657,16 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
 - `send_nav_goal` espera 5 s al servidor de Nav2, no 1,5: descubrirlo tardó
   2,25 s medidos.
 - Los eventos de la patrulla y la exploración van también al log.
+
+**Añadido el 2026-09-17 (madrugada):**
+- El frenado pasa de CORREDOR a SECTORES angulares configurables. El
+  corredor medía el ancho del robot + 5 cm, así que en pasillos estrechos las
+  paredes laterales caían dentro del sector frontal y el robot se paraba sin
+  tener nada delante. Ahora: `cono_frontal_deg` (el trasero es su espejo) y
+  `cono_lateral_deg`, con todos los umbrales en CENTÍMETROS
+  (`margen_parada_cm`, `deslizamiento_cm`, `robot_largo_cm`, `robot_ancho_cm`).
+- Sección `autonomia` con control total desde Parámetros: `avance_libre_cm`,
+  `lado_libre_cm`, `retroceso_libre_cm`, `escala_velocidad`,
+  `escaneo_periodo_s`, `distancia_puntos_cm`.
+- Las distancias del dashboard van en cm.
+- El explorador no arranca ni continúa sin LIDAR fresco (< 1 s).

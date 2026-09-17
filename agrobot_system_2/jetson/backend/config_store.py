@@ -46,18 +46,24 @@ DEFAULTS = {
         "clip_record_threshold": 0.60,
     },
     "slam": {
-        # Caja de la carrocería, centrada en el LIDAR. Medida del usuario
-        # (2026-09-17): 40 cm de largo x 35 de ancho. Tiene que coincidir con
-        # el `footprint` de nav2_params.yaml. El frenado mide dentro de un
-        # corredor de este ancho.
-        "robot_largo_m": 0.40,
-        "robot_ancho_m": 0.35,
-        # hueco que se deja libre al parar, medido desde la carrocería (m)
-        "obstacle_margen_m": 0.15,
-        # cuánto sigue avanzando el robot tras cortar los motores (m). Medido
-        # por el usuario el 2026-09-17: ~80 cm. El firmware deja las ruedas
-        # sueltas al parar; con freno activo este número bajaría mucho.
-        "obstacle_deslizamiento_m": 0.80,
+        # TODO EN CENTÍMETROS Y GRADOS, que es como se mide en el robot.
+        #
+        # Carrocería (medida por el usuario el 2026-09-17). Sirve para restar
+        # media carrocería a las distancias: así "adelante: 30 cm" significa
+        # 30 cm hasta tocar, no hasta el centro del robot. El `footprint` de
+        # nav2_params.yaml es aparte y va en metros: si cambia esto, cambiarlo.
+        "robot_largo_cm": 40,
+        "robot_ancho_cm": 35,
+        # Sectores del LIDAR. El trasero es el espejo del frontal.
+        # Frontal estrecho = pasa por pasillos sin frenar por las paredes;
+        # ancho = ve antes las esquinas, pero se frena más a menudo.
+        "cono_frontal_deg": 40,
+        "cono_lateral_deg": 60,
+        # Hueco que se deja sin invadir al parar.
+        "margen_parada_cm": 26,
+        # Lo que sigue avanzando tras cortar motores (las ruedas quedan
+        # sueltas). Se corta con esta antelación.
+        "deslizamiento_cm": 40,
         # filtro complementario de pose: 0 = confía solo en la velocidad
         # comandada (dead-reckoning puro), 1 = confía solo en el giroscopio
         "pose_gyro_trust": 0.8,
@@ -67,9 +73,14 @@ DEFAULTS = {
         # del máximo. Los motores no bajan de ~78 % de potencia, así que esto
         # solo limita el tope; para ir "despacio" lo que vale son los pulsos.
         "escala_velocidad": 0.5,
-        # Un punto del recorrido cada tantos metros recorridos (grabación
-        # automática y exploración). 0,50 m lo pidió el usuario el 2026-09-17.
-        "distancia_puntos_m": 0.50,
+        # Un punto del recorrido cada tantos cm recorridos (grabación
+        # automática y exploración).
+        "distancia_puntos_cm": 50,
+        # Decisiones del modo exploración, en cm de hueco LIBRE hasta tocar:
+        "avance_libre_cm": 100,      # para lanzar un pulso de avance
+        "lado_libre_cm": 60,         # para considerar un lado como salida
+        "retroceso_libre_cm": 50,    # para poder retroceder
+        "escaneo_periodo_s": 120,    # cada cuánto se para a barrer con la cámara
     },
     "odometria_webcam": {
         # Odometría visual con la webcam (odometria_webcam.py). `habilitada`

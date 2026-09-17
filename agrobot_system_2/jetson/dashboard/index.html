@@ -779,8 +779,8 @@ input[type="text"], select { font-family: inherit; }
           <label class="switch"><input type="checkbox" id="auto-grabar"><div class="track"></div></label>
         </div>
         <div class="slider-row" style="margin-top:10px;">
-          <div class="label-row"><span>Un punto cada</span><span class="v mono" id="p-dist-puntos-val">0.50 m</span></div>
-          <input type="range" min="0.2" max="5" step="0.1" value="0.5" id="p-dist-puntos">
+          <div class="label-row"><span>Un punto cada</span><span class="v mono" id="p-dist-puntos-val">50 cm</span></div>
+          <input type="range" min="20" max="500" step="10" value="50" id="p-dist-puntos">
           <p class="hint" style="margin-top:6px;">Vale para la grabación mientras conducís y para la exploración.
             Se aplica al soltar el control.</p>
         </div>
@@ -1104,28 +1104,65 @@ input[type="text"], select { font-family: inherit; }
         <div class="col">
           <div class="card">
             <h3>Frenado por LIDAR</h3>
-            <p class="hint" style="margin-bottom:12px;">Mide dentro de un corredor del ancho del robot (no un cono), así en pasillos
-              estrechos no frena por las hileras de los lados. Corta los motores con antelación suficiente para el deslizamiento: el robot no tiene gama lenta real ni freno.
-              Largo y ancho deben coincidir con el <code>footprint</code> de <code>nav2_params.yaml</code>.</p>
+            <p class="hint" style="margin-bottom:12px;">Todo en centímetros y grados. Mira por sectores: un cono al frente (y su
+              espejo atrás) y un cono a cada lado. <b>Cono frontal estrecho</b> = pasa por pasillos sin frenar por las paredes;
+              ancho = ve antes las esquinas pero frena más. Corta los motores con <b>margen + deslizamiento</b> de antelación,
+              porque el robot no tiene gama lenta ni freno. El largo y el ancho solo se usan para restar media carrocería
+              (deben coincidir con el <code>footprint</code> de <code>nav2_params.yaml</code>).</p>
             <div class="param-group">
               <div class="slider-row" style="margin-bottom:14px;">
-                <div class="label-row"><span>Largo del robot</span><span class="v mono" id="p-largo-val">0.50 m</span></div>
-                <input type="range" min="0.2" max="1.2" step="0.01" value="0.50" id="p-largo">
+                <div class="label-row"><span>Cono frontal (el trasero es su espejo)</span><span class="v mono" id="p-cono-frontal-val">60°</span></div>
+                <input type="range" min="10" max="180" step="5" value="60" id="p-cono-frontal">
               </div>
               <div class="slider-row" style="margin-bottom:14px;">
-                <div class="label-row"><span>Ancho del robot</span><span class="v mono" id="p-ancho-val">0.50 m</span></div>
-                <input type="range" min="0.2" max="1.2" step="0.01" value="0.50" id="p-ancho">
+                <div class="label-row"><span>Cono lateral (a cada lado)</span><span class="v mono" id="p-cono-lateral-val">60°</span></div>
+                <input type="range" min="10" max="160" step="5" value="60" id="p-cono-lateral">
               </div>
               <div class="slider-row" style="margin-bottom:14px;">
-                <div class="label-row"><span>Hueco que deja al parar</span><span class="v mono" id="p-margen-val">0.15 m</span></div>
-                <input type="range" min="0.05" max="0.8" step="0.01" value="0.15" id="p-margen">
+                <div class="label-row"><span>Hueco que deja al parar</span><span class="v mono" id="p-margen-val">26 cm</span></div>
+                <input type="range" min="2" max="100" step="1" value="26" id="p-margen">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Cuánto desliza al cortar motores</span><span class="v mono" id="p-desliz-val">40 cm</span></div>
+                <input type="range" min="0" max="150" step="5" value="40" id="p-desliz">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Largo del robot</span><span class="v mono" id="p-largo-val">40 cm</span></div>
+                <input type="range" min="20" max="120" step="1" value="40" id="p-largo">
               </div>
               <div class="slider-row">
-                <div class="label-row"><span>Cuánto desliza al cortar motores</span><span class="v mono" id="p-desliz-val">0.80 m</span></div>
-                <input type="range" min="0.05" max="1.5" step="0.05" value="0.80" id="p-desliz">
+                <div class="label-row"><span>Ancho del robot</span><span class="v mono" id="p-ancho-val">35 cm</span></div>
+                <input type="range" min="20" max="120" step="1" value="35" id="p-ancho">
               </div>
             </div>
             <button class="btn primary" id="p-slam-save" style="margin-bottom:18px;">Guardar</button>
+
+            <h3>Autonomía (modo exploración)</h3>
+            <p class="hint" style="margin-bottom:12px;">Cuánto hueco LIBRE (hasta tocar) exige el robot para decidir cada
+              maniobra. Si se para demasiado en sitios estrechos, bajá «avance libre»; si roza, subilo.</p>
+            <div class="param-group">
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Avance libre mínimo</span><span class="v mono" id="p-avance-val">100 cm</span></div>
+                <input type="range" min="30" max="300" step="5" value="100" id="p-avance">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Lado libre para girar hacia ahí</span><span class="v mono" id="p-lado-val">60 cm</span></div>
+                <input type="range" min="10" max="200" step="5" value="60" id="p-lado">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Espacio atrás para retroceder</span><span class="v mono" id="p-retro-val">50 cm</span></div>
+                <input type="range" min="10" max="200" step="5" value="50" id="p-retro">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Acelerador en autónomo</span><span class="v mono" id="p-escala-val">50 %</span></div>
+                <input type="range" min="10" max="100" step="5" value="50" id="p-escala">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>Barrido de cámara cada</span><span class="v mono" id="p-escaneo-val">120 s</span></div>
+                <input type="range" min="15" max="600" step="15" value="120" id="p-escaneo">
+              </div>
+            </div>
+            <button class="btn primary" id="p-autonomia-save" style="margin-bottom:18px;">Guardar</button>
 
             <h3>Fusión de pose (sin encoders)</h3>
             <div class="slider-row">
@@ -1594,7 +1631,7 @@ input[type="text"], select { font-family: inherit; }
 
   function pintarDistancias(d) {
     ultimasDistanciasT = Date.now();
-    const margen = d.margen_m ?? 0.15;
+    const umbral = d.umbral_cm ?? 66;
     document.querySelectorAll(".dist-celda").forEach((celda) => {
       const valor = d[celda.dataset.lado];
       celda.classList.remove("ok", "aviso", "peligro");
@@ -1603,8 +1640,8 @@ input[type="text"], select { font-family: inherit; }
         celda.classList.add("ok");
         return;
       }
-      celda.querySelector(".v").textContent = valor.toFixed(2) + " m";
-      celda.classList.add(valor <= margen ? "peligro" : valor <= margen + 0.35 ? "aviso" : "ok");
+      celda.querySelector(".v").textContent = valor + " cm";
+      celda.classList.add(valor <= umbral ? "peligro" : valor <= umbral + 35 ? "aviso" : "ok");
     });
     pintarEstadoDistancias();
   }
@@ -1613,7 +1650,7 @@ input[type="text"], select { font-family: inherit; }
     frenadoHasta = Date.now() + 700;
     textoFrenado = aviso.motivo === "lidar_sin_datos"
       ? "LIDAR sin datos: no avanza ni retrocede (solo gira)"
-      : `Frenando: obstáculo ${nombreLado[aviso.lado] || ""} a ${aviso.distancia_m.toFixed(2)} m`;
+      : `Frenando: obstáculo ${nombreLado[aviso.lado] || ""} a ${Math.round(aviso.distancia_m * 100)} cm`;
     pintarEstadoDistancias();
   }
 
@@ -1796,8 +1833,26 @@ input[type="text"], select { font-family: inherit; }
 
   // `change` y no `input`: guardar en cada píxel del arrastre sería un POST
   // por movimiento del dedo.
+  function aplicarConfigAutonomia(a) {
+    const pares = [["p-dist-puntos", a.distancia_puntos_cm], ["p-avance", a.avance_libre_cm],
+                   ["p-lado", a.lado_libre_cm], ["p-retro", a.retroceso_libre_cm],
+                   ["p-escala", Math.round(a.escala_velocidad * 100)],
+                   ["p-escaneo", a.escaneo_periodo_s]];
+    for (const [id, v] of pares) {
+      if ($(id) !== document.activeElement) { $(id).value = v; liveSliders[id](v); }
+    }
+  }
+
+  $("p-autonomia-save").addEventListener("click", () => saveParams("autonomia", {
+    avance_libre_cm: parseFloat($("p-avance").value),
+    lado_libre_cm: parseFloat($("p-lado").value),
+    retroceso_libre_cm: parseFloat($("p-retro").value),
+    escala_velocidad: parseFloat($("p-escala").value) / 100,
+    escaneo_periodo_s: parseFloat($("p-escaneo").value),
+  }));
+
   $("p-dist-puntos").addEventListener("change", (e) =>
-    saveParams("autonomia", { distancia_puntos_m: parseFloat(e.target.value) }));
+    saveParams("autonomia", { distancia_puntos_cm: parseFloat(e.target.value) }));
 
   $("auto-grabar").addEventListener("change", async (e) => {
     const res = await fetch("/api/patrol/auto", {
@@ -2349,14 +2404,12 @@ input[type="text"], select { font-family: inherit; }
     }
     if (cfg.slam) {
       if (cfg.odometria_webcam) aplicarConfigOdomWebcam(cfg.odometria_webcam);
-      if (cfg.autonomia && $("p-dist-puntos") !== document.activeElement) {
-        $("p-dist-puntos").value = cfg.autonomia.distancia_puntos_m;
-        liveSliders["p-dist-puntos"](cfg.autonomia.distancia_puntos_m);
+      if (cfg.autonomia) aplicarConfigAutonomia(cfg.autonomia);
+      for (const [id, v] of [["p-largo", cfg.slam.robot_largo_cm], ["p-ancho", cfg.slam.robot_ancho_cm],
+                             ["p-margen", cfg.slam.margen_parada_cm], ["p-desliz", cfg.slam.deslizamiento_cm],
+                             ["p-cono-frontal", cfg.slam.cono_frontal_deg], ["p-cono-lateral", cfg.slam.cono_lateral_deg]]) {
+        if ($(id) !== document.activeElement) { $(id).value = v; liveSliders[id](v); }
       }
-      $("p-largo").value = cfg.slam.robot_largo_m; $("p-largo-val").textContent = cfg.slam.robot_largo_m.toFixed(2) + " m";
-      $("p-ancho").value = cfg.slam.robot_ancho_m; $("p-ancho-val").textContent = cfg.slam.robot_ancho_m.toFixed(2) + " m";
-      $("p-margen").value = cfg.slam.obstacle_margen_m; $("p-margen-val").textContent = cfg.slam.obstacle_margen_m.toFixed(2) + " m";
-      $("p-desliz").value = cfg.slam.obstacle_deslizamiento_m; $("p-desliz-val").textContent = cfg.slam.obstacle_deslizamiento_m.toFixed(2) + " m";
       $("p-gyro").value = cfg.slam.pose_gyro_trust; $("p-gyro-val").textContent = Number(cfg.slam.pose_gyro_trust).toFixed(2);
     }
   }
@@ -2378,11 +2431,18 @@ input[type="text"], select { font-family: inherit; }
     "ov-incl": (v) => $("ov-incl-val").textContent = parseFloat(v).toFixed(1) + "°",
     "ov-hfov": (v) => $("ov-hfov-val").textContent = v + "°",
     "ov-adelante": (v) => $("ov-adelante-val").textContent = parseFloat(v).toFixed(2) + " m",
-    "p-dist-puntos": (v) => $("p-dist-puntos-val").textContent = parseFloat(v).toFixed(2) + " m",
-    "p-largo": (v) => $("p-largo-val").textContent = parseFloat(v).toFixed(2) + " m",
-    "p-ancho": (v) => $("p-ancho-val").textContent = parseFloat(v).toFixed(2) + " m",
-    "p-margen": (v) => $("p-margen-val").textContent = parseFloat(v).toFixed(2) + " m",
-    "p-desliz": (v) => $("p-desliz-val").textContent = parseFloat(v).toFixed(2) + " m",
+    "p-dist-puntos": (v) => $("p-dist-puntos-val").textContent = v + " cm",
+    "p-avance": (v) => $("p-avance-val").textContent = v + " cm",
+    "p-lado": (v) => $("p-lado-val").textContent = v + " cm",
+    "p-retro": (v) => $("p-retro-val").textContent = v + " cm",
+    "p-escala": (v) => $("p-escala-val").textContent = Math.round(v) + " %",
+    "p-escaneo": (v) => $("p-escaneo-val").textContent = v + " s",
+    "p-largo": (v) => $("p-largo-val").textContent = v + " cm",
+    "p-ancho": (v) => $("p-ancho-val").textContent = v + " cm",
+    "p-margen": (v) => $("p-margen-val").textContent = v + " cm",
+    "p-desliz": (v) => $("p-desliz-val").textContent = v + " cm",
+    "p-cono-frontal": (v) => $("p-cono-frontal-val").textContent = v + "°",
+    "p-cono-lateral": (v) => $("p-cono-lateral-val").textContent = v + "°",
     "p-gyro": (v) => $("p-gyro-val").textContent = parseFloat(v).toFixed(2),
     "p-max-v": (v) => { $("p-max-v-val").textContent = parseFloat(v).toFixed(2) + " m/s"; maxVel.v = parseFloat(v); refreshSpeedLabel(); },
     "p-max-omega": (v) => $("p-max-omega-val").textContent = parseFloat(v).toFixed(1) + " rad/s",
@@ -2452,10 +2512,12 @@ input[type="text"], select { font-family: inherit; }
     max_omega_rps: parseFloat($("p-max-omega").value),
   }));
   $("p-slam-save").addEventListener("click", () => saveParams("slam", {
-    robot_largo_m: parseFloat($("p-largo").value),
-    robot_ancho_m: parseFloat($("p-ancho").value),
-    obstacle_margen_m: parseFloat($("p-margen").value),
-    obstacle_deslizamiento_m: parseFloat($("p-desliz").value),
+    robot_largo_cm: parseFloat($("p-largo").value),
+    robot_ancho_cm: parseFloat($("p-ancho").value),
+    margen_parada_cm: parseFloat($("p-margen").value),
+    deslizamiento_cm: parseFloat($("p-desliz").value),
+    cono_frontal_deg: parseFloat($("p-cono-frontal").value),
+    cono_lateral_deg: parseFloat($("p-cono-lateral").value),
     pose_gyro_trust: parseFloat($("p-gyro").value),
   }));
 

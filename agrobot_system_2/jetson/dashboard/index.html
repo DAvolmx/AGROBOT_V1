@@ -1025,7 +1025,7 @@ input[type="text"], select { font-family: inherit; }
           <div class="card">
             <h3>Frenado por LIDAR</h3>
             <p class="hint" style="margin-bottom:12px;">Mide dentro de un corredor del ancho del robot (no un cono), así en pasillos
-              estrechos no frena por las hileras de los lados. La velocidad máxima baja según lo que falta para parar.
+              estrechos no frena por las hileras de los lados. Corta los motores con antelación suficiente para el deslizamiento: el robot no tiene gama lenta real ni freno.
               Largo y ancho deben coincidir con el <code>footprint</code> de <code>nav2_params.yaml</code>.</p>
             <div class="param-group">
               <div class="slider-row" style="margin-bottom:14px;">
@@ -1041,8 +1041,8 @@ input[type="text"], select { font-family: inherit; }
                 <input type="range" min="0.05" max="0.8" step="0.01" value="0.15" id="p-margen">
               </div>
               <div class="slider-row">
-                <div class="label-row"><span>Frenada del robot (menor = frena antes)</span><span class="v mono" id="p-decel-val">0.80 m/s²</span></div>
-                <input type="range" min="0.2" max="3" step="0.05" value="0.80" id="p-decel">
+                <div class="label-row"><span>Cuánto desliza al cortar motores</span><span class="v mono" id="p-desliz-val">0.80 m</span></div>
+                <input type="range" min="0.05" max="1.5" step="0.05" value="0.80" id="p-desliz">
               </div>
             </div>
             <button class="btn primary" id="p-slam-save" style="margin-bottom:18px;">Guardar</button>
@@ -1513,7 +1513,7 @@ input[type="text"], select { font-family: inherit; }
   function marcarFrenado(aviso) {
     frenadoHasta = Date.now() + 700;
     textoFrenado = aviso.motivo === "lidar_sin_datos"
-      ? "LIDAR sin datos: velocidad limitada a 0,15 m/s"
+      ? "LIDAR sin datos: no avanza ni retrocede (solo gira)"
       : `Frenando: obstáculo ${nombreLado[aviso.lado] || ""} a ${aviso.distancia_m.toFixed(2)} m`;
     pintarEstadoDistancias();
   }
@@ -2143,7 +2143,7 @@ input[type="text"], select { font-family: inherit; }
       $("p-largo").value = cfg.slam.robot_largo_m; $("p-largo-val").textContent = cfg.slam.robot_largo_m.toFixed(2) + " m";
       $("p-ancho").value = cfg.slam.robot_ancho_m; $("p-ancho-val").textContent = cfg.slam.robot_ancho_m.toFixed(2) + " m";
       $("p-margen").value = cfg.slam.obstacle_margen_m; $("p-margen-val").textContent = cfg.slam.obstacle_margen_m.toFixed(2) + " m";
-      $("p-decel").value = cfg.slam.obstacle_decel_mps2; $("p-decel-val").textContent = cfg.slam.obstacle_decel_mps2.toFixed(2) + " m/s²";
+      $("p-desliz").value = cfg.slam.obstacle_deslizamiento_m; $("p-desliz-val").textContent = cfg.slam.obstacle_deslizamiento_m.toFixed(2) + " m";
       $("p-gyro").value = cfg.slam.pose_gyro_trust; $("p-gyro-val").textContent = Number(cfg.slam.pose_gyro_trust).toFixed(2);
     }
   }
@@ -2164,7 +2164,7 @@ input[type="text"], select { font-family: inherit; }
     "p-largo": (v) => $("p-largo-val").textContent = parseFloat(v).toFixed(2) + " m",
     "p-ancho": (v) => $("p-ancho-val").textContent = parseFloat(v).toFixed(2) + " m",
     "p-margen": (v) => $("p-margen-val").textContent = parseFloat(v).toFixed(2) + " m",
-    "p-decel": (v) => $("p-decel-val").textContent = parseFloat(v).toFixed(2) + " m/s²",
+    "p-desliz": (v) => $("p-desliz-val").textContent = parseFloat(v).toFixed(2) + " m",
     "p-gyro": (v) => $("p-gyro-val").textContent = parseFloat(v).toFixed(2),
     "p-max-v": (v) => { $("p-max-v-val").textContent = parseFloat(v).toFixed(2) + " m/s"; maxVel.v = parseFloat(v); refreshSpeedLabel(); },
     "p-max-omega": (v) => $("p-max-omega-val").textContent = parseFloat(v).toFixed(1) + " rad/s",
@@ -2192,7 +2192,7 @@ input[type="text"], select { font-family: inherit; }
     robot_largo_m: parseFloat($("p-largo").value),
     robot_ancho_m: parseFloat($("p-ancho").value),
     obstacle_margen_m: parseFloat($("p-margen").value),
-    obstacle_decel_mps2: parseFloat($("p-decel").value),
+    obstacle_deslizamiento_m: parseFloat($("p-desliz").value),
     pose_gyro_trust: parseFloat($("p-gyro").value),
   }));
 

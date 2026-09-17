@@ -22,8 +22,8 @@
     "robot_largo_m": 0.4,
     "robot_ancho_m": 0.35,
     "obstacle_margen_m": 0.15,
-    "obstacle_decel_mps2": 0.8,
-    "pose_gyro_trust": 0.85
+    "pose_gyro_trust": 0.85,
+    "obstacle_deslizamiento_m": 0.8
   },
   "control": {
     "max_v_mps": 1.5,

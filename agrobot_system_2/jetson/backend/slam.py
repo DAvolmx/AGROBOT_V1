@@ -85,12 +85,8 @@ class PoseEstimator:
         return {"x": self.x, "y": self.y, "theta_deg": math.degrees(self.theta) % 360}
 
 
-# Retraso entre que algo aparece y que el robot empieza a frenar: un scan a
-# 10 Hz (hasta 100 ms de antigüedad) más el viaje hasta el C3.
-LATENCIA_FRENADO_S = 0.15
-# Sin scan fresco no se sabe qué hay delante: se permite moverse, pero lento.
+# Sin scan fresco no se sabe qué hay delante ni detrás.
 SCAN_VIEJO_S = 0.6
-VEL_SIN_LIDAR_MPS = 0.15
 # Holgura del corredor a cada lado de la carrocería.
 MARGEN_CORREDOR_M = 0.05
 
@@ -164,15 +160,21 @@ class LidarReactive:
         return res
 
     def limitar_velocidad(self, v: float, cfg: dict) -> tuple[float, dict | None]:
-        """Recorta v para que el robot pueda parar antes de tocar lo que tiene
-        delante (o detrás, si va marcha atrás). Devuelve (v, aviso|None).
+        """Corta el avance (o el retroceso) cuando lo que hay en esa dirección
+        está más cerca que lo que el robot necesita para detenerse.
+        Devuelve (v, aviso|None).
 
-        El tope depende de la velocidad, no de una distancia fija. Antes se
-        paraba a 0,35 m siempre: suficiente a paso lento, corto a 0,9 m/s, y
-        el firmware además deja las ruedas sueltas al parar (no frena), así
-        que el robot seguía deslizando y chocaba. Ahora la velocidad máxima
-        permitida es la que deja frenar en el espacio libre:
-            v_max = sqrt(2 · decel · (hueco − margen − v · latencia))
+        Es un CORTE a cero, no una reducción gradual, por dos límites del
+        hardware medidos en el robot:
+          · el firmware mapea cualquier velocidad pedida a PWM 200..255
+            (78 % a 100 %): pedir la mitad de velocidad casi no lo frena;
+          · al parar deja las ruedas sueltas y el robot desliza unos 80 cm
+            (medido por el usuario el 2026-09-17).
+        Así que hay que cortar con todo ese deslizamiento de antelación:
+            parar si  hueco <= margen + deslizamiento
+
+        Sin datos del LIDAR no se permite avanzar ni retroceder: con 80 cm de
+        deslizamiento y sin ver, no hay velocidad segura.
 
         NO recorta el giro: girar sobre el propio eje no acerca el frente a
         nada, y quitarle el giro le quita justo la maniobra para zafar.
@@ -181,22 +183,15 @@ class LidarReactive:
             return v, None
 
         if self.edad_scan_s() > SCAN_VIEJO_S:
-            if abs(v) <= VEL_SIN_LIDAR_MPS:
-                return v, None
-            return math.copysign(VEL_SIN_LIDAR_MPS, v), {"motivo": "lidar_sin_datos"}
+            return 0.0, {"motivo": "lidar_sin_datos"}
 
         lado = "adelante" if v > 0 else "atras"
         hueco = self.distancias(cfg)[lado]
         if hueco is None:
             return v, None
 
-        libre = hueco - cfg["obstacle_margen_m"] - abs(v) * LATENCIA_FRENADO_S
-        v_perm = math.sqrt(2 * cfg["obstacle_decel_mps2"] * libre) if libre > 0 else 0.0
-        if v_perm < 0.03:
-            v_perm = 0.0
-        if abs(v) <= v_perm:
+        umbral = cfg["obstacle_margen_m"] + cfg["obstacle_deslizamiento_m"]
+        if hueco > umbral:
             return v, None
-        return math.copysign(v_perm, v), {
-            "motivo": "obstaculo", "lado": lado,
-            "distancia_m": hueco, "v_permitida": round(v_perm, 2),
-        }
+        return 0.0, {"motivo": "obstaculo", "lado": lado, "distancia_m": hueco,
+                     "umbral_m": round(umbral, 2)}

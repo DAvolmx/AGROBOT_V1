@@ -54,9 +54,10 @@ DEFAULTS = {
         "robot_ancho_m": 0.35,
         # hueco que se deja libre al parar, medido desde la carrocería (m)
         "obstacle_margen_m": 0.15,
-        # frenada que se le supone al robot. Conservadora a propósito: el
-        # firmware deja las ruedas sueltas al parar y el robot desliza.
-        "obstacle_decel_mps2": 0.8,
+        # cuánto sigue avanzando el robot tras cortar los motores (m). Medido
+        # por el usuario el 2026-09-17: ~80 cm. El firmware deja las ruedas
+        # sueltas al parar; con freno activo este número bajaría mucho.
+        "obstacle_deslizamiento_m": 0.80,
         # filtro complementario de pose: 0 = confía solo en la velocidad
         # comandada (dead-reckoning puro), 1 = confía solo en el giroscopio
         "pose_gyro_trust": 0.8,

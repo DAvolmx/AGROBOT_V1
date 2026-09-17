@@ -75,6 +75,23 @@ cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
   Un reinicio de ROS sin cargar mapa empieza uno nuevo y el recorrido deja de
   valer.
 
+### Odometría visual (preparada, sin cámara todavía)
+- La webcam NexiGo N60 no sirve: monocular (sin escala) y sobre el servo de
+  escaneo. Decisión del usuario (2026-09-17): cámara de profundidad FIJA al
+  frente (RealSense D435i u OAK-D Lite).
+- `launch/odometria_visual.launch.py` (incluido por el de mapeo, apagado por
+  defecto) + `config/odometria_visual.yaml` → rtabmap `rgbd_odometry` publica
+  `/odom_visual`. `ekf.yaml` ya lo fusiona como `odom2` (vx + giro); sin
+  publicador no hace nada.
+- Para activarla: instalar el driver (`ros-jazzy-realsense2-camera` o
+  `ros-jazzy-depthai-ros-driver`), medir `CAM_XYZ` en el launch, comprobar los
+  tópicos del preset con `ros2 topic list`, y en `/etc/default/agrobot`:
+  `AGROBOT_LAUNCH_ARGS="odom_visual:=true camara:=realsense"` +
+  `sudo systemctl restart agrobot-ros`.
+- Validado sin cámara: los argumentos aparecen en el launch, sin driver avisa
+  en vez de romper, rtabmap acepta los parámetros y el EKF carga con 4
+  fuentes. **No probado con imágenes reales.**
+
 ### Manejo manual
 - Por pulsos (`pulse_drive.py`, `POST /api/drive`): un toque = 1 s
   adelante/atrás, encadenable hasta 3 s. Espacio o ■ = parada. Giro con
@@ -106,8 +123,7 @@ cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
 3. Parachoques físico con finales de carrera directo al C3.
 4. Seguridad: clave del AP `12345678`, API sin autenticación.
 5. Arreglar `agrobot_navigation.launch.py`.
-6. Odometría visual: pedida el 2026-09-17, en evaluación (la cámara es
-   monocular y va montada sobre el servo de escaneo).
+6. Odometría visual: **preparada, falta la cámara** (ver abajo).
 7. Pila para el RTC de la Jetson.
 8. Borrar `obstacle_avoidance.py` y corregir `REPORTE_MEJORAS_2026-09-13.md`.
 
@@ -3578,3 +3594,12 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
 `ros2_ws/src/agrobot_navigation/launch/agrobot_{mapping,navigation}.launch.py`,
 `ros2_ws/src/agrobot_navigation/config/nav2_params.yaml`, `INICIAR_BOT.sh`,
 `jetson/systemd/*`, `.gitignore`.
+
+**Añadido el mismo 2026-09-17 (tarde):**
+- Frenado: corte a `margen (0,15) + deslizamiento medido (0,80)`; sin LIDAR
+  no avanza. `obstacle_decel_mps2` reemplazado por `obstacle_deslizamiento_m`.
+- Mapas con nombre: `backend/mapas.py`, `GET /api/mapas`,
+  `POST /api/mapas/guardar|cargar`, carpeta `agrobot_system_2/maps/`.
+- Odometría visual preparada (ver sección 0). `agrobot-ros.service` acepta
+  `AGROBOT_LAUNCH_ARGS` desde `/etc/default/agrobot`.
+- Huella real del robot 0,40 × 0,35 m en `nav2_params.yaml` y config.

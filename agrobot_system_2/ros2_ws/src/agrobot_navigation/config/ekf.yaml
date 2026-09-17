@@ -1,6 +1,6 @@
 # robot_localization — EKF que reemplaza al PoseEstimator casero de slam.py.
 #
-# Fusiona TRES fuentes desde 2026-09-06:
+# Fusiona TRES fuentes desde 2026-09-06 (CUATRO si hay odometría visual, ver odom2):
 #   - /odom_rf2o      : odometría por casamiento de scans del LIDAR (rf2o).
 #                       Es la ÚNICA medida real de traslación que tiene el
 #                       robot: no hay encoders, y hasta ahora el avance era
@@ -72,6 +72,21 @@ ekf_filter_node:
                    false, false, false]
     odom1_differential: false
     odom1_relative: false
+
+    # Odometría visual (rtabmap rgbd_odometry), preparada el 2026-09-17 para
+    # una cámara de profundidad fija que todavía no está montada. Mientras
+    # nadie publique /odom_visual este bloque no hace nada. Se toman `vx` y el
+    # giro: una cámara con profundidad mide bien los dos, y no le afecta el
+    # cabeceo que corrompe a rf2o. Cuando pierde el seguimiento rtabmap
+    # publica covarianza enorme y el filtro deja de creerle solo.
+    odom2: /odom_visual
+    odom2_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, true,
+                   false, false, false]
+    odom2_differential: false
+    odom2_relative: false
 
     imu0: /imu/data_raw
     # Del IMU se toma SOLO la velocidad angular en yaw (indice 11).

@@ -3,12 +3,15 @@ Modo MAPEO — primera pasada por un terreno nuevo.
 
   ros2 launch agrobot_navigation agrobot_mapping.launch.py
 
-Sube: sllidar_ros2 (driver real del RPLIDAR C1) + robot_localization (EKF)
-+ slam_toolbox en modo mapping. NO sube Nav2 todavía — en este modo el
-robot se mueve manual desde el dashboard mientras se construye el mapa.
-Cuando el mapa se ve bien, guardarlo con POST /api/nav/save_map (o
-`ros2 run nav2_map_server map_saver_cli -f maps/agrobot_map`) y pasar a
-agrobot_navigation.launch.py.
+Es el launch que usa systemd (agrobot-ros.service) en el día a día.
+
+Sube: sllidar_ros2 (driver real del RPLIDAR C1) + rf2o + robot_localization
+(EKF) + slam_toolbox en modo mapping + Nav2 (desde 2026-09-17), así la
+patrulla autónoma navega sobre el mapa mientras este sigue creciendo. Los
+mapas se guardan y reusan con nombre desde el dashboard (backend/mapas.py).
+
+Opcional: odometría visual con `odom_visual:=true camara:=realsense|oak`
+(ver odometria_visual.launch.py).
 """
 import os
 from ament_index_python.packages import get_package_share_directory
@@ -249,6 +252,10 @@ def generate_launch_description():
                           "bond_timeout": 0.0}]),
     ]
 
+    # Odometría visual: apagada salvo `odom_visual:=true` (ver ese launch).
+    odometria_visual = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "odometria_visual.launch.py")))
+
     return LaunchDescription([
         DeclareLaunchArgument(
             "odom_estatico", default_value="false",
@@ -264,4 +271,5 @@ def generate_launch_description():
         slam_node,
         slam_lifecycle,
         *nav2,
+        odometria_visual,
     ])

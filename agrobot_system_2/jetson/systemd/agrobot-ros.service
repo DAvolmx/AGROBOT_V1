@@ -25,8 +25,10 @@ WorkingDirectory=/home/jetson/Desktop/AGROBOT/agrobot_system_2/ros2_ws
 # Se elige en /etc/default/agrobot (una linea). Si ese fichero no existe se
 # usa mapeo, que es el modo seguro: no carga un mapa que quiza no esta ni
 # planifica rutas sin querer.
+# AGROBOT_LAUNCH_ARGS: argumentos extra del launch, sin comillas internas.
+# Ej. para la odometría visual: AGROBOT_LAUNCH_ARGS="odom_visual:=true camara:=realsense"
 EnvironmentFile=-/etc/default/agrobot
-ExecStart=/bin/bash -lc 'source /opt/ros/jazzy/setup.bash && source install/setup.bash && exec ros2 launch agrobot_navigation "${AGROBOT_LAUNCH:-agrobot_mapping.launch.py}"'
+ExecStart=/bin/bash -lc 'source /opt/ros/jazzy/setup.bash && source install/setup.bash && exec ros2 launch agrobot_navigation "${AGROBOT_LAUNCH:-agrobot_mapping.launch.py}" ${AGROBOT_LAUNCH_ARGS:-}'
 
 Restart=always
 RestartSec=8

@@ -1,0 +1,33 @@
+# Odometría visual con rtabmap (rgbd_odometry) para una cámara de
+# profundidad MONTADA FIJA al frente del robot. Preparado el 2026-09-17,
+# antes de tener la cámara: no se ha probado con imágenes reales.
+#
+# Por qué una cámara nueva y no la webcam actual: la NexiGo N60 es monocular
+# (no mide distancias, así que no da escala métrica) y va sobre el servo de
+# escaneo, que la gira cada 2 minutos. rgbd_odometry necesita profundidad.
+#
+# Se activa desde el launch (odometria_visual.launch.py, argumento
+# odom_visual:=true). Los parámetros de rtabmap van SIEMPRE como strings.
+rgbd_odometry:
+  ros__parameters:
+    frame_id: base_link
+    odom_frame_id: odom
+    # El EKF ya publica odom -> base_link. Si esto también la publicara
+    # habría dos dueños de la misma TF y el robot "saltaría" entre ambas.
+    publish_tf: false
+    wait_for_transform: 0.2
+    approx_sync: true        # color y profundidad no llegan con el mismo sello exacto
+    approx_sync_max_interval: 0.05
+    queue_size: 10
+
+    # Robot en el suelo: solo x, y y giro. Sin esto la estimación se va en
+    # z/cabeceo con los baches y contamina el avance.
+    "Reg/Force3DoF": "true"
+    # Frame-to-Map: más estable que frame-to-frame con pocos rasgos (campo).
+    "Odom/Strategy": "0"
+    "Vis/MinInliers": "15"
+    # Si pierde el seguimiento (cámara tapada, polvo, cielo) se reinicia solo
+    # al siguiente cuadro válido, en vez de quedarse perdido. Mientras está
+    # perdido publica covarianza enorme y el EKF deja de creerle.
+    "Odom/ResetCountdown": "1"
+    "Odom/ImageDecimation": "2"     # la Jetson también corre YOLO y SLAM

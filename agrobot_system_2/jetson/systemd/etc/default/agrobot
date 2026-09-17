@@ -8,3 +8,7 @@
 #
 # Tras cambiarlo:  sudo systemctl restart agrobot-ros
 AGROBOT_LAUNCH=agrobot_mapping.launch.py
+
+# Argumentos extra para el launch. Odometría visual (requiere la cámara de
+# profundidad montada y su driver instalado; ver odometria_visual.launch.py):
+#AGROBOT_LAUNCH_ARGS="odom_visual:=true camara:=realsense"

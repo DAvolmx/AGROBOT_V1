@@ -59,7 +59,20 @@ try:
     from nav2_msgs.action import NavigateToPose
     from tf2_ros import Buffer, TransformListener
     from action_msgs.msg import GoalStatus
+    from ament_index_python.packages import get_package_share_directory as _share
     ROS_AVAILABLE = True
+
+    # Árbol de comportamiento que Nav2 debe ejecutar para cada meta.
+    #
+    # Se manda en la META (campo `behavior_tree`) y no solo por parámetro: el
+    # 2026-09-17 `bt_navigator` tenía `default_nav_to_pose_bt_xml: ""` y en
+    # Jazzy eso NO significa "el de por defecto" sino árbol VACÍO. Aceptaba
+    # cada meta y la abortaba al instante ("Behavior tree threw exception:
+    # Empty Tree"): 63 metas seguidas sin que el robot se moviera nunca.
+    import os as _os
+    BT_POR_DEFECTO = _os.path.join(
+        _share("nav2_bt_navigator"), "behavior_trees",
+        "navigate_to_pose_w_replanning_and_recovery.xml")
 except ImportError as exc:
     ROS_AVAILABLE = False
     import os as _os
@@ -328,7 +341,9 @@ if ROS_AVAILABLE:
             self.wheel_odom_pub.publish(msg)
 
         def send_nav_goal(self, x: float, y: float, theta_deg: float) -> bool:
-            if not self._nav_client.wait_for_server(timeout_sec=1.5):
+            # 5 s y no 1.5: descubrir el servidor tardó 2,25 s medidos en el
+            # robot, así que el primer intento fallaba siempre.
+            if not self._nav_client.wait_for_server(timeout_sec=5.0):
                 self.get_logger().warn("Nav2 action server no disponible")
                 return False
             goal = NavigateToPose.Goal()
@@ -340,6 +355,7 @@ if ROS_AVAILABLE:
             theta = math.radians(theta_deg)
             goal.pose.pose.orientation.z = math.sin(theta / 2)
             goal.pose.pose.orientation.w = math.cos(theta / 2)
+            goal.behavior_tree = BT_POR_DEFECTO
             # El handle hay que guardarlo, si no `cancel_nav_goal` no tiene
             # a quién cancelar y es un no-op silencioso: la meta seguía viva
             # y Nav2 seguía publicando /cmd_vel después de "cancelar".

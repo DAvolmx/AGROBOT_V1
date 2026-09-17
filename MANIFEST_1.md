@@ -65,8 +65,25 @@ cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
   plural, `navigators` declarados, huella rectangular 0,40 × 0,35 m.
 - Driver del LIDAR con `respawn=True` (moría con `80008004` en ~1 de cada 4
   arranques, y al desconectar el USB).
-- **Modo autónomo = patrulla** (`patrol.py`), único punto de entrada
-  `POST /api/mission/start`. Recorre waypoints en ciclo, escanea cada 2 min y
+- ⚠️ **`default_nav_to_pose_bt_xml: ""` NO significa "el árbol por defecto"**
+  en Jazzy: significa árbol VACÍO. bt_navigator aceptaba cada meta y la
+  abortaba en el acto ("Behavior tree threw exception: Empty Tree"), 63 metas
+  seguidas, y el robot NUNCA se movía en autónomo. La ruta real va ahora en
+  cada meta (`goal.behavior_tree`, ros_bridge.py) y también por parámetro
+  desde el launch. Diagnosticado el 2026-09-17.
+- **Dos modos autónomos:**
+  · **Patrulla** (`patrol.py`, `POST /api/mission/start`): repite los
+    waypoints con Nav2.
+  · **Exploración** (`explorador.py`, `POST /api/exploracion/start`):
+    autonomía REACTIVA sin mapa ni waypoints — mira las distancias del LIDAR,
+    avanza a pulsos, gira al lado más despejado, retrocede si no hay salida,
+    se desatasca si la pose no cambia en 25 s, y barre cada 2 min. No usa
+    Nav2: los motores no tienen gama lenta y no pueden ejecutar velocidades
+    finas.
+- **Grabación automática del recorrido** (`POST /api/patrol/auto`): con el
+  operador conduciendo, suelta un waypoint cada 1,5 m recorridos (mide sobre
+  la pose, no sobre el tiempo). La exploración la activa sola. Los puntos se
+  dibujan sobre el mapa del dashboard. Recorre waypoints en ciclo, escanea cada 2 min y
   al detectar planta (robot quieto), salta metas que Nav2 aborta. Waypoints
   en el marco `map` (vía TF).
 - **Mapas con nombre** (`mapas.py`): guardan el grafo de slam_toolbox + el
@@ -111,6 +128,8 @@ cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
   fuentes. **No probado con imágenes reales.**
 
 ### Manejo manual
+- El clic en el mapa para mandar metas se quitó el 2026-09-17: un clic
+  accidental arrancaba el robot.
 - Por pulsos (`pulse_drive.py`, `POST /api/drive`): un toque = 1 s
   adelante/atrás, encadenable hasta 3 s. Espacio o ■ = parada. Giro con
   maniobra para tierra blanda (arco adelante + arco atrás, mismo sentido).
@@ -3625,3 +3644,16 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
 - Odometría visual con la webcam (`odometria_webcam.py`, `/odom_webcam`,
   `odom3` del EKF, tarjeta en SLAM & Telemetría). Apagada hacia el EKF hasta
   calibrar. Arreglo de `camera.py` (cajas dibujadas sobre el frame crudo).
+
+**Añadido el 2026-09-17 (noche):**
+- Arreglado el árbol de comportamiento vacío: es LA razón por la que el modo
+  autónomo nunca movió el robot (ver sección 0).
+- `explorador.py`: modo exploración reactivo con pulsos + LIDAR.
+- Grabación automática de recorrido cada 1,5 m y waypoints dibujados en el mapa.
+- Robustez del enlace: se sacaron del bucle de eventos las llamadas que lo
+  bloqueaban más que el latido del WebSocket (10 s) y tiraban la conexión —
+  guardar mapa (15 s), reiniciar Nav2 y `wait_for_server` de cada meta (5 s).
+  El vídeo ya no llena el log de trazas cuando se cierra el navegador.
+- `send_nav_goal` espera 5 s al servidor de Nav2, no 1,5: descubrirlo tardó
+  2,25 s medidos.
+- Los eventos de la patrulla y la exploración van también al log.

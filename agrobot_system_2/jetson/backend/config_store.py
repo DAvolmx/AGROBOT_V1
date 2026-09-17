@@ -62,6 +62,12 @@ DEFAULTS = {
         # comandada (dead-reckoning puro), 1 = confía solo en el giroscopio
         "pose_gyro_trust": 0.8,
     },
+    "autonomia": {
+        # Acelerador que usan los pulsos del modo exploración, como fracción
+        # del máximo. Los motores no bajan de ~78 % de potencia, así que esto
+        # solo limita el tope; para ir "despacio" lo que vale son los pulsos.
+        "escala_velocidad": 0.5,
+    },
     "odometria_webcam": {
         # Odometría visual con la webcam (odometria_webcam.py). `habilitada`
         # mide y lo muestra en el dashboard; `publicar_ros` además lo manda al

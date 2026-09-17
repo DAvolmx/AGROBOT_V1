@@ -774,6 +774,11 @@ input[type="text"], select { font-family: inherit; }
           <button class="btn primary" id="btn-wp-grabar">Grabar punto aquí</button>
           <button class="btn peligro" id="btn-wp-borrar">Borrar recorrido</button>
         </div>
+        <div class="toggle-row">
+          <span style="font-size:15px;">Grabar solo mientras conduzco
+            <span style="color:var(--ink-soft); font-size:13px;">(un punto cada 1,5 m)</span></span>
+          <label class="switch"><input type="checkbox" id="auto-grabar"><div class="track"></div></label>
+        </div>
         <div class="row-kv"><span class="k">Puntos grabados</span><span class="v mono" id="patrol-n">0</span></div>
         <ol class="mono" id="patrol-lista" style="margin:10px 0 0; padding-left:22px; font-size:13px; color:var(--ink-soft); line-height:1.7;"></ol>
       </div>
@@ -791,6 +796,26 @@ input[type="text"], select { font-family: inherit; }
           <button class="btn primary" id="btn-patrulla-on">▶ Iniciar patrulla</button>
           <button class="btn peligro" id="btn-patrulla-off">■ Detener</button>
           <button class="btn" id="btn-wp-escanear">Escanear ahora</button>
+        </div>
+        <div style="border-top:1px solid var(--line); padding-top:14px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+            <b style="font-size:15px;">Exploración</b>
+            <span class="pill" id="expl-pill"><span class="dot"></span><span id="expl-estado">detenida</span></span>
+          </div>
+          <p class="hint" style="margin:8px 0 10px; line-height:1.5;">
+            Sin recorrido grabado ni mapa previo: avanza, esquiva con el LIDAR y deja que el SLAM
+            mapee. Va soltando puntos del recorrido cada 1,5 m.
+          </p>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+            <button class="btn primary" id="btn-expl-on">▶ Explorar y mapear</button>
+            <button class="btn peligro" id="btn-expl-off">■ Detener</button>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px;">
+            <span>Avances: <b class="mono" id="expl-pulsos">0</b></span>
+            <span>Giros: <b class="mono" id="expl-giros">0</b></span>
+            <span>Desatascos: <b class="mono" id="expl-desatascos">0</b></span>
+            <span>Barridos: <b class="mono" id="expl-escaneos">0</b></span>
+          </div>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px;">
           <span>Puntos: <b class="mono" id="patrol-n2">0</b></span>
@@ -1310,6 +1335,8 @@ input[type="text"], select { font-family: inherit; }
       case "health": renderHealth(msg.data); break;
       case "pose": updatePose(msg.data); setPoseSource(msg.source); pintarVelEkf(msg.data); break;
       case "odom_webcam": pintarOdomWebcam(msg.data); break;
+      case "exploracion": pintarExploracion(msg.data); break;
+      case "exploracion_event": break;   // ya se ve en el estado
       case "lidar_scan": lastScan = msg.data; dibujarRadarSiVisible(); break;
       case "map": setMap(msg.data); break;
       case "lidar_distancias": pintarDistancias(msg.data); break;
@@ -1442,6 +1469,10 @@ input[type="text"], select { font-family: inherit; }
     mapCanvas.height = h;
     drawMap();
   }
+  // Puntos del recorrido que se dibujan sobre el mapa (los rellena la
+  // patrulla al refrescar su estado).
+  let waypointsMapa = [], waypointIndice = -1;
+
   function setMap(m) {
     lastMap = m;
     $("map-caption").textContent = `${m.width}×${m.height} celdas · resolución ${m.resolution.toFixed(2)} m/celda`;
@@ -1466,6 +1497,31 @@ input[type="text"], select { font-family: inherit; }
       }
     }
 
+    // Puntos del recorrido sobre el mapa. El índice actual va resaltado.
+    const aPixel = (wx, wy) => [
+      ox + ((wx - lastMap.origin_x) / lastMap.resolution) * scale,
+      h - (oy + ((wy - lastMap.origin_y) / lastMap.resolution) * scale),
+    ];
+    if (waypointsMapa.length) {
+      ctx.strokeStyle = "rgba(26,152,80,0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      waypointsMapa.forEach((wp, i) => {
+        const [x, y] = aPixel(wp.x, wp.y);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      waypointsMapa.forEach((wp, i) => {
+        const [x, y] = aPixel(wp.x, wp.y);
+        const actual = i === waypointIndice;
+        ctx.beginPath();
+        ctx.arc(x, y, actual ? 5 : 3, 0, Math.PI * 2);
+        ctx.fillStyle = actual ? "#f2a33c" : "#1a9850";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1; ctx.stroke();
+      });
+    }
+
     const px = ox + ((lastPose.x - lastMap.origin_x) / lastMap.resolution) * scale;
     const py = h - (oy + ((lastPose.y - lastMap.origin_y) / lastMap.resolution) * scale);
     const th = (-lastPose.theta_deg) * Math.PI / 180;
@@ -1481,27 +1537,9 @@ input[type="text"], select { font-family: inherit; }
   }
   window.addEventListener("resize", resizeMap);
 
-  if (mapCanvas) {
-    mapCanvas.addEventListener("click", async (e) => {
-      if (!lastMap) { toast("warning", "Sin mapa todavía", "Corre el modo mapeo primero."); return; }
-      const rect = mapCanvas.getBoundingClientRect();
-      const w = mapCanvas.width, h = mapCanvas.height;
-      const { width: gw, height: gh } = lastMap;
-      const scale = Math.min(w / gw, h / gh);
-      const ox = (w - gw * scale) / 2, oy = (h - gh * scale) / 2;
-      const clickX = (e.clientX - rect.left) * (w / rect.width);
-      const clickY = (e.clientY - rect.top) * (h / rect.height);
-      const col = (clickX - ox) / scale;
-      const row = gh - 1 - (clickY - oy) / scale;
-      const worldX = lastMap.origin_x + col * lastMap.resolution;
-      const worldY = lastMap.origin_y + row * lastMap.resolution;
-      const res = await fetch("/api/nav/set_goal", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ x: worldX, y: worldY, theta_deg: 0 }),
-      });
-      if (!res.ok) { const body = await res.json().catch(() => ({})); toast("error", "No se pudo mandar la meta", body.error || "ver consola/servidor"); }
-    });
-  }
+  // El clic en el mapa mandaba al robot a ese punto. Se quitó el 2026-09-17:
+  // la pestaña quedó en manual (grabar) y autónomo (patrullar/explorar), y un
+  // clic accidental sobre el mapa arrancaba el robot sin avisar.
 
   // ---------------------------------------------------------------
   // Patrulla autónoma
@@ -1534,6 +1572,11 @@ input[type="text"], select { font-family: inherit; }
       : '<li style="list-style:none; margin-left:-22px;">Sin puntos todavía.</li>';
     $("btn-patrulla-on").disabled = p.activo || wps.length === 0;
     $("btn-patrulla-off").disabled = !p.activo;
+    if ($("auto-grabar") !== document.activeElement) $("auto-grabar").checked = !!p.auto_activa;
+    // los puntos se dibujan sobre el mapa de la pestaña Navegación
+    waypointsMapa = wps;
+    waypointIndice = p.activo ? p.indice : -1;
+    drawMap();
   }
 
   // ---------------------------------------------------------------
@@ -1723,6 +1766,41 @@ input[type="text"], select { font-family: inherit; }
       refrescarPatrulla();
     }
   }
+
+  // ---------------------------------------------------------------
+  // Exploración autónoma
+  // ---------------------------------------------------------------
+  function pintarExploracion(d) {
+    $("expl-estado").textContent = d.estado || "detenida";
+    $("expl-pill").className = "pill" + (d.activo ? " ok" : "");
+    $("expl-pulsos").textContent = d.pulsos;
+    $("expl-giros").textContent = d.giros;
+    $("expl-desatascos").textContent = d.desatascos;
+    $("expl-escaneos").textContent = d.escaneos;
+    $("btn-expl-on").disabled = !!d.activo;
+    $("btn-expl-off").disabled = !d.activo;
+  }
+
+  $("btn-expl-on").addEventListener("click", async () => {
+    if (!confirm("El robot va a moverse solo: avanza, gira y esquiva.\n\n¿Está en el suelo y con espacio alrededor?")) return;
+    const res = await fetch("/api/exploracion/start", { method: "POST" });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) toast("warning", "No se pudo explorar", d.error || d.message || `HTTP ${res.status}`);
+  });
+  $("btn-expl-off").addEventListener("click", () => fetch("/api/exploracion/stop", { method: "POST" }));
+
+  $("auto-grabar").addEventListener("change", async (e) => {
+    const res = await fetch("/api/patrol/auto", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activa: e.target.checked }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast("warning", "No se pudo grabar", d.error || `HTTP ${res.status}`);
+      e.target.checked = false;
+    }
+    refrescarPatrulla();
+  });
 
   $("mapa-guardar-btn").addEventListener("click", () => guardarMapa());
   $("mapa-nombre").addEventListener("keydown", (e) => { if (e.key === "Enter") guardarMapa(); });

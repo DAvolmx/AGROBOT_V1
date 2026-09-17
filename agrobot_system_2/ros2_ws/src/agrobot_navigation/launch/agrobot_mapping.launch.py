@@ -237,6 +237,15 @@ def generate_launch_description():
     # directo al puente.
     nav2_yaml = os.path.join(pkg_share, "config", "nav2_params.yaml")
     nav2_nodos = ["controller_server", "planner_server", "behavior_server", "bt_navigator"]
+    # Árboles de comportamiento: hay que dar la ruta COMPLETA. Ver el aviso en
+    # nav2_params.yaml sobre por qué una cadena vacía no vale.
+    bt_dir = os.path.join(get_package_share_directory("nav2_bt_navigator"), "behavior_trees")
+    bt_params = {
+        "default_nav_to_pose_bt_xml":
+            os.path.join(bt_dir, "navigate_to_pose_w_replanning_and_recovery.xml"),
+        "default_nav_through_poses_bt_xml":
+            os.path.join(bt_dir, "navigate_through_poses_w_replanning_and_recovery.xml"),
+    }
     nav2 = [
         Node(package="nav2_controller", executable="controller_server",
              name="controller_server", output="screen", parameters=[nav2_yaml]),
@@ -245,7 +254,7 @@ def generate_launch_description():
         Node(package="nav2_behaviors", executable="behavior_server",
              name="behavior_server", output="screen", parameters=[nav2_yaml]),
         Node(package="nav2_bt_navigator", executable="bt_navigator",
-             name="bt_navigator", output="screen", parameters=[nav2_yaml]),
+             name="bt_navigator", output="screen", parameters=[nav2_yaml, bt_params]),
         Node(package="nav2_lifecycle_manager", executable="lifecycle_manager",
              name="lifecycle_manager_navigation", output="screen",
              parameters=[{"autostart": True, "node_names": nav2_nodos,

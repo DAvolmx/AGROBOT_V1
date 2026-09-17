@@ -50,6 +50,12 @@ TICK_S = 0.5                  # cadencia del bucle de vigilancia
 # barriendo en bucle delante del primer arbusto enfermo que encontrara.
 COOLDOWN_DETECCION_S = 30.0
 
+# Grabación automática del recorrido mientras se conduce a mano: un punto
+# cada tanto avance. 1,5 m es lo que pidió el usuario: suficiente para que la
+# patrulla luego repita la trayectoria sin acumular cientos de puntos.
+DISTANCIA_AUTO_M = 1.5
+TICK_AUTO_S = 0.2
+
 
 class PatrolController:
     """
@@ -83,6 +89,9 @@ class PatrolController:
         # tarea: `_ir_a` usa esto para esperar y reenviar la meta después.
         self._escaneando = False
         self._meta_cancelada = False
+        self.auto_activa = False
+        self._auto_ultima = None
+        self._tarea_auto: asyncio.Task | None = None
 
         self._cargar()
 
@@ -123,9 +132,54 @@ class PatrolController:
         self.indice = 0
         self._guardar()
 
+    # ---------------------------------------------------------------
+    # Grabación automática mientras el operador conduce
+    # ---------------------------------------------------------------
+    def grabacion_auto(self, activa: bool) -> tuple[bool, str]:
+        self.auto_activa = bool(activa)
+        if not self.auto_activa:
+            if self._tarea_auto is not None:
+                self._tarea_auto.cancel()
+                self._tarea_auto = None
+            return True, "grabación automática detenida"
+
+        pose = self._get_pose()
+        if pose is None:
+            self.auto_activa = False
+            return False, "sin pose todavía — ¿está corriendo el SLAM?"
+        # El primer punto es donde está el robot ahora: así el recorrido
+        # empieza en el sitio desde el que se sale.
+        self._auto_ultima = (pose["x"], pose["y"])
+        self.agregar_waypoint(pose["x"], pose["y"], pose.get("theta_deg", 0.0))
+        self._emitir({"evento": "punto_auto", "total": len(self.waypoints)})
+        if self._tarea_auto is None or self._tarea_auto.done():
+            self._tarea_auto = asyncio.create_task(self._bucle_auto())
+        return True, f"grabando un punto cada {DISTANCIA_AUTO_M:g} m"
+
+    async def _bucle_auto(self):
+        """Suelta un punto cada DISTANCIA_AUTO_M recorridos. Mide sobre la
+        pose del mapa, no sobre el tiempo: parado no acumula puntos."""
+        try:
+            while self.auto_activa:
+                await asyncio.sleep(TICK_AUTO_S)
+                pose = self._get_pose()
+                if pose is None or self._auto_ultima is None:
+                    continue
+                if math.hypot(pose["x"] - self._auto_ultima[0],
+                              pose["y"] - self._auto_ultima[1]) >= DISTANCIA_AUTO_M:
+                    self._auto_ultima = (pose["x"], pose["y"])
+                    self.agregar_waypoint(pose["x"], pose["y"], pose.get("theta_deg", 0.0))
+                    self._emitir({"evento": "punto_auto", "total": len(self.waypoints)})
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.auto_activa = False
+            self._emitir({"evento": "error_auto", "detalle": str(exc)})
+
     def borrar_waypoints(self):
         self.waypoints = []
         self.indice = 0
+        self._auto_ultima = None
         self._guardar()
 
     # ---------------------------------------------------------------
@@ -228,9 +282,12 @@ class PatrolController:
             self._emitir({"evento": "error", "detalle": str(exc)})
             print(f"[patrulla] bucle abortado: {type(exc).__name__}: {exc}")
 
-    def _enviar(self, wp: dict) -> bool:
+    async def _enviar(self, wp: dict) -> bool:
+        """En un hilo: `send_nav_goal` espera al servidor de Nav2 hasta 5 s y
+        eso, en el bucle de eventos, congela el WebSocket y el vídeo."""
         self._meta_cancelada = False
-        return self._send_nav_goal(wp["x"], wp["y"], wp["theta_deg"])
+        return await asyncio.to_thread(
+            self._send_nav_goal, wp["x"], wp["y"], wp["theta_deg"])
 
     async def _ir_a(self, wp: dict) -> str:
         """Navega a un waypoint, intercalando los barridos que toquen.
@@ -238,7 +295,7 @@ class PatrolController:
         Devuelve "llegado" | "abortada" | "timeout" | "sin_nav2" | "detenido".
         """
         i = self.indice % len(self.waypoints)
-        if not self._enviar(wp):
+        if not await self._enviar(wp):
             self.estado = "Nav2 no disponible"
             self._emitir({"evento": "nav2_caido"})
             return "sin_nav2"
@@ -260,7 +317,7 @@ class PatrolController:
 
             if self._meta_cancelada:
                 # La canceló un escaneo (del reloj o de una detección).
-                if not self._enviar(wp):
+                if not await self._enviar(wp):
                     return "sin_nav2"
                 inicio = time.monotonic()
                 continue
@@ -311,4 +368,6 @@ class PatrolController:
             "vueltas": self.vueltas,
             "escaneos": self.escaneos,
             "proximo_escaneo_s": round(restante if self.activo else SCAN_PERIODO_S, 1),
+            "auto_activa": self.auto_activa,
+            "distancia_auto_m": DISTANCIA_AUTO_M,
         }

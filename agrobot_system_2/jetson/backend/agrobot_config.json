@@ -21,9 +21,17 @@
   "slam": {
     "robot_largo_m": 0.4,
     "robot_ancho_m": 0.35,
-    "obstacle_margen_m": 0.15,
-    "pose_gyro_trust": 0.85,
-    "obstacle_deslizamiento_m": 0.8
+    "obstacle_margen_m": 0.26,
+    "obstacle_deslizamiento_m": 0.4,
+    "pose_gyro_trust": 0.85
+  },
+  "odometria_webcam": {
+    "habilitada": true,
+    "publicar_ros": false,
+    "camara_altura_m": 0.3,
+    "camara_inclinacion_deg": 15.0,
+    "camara_hfov_deg": 70.0,
+    "camara_adelante_m": 0.15
   },
   "control": {
     "max_v_mps": 1.5,

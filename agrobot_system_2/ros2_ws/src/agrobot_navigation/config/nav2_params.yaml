@@ -28,7 +28,12 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_link
     odom_topic: /odometry/filtered
-    default_nav_to_pose_bt_xml: ""   # usa el árbol por defecto de nav2_bt_navigator
+    # ⚠️ NO poner "" aquí. Parecía significar "usa el árbol por defecto" y en
+    # Jazzy significa árbol VACÍO: bt_navigator aceptaba cada meta y la
+    # abortaba en el acto con "Behavior tree threw exception: Empty Tree"
+    # (63 metas seguidas el 2026-09-17: el robot no se movía nunca en modo
+    # autónomo). La ruta real la pasa agrobot_mapping.launch.py, que la
+    # resuelve con el paquete instalado en vez de escribirla a mano.
     # Jazzy los exige declarados; sin ellos bt_navigator no configura.
     navigators: ["navigate_to_pose", "navigate_through_poses"]
     navigate_to_pose:

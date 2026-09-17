@@ -46,6 +46,7 @@ from patrol import PatrolController
 from pulse_drive import ConductorPulsos, ACCIONES
 from mapas import GestorMapas, ErrorMapa
 from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
+from explorador import ExploradorReactivo
 
 # =============================================
 # ===== CONFIG =====
@@ -689,6 +690,8 @@ async def ws_handler(request: web.Request):
                 # velocidad (o una meta a Nav2) justo después de la parada.
                 if patrol is not None:
                     patrol.detener()
+                if explorador is not None:
+                    explorador.detener()
                 if conductor is not None:
                     conductor.parar()
                 actuator_proto.emergency_stop()
@@ -733,7 +736,9 @@ async def video_handler(request: web.Request):
             jpeg = await cola.get()
             await response.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
                                  + jpeg + b"\r\n")
-    except (ConnectionResetError, asyncio.CancelledError):
+    except (ConnectionError, asyncio.CancelledError):
+        # ConnectionError cubre BrokenPipe y ConnectionReset: es lo normal
+        # cuando el navegador cierra la pestaña, no un fallo que reportar.
         pass
     finally:
         camera.unsubscribe(cola)
@@ -746,6 +751,7 @@ async def video_handler(request: web.Request):
 # =============================================
 patrol: PatrolController | None = None
 conductor: ConductorPulsos | None = None
+explorador: ExploradorReactivo | None = None
 
 WAYPOINTS_PATH = _AQUI / "patrol_waypoints.json"
 
@@ -797,7 +803,9 @@ async def drive_handler(request: web.Request):
     accion = body.get("accion", "")
 
     if accion == "parar":
-        # Parar lo para TODO, patrulla incluida: es la tecla de pánico.
+        # Parar lo para TODO: patrulla, exploración y pulsos.
+        if explorador is not None and explorador.activo:
+            explorador.detener()
         if patrol is not None and patrol.activo:
             patrol.detener()
             state.mission_active = False
@@ -835,7 +843,23 @@ def _patrol_is_scanning() -> bool:
     return bool((state.actuator_status or {}).get("scanning", False))
 
 
+def _conducir_pulso(accion: str):
+    """Un pulso del conductor manual, con el acelerador de la config."""
+    ctrl = state.config["control"]
+    escala = state.config["autonomia"]["escala_velocidad"]
+    conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * escala,
+                      omega_max=ctrl["max_omega_rps"] * escala, maniobra=True)
+
+
+def _evento(tipo: str, data: dict):
+    print(f"[{tipo}] {data}", flush=True)
+    _lanzar(state.broadcast({"type": f"{tipo}_event", "data": data}), tipo)
+
+
 def _patrol_event(data: dict):
+    # Al log ADEMÁS de al dashboard: sin esto no había forma de saber qué hizo
+    # la patrulla si el navegador no estaba abierto (pasó el 2026-09-17).
+    print(f"[patrulla] {data}", flush=True)
     _lanzar(state.broadcast({"type": "patrol_event", "data": data}), "patrulla")
 
 
@@ -882,6 +906,45 @@ async def patrol_record_handler(request: web.Request):
                            "data": {"evento": "waypoint_grabado", "waypoint": wp}})
     return web.json_response({"ok": True, "waypoint": wp,
                               "total": len(patrol.waypoints)})
+
+
+async def exploracion_start_handler(request: web.Request):
+    """POST /api/exploracion/start — autonomía reactiva: recorre y mapea."""
+    if explorador is None:
+        return web.json_response({"error": "explorador no inicializado"}, status=503)
+    if patrol is not None and patrol.activo:
+        return web.json_response(
+            {"ok": False, "error": "detené la patrulla antes de explorar"}, status=409)
+    await _cargar_modelo_si_falta(request.app)
+    ok, msg = explorador.iniciar()
+    state.mission_active = ok
+    await state.broadcast({"type": "mission_state", "data": {"active": ok}})
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success" if ok else "warning", "title": "Exploración", "message": msg}})
+    return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 409)
+
+
+async def exploracion_stop_handler(request: web.Request):
+    if explorador is not None:
+        explorador.detener()
+    state.mission_active = False
+    actuator_proto.emergency_stop()
+    await state.broadcast({"type": "mission_state", "data": {"active": False}})
+    return web.json_response({"ok": True})
+
+
+async def patrol_auto_handler(request: web.Request):
+    """POST /api/patrol/auto {"activa": true} — graba un punto cada 1,5 m
+    mientras el operador conduce, para no tener que ir pulsando Grabar."""
+    if patrol is None:
+        return web.json_response({"error": "patrulla no inicializada"}, status=503)
+    body = await request.json()
+    ok, msg = patrol.grabacion_auto(bool(body.get("activa", False)))
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=409)
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Grabación de recorrido", "message": msg}})
+    return web.json_response({"ok": True, "activa": patrol.auto_activa, "message": msg})
 
 
 async def patrol_clear_handler(request: web.Request):
@@ -1328,8 +1391,10 @@ async def nav_restart_handler(request: web.Request):
     """Reinicia el servicio Nav2 (killea y relanza)"""
     try:
         # Matar nodos Nav2
-        subprocess.run(["ros2", "node", "kill", "/nav2_bringup/lifecycle_manager_navigation"],
-                      capture_output=True, timeout=5)
+        await asyncio.to_thread(
+            subprocess.run,
+            ["ros2", "node", "kill", "/nav2_bringup/lifecycle_manager_navigation"],
+            capture_output=True, timeout=5)
         await asyncio.sleep(2)
         await state.broadcast({"type": "toast", "data": {
             "kind": "ok", "title": "Nav2 reiniciándose", "message": "El servicio se está reiniciando. Espera 5-10 segundos.",
@@ -1362,7 +1427,11 @@ async def nav_save_map_handler(request: web.Request):
     MAPS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = str(MAPS_DIR / name)
     try:
-        result = subprocess.run(
+        # En un hilo: bloquear el bucle de eventos 15 s tira el WebSocket
+        # (latido de 10 s) y corta el vídeo. Era una de las causas de "se
+        # pierde el enlace Jetson".
+        result = await asyncio.to_thread(
+            subprocess.run,
             ["ros2", "run", "nav2_map_server", "map_saver_cli", "-f", out_path],
             capture_output=True, text=True, timeout=15,
         )
@@ -1502,6 +1571,8 @@ async def mission_start_handler(request: web.Request):
     # Un pulso manual a medio ejecutar pelearía con Nav2 por el actuador.
     if conductor is not None and conductor.activo:
         conductor.parar()
+    if explorador is not None and explorador.activo:
+        explorador.detener()
 
     ok, msg = (False, "patrulla no inicializada")
     if patrol is not None:
@@ -1523,6 +1594,9 @@ async def mission_stop_handler(request: web.Request):
     # volvería a mandarle una meta a Nav2 acto seguido.
     if patrol is not None:
         patrol.detener()
+        patrol.grabacion_auto(False)
+    if explorador is not None:
+        explorador.detener()
     state.mission_active = False
     actuator_proto.emergency_stop()
     await state.broadcast({"type": "mission_state", "data": {"active": False}})
@@ -1596,6 +1670,8 @@ async def stats_loop():
         await state.broadcast({"type": "system_stats", "data": stats})
         if odom_webcam is not None:
             await state.broadcast({"type": "odom_webcam", "data": odom_webcam.snapshot()})
+        if explorador is not None:
+            await state.broadcast({"type": "exploracion", "data": explorador.snapshot()})
         await state.broadcast({"type": "health", "data": health_data})
         # solo emite el fallback casero si ROS todavía no ha mandado una
         # pose fusionada real — evita pisar la buena con la de dead-reckoning
@@ -1704,6 +1780,17 @@ async def start_background(app: web.Application):
     )
     print(f"[patrulla] lista — {len(patrol.waypoints)} waypoints grabados")
 
+    global explorador
+    explorador = ExploradorReactivo(
+        distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
+        get_pose=ros_bridge.pose_en_mapa,
+        conducir=_conducir_pulso,
+        parar=lambda: conductor.parar(),
+        escanear=patrol.escanear,
+        on_event=lambda d: _evento("exploracion", d),
+        grabar_recorrido=lambda activa: patrol.grabacion_auto(activa),
+    )
+
     pose_estimator.gyro_weight = state.config["slam"]["pose_gyro_trust"]
 
     camera = CameraWorker(loop, _on_detection, lambda: state.config, health.beat)
@@ -1797,6 +1884,9 @@ def create_app() -> web.Application:
     app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
     app.router.add_get("/api/patrol", patrol_status_handler)
     app.router.add_post("/api/patrol/record", patrol_record_handler)
+    app.router.add_post("/api/exploracion/start", exploracion_start_handler)
+    app.router.add_post("/api/exploracion/stop", exploracion_stop_handler)
+    app.router.add_post("/api/patrol/auto", patrol_auto_handler)
     app.router.add_post("/api/patrol/clear", patrol_clear_handler)
     app.router.add_post("/api/patrol/scan", patrol_scan_handler)
     app.router.add_post("/api/session-report", session_report_handler)

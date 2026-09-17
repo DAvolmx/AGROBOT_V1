@@ -15,7 +15,101 @@
 > Cualquier LLM o persona que retome este proyecto debe poder reconstruir
 > el estado completo del sistema leyendo solo este archivo.
 
-Última actualización: 2026-09-13 23:30 UTC
+Última actualización: 2026-09-17
+
+---
+
+## 0. ESTADO ACTUAL — 2026-09-17 (leer esto primero)
+
+Resumen de lo que es verdad HOY. Donde una sección de más abajo diga otra
+cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
+
+### Cómo arranca de verdad el sistema
+- **systemd, NO `INICIAR_BOT.sh`.** `agrobot-backend.service` y
+  `agrobot-ros.service` (ambos `Restart=always`: al matar un proceso a mano
+  reaparece solo). Además `agrobot-ap0`, `agrobot-hostapd`, `agrobot-dhcp` y
+  `agrobot-reloj-vigia`. No usar `INICIAR_BOT.sh` a la vez: los dos abren el
+  puerto 8080. `INICIAR_BOT_MEJORADO.sh` (citado el 2026-09-13) **no existe**.
+- Copia de todos los archivos de sistema en `agrobot_system_2/jetson/systemd/`
+  (services, drop-ins, `sbin/`, `etc/hostapd`, `etc/default`). La clave del
+  WiFi va como `CAMBIAR_AL_INSTALAR`.
+- **Control de versiones:** repo git en `/home/jetson/Desktop/AGROBOT` desde
+  el 2026-09-17. Fuera del repo (ver `.gitignore`): `ros2_ws/build|install|log`,
+  logs, capturas, mapas guardados, pesos de entrenamiento duplicados y dos
+  paquetes de terceros que hay que reclonar en `ros2_ws/src/`:
+  `https://github.com/MAPIRlab/rf2o_laser_odometry.git` @ `b38c68e` y
+  `https://github.com/Slamtec/sllidar_ros2.git` @ `3430009`. Luego
+  `colcon build --symlink-install`.
+
+### Red
+- Una sola radio (Intel 8265) sirve el AP `JETSON_AP` (`ap0`) y el cliente
+  `LoRa_Wan`. **Tienen que estar en el mismo canal** o el enlace se vuelve
+  intermitente ("la Jetson se cuelga"). `agrobot-sync-ap-channel.sh` corre
+  como `ExecStartPre` de hostapd y copia el canal del cliente.
+
+### Reloj (la Jetson no tiene pila de RTC)
+- Algo en el arranque devuelve el reloj a 1970 a los ~9 s y NTP lo corrige
+  entre 80 s y 6 min después. Ese salto con ROS corriendo atasca o mata
+  slam_toolbox. `agrobot-reloj-vigia` reinicia `agrobot-ros` UNA vez cuando
+  NTP sincroniza. `systemd-time-wait-sync` está deshabilitado a propósito
+  (probado: expiraba y solo retrasaba ROS 3 min).
+
+### Navegación autónoma
+- `agrobot_mapping.launch.py` (el que usa systemd) **incluye Nav2**: 4 nodos
+  (`controller_server`, `planner_server`, `behavior_server`, `bt_navigator`)
+  con `lifecycle_manager_navigation`, sobre slam_toolbox en mapeo. Primer día
+  en que Nav2 llegó a activarse. `agrobot_navigation.launch.py` sigue roto
+  (usa `navigation_launch.py` de nav2_bringup, que arranca 10 nodos y falla).
+- Arreglos en `nav2_params.yaml`: `data_type: "LaserScan"` en las capas de
+  obstáculos (sin eso el costmap no veía nada), `progress_checker_plugins` en
+  plural, `navigators` declarados, huella rectangular 0,40 × 0,35 m.
+- Driver del LIDAR con `respawn=True` (moría con `80008004` en ~1 de cada 4
+  arranques, y al desconectar el USB).
+- **Modo autónomo = patrulla** (`patrol.py`), único punto de entrada
+  `POST /api/mission/start`. Recorre waypoints en ciclo, escanea cada 2 min y
+  al detectar planta (robot quieto), salta metas que Nav2 aborta. Waypoints
+  en el marco `map` (vía TF).
+- **Mapas con nombre** (`mapas.py`): guardan el grafo de slam_toolbox + el
+  recorrido en `agrobot_system_2/maps/<nombre>/`. Al cargar, el SLAM sigue
+  ampliando ese mapa. **El robot debe estar en la base donde empezó el mapa.**
+  Un reinicio de ROS sin cargar mapa empieza uno nuevo y el recorrido deja de
+  valer.
+
+### Manejo manual
+- Por pulsos (`pulse_drive.py`, `POST /api/drive`): un toque = 1 s
+  adelante/atrás, encadenable hasta 3 s. Espacio o ■ = parada. Giro con
+  maniobra para tierra blanda (arco adelante + arco atrás, mismo sentido).
+- La rampa avanza sola a 20 Hz (`ActuatorController.tick`) con hombre muerto
+  de 0,5 s. Corrige un fallo grave: al soltar el botón el robot seguía a
+  ~0,66 m/s indefinidamente.
+
+### Frenado por LIDAR (`slam.py`, `LidarReactive`)
+- Mide en un **corredor del ancho del robot**, no en un cono (en pasillos el
+  cono veía las hileras). Distancias a las 4 caras en el dashboard
+  (`lidar_distancias`, 10 Hz).
+- **Corte a cero** cuando el hueco < `obstacle_margen_m` (0,15) +
+  `obstacle_deslizamiento_m` (0,80). Sin datos de LIDAR no avanza ni
+  retrocede. No limita el giro.
+- `obstacle_avoidance.py` (`ControladorEvasion`) es **código muerto**: nunca
+  se ejecutó (exigía un atributo `_lidar_scan` que no existe).
+
+### Límites físicos medidos — condicionan todo lo anterior
+- PWM de motores 200..255: **no hay gama lenta** (78 % a 100 %).
+- Al parar, ruedas sueltas (TA6586 en reposo, no freno): **desliza ~80 cm**.
+- `control.max_v_mps` = 1,5 en la config vs `V_MAX` = 0,55 en el firmware:
+  los m/s del dashboard y de Nav2 **no son reales**.
+- Robot: 40 cm de largo × 35 cm de ancho. Sin encoders.
+
+### Pendiente, por prioridad
+1. Freno activo en firmware (ambos pines del TA6586 en alto al parar).
+2. Medir velocidad real al 100 % y alinear `max_v_mps` con `V_MAX`.
+3. Parachoques físico con finales de carrera directo al C3.
+4. Seguridad: clave del AP `12345678`, API sin autenticación.
+5. Arreglar `agrobot_navigation.launch.py`.
+6. Odometría visual: pedida el 2026-09-17, en evaluación (la cámara es
+   monocular y va montada sobre el servo de escaneo).
+7. Pila para el RTC de la Jetson.
+8. Borrar `obstacle_avoidance.py` y corregir `REPORTE_MEJORAS_2026-09-13.md`.
 
 ---
 
@@ -524,13 +618,19 @@ robot. Lo que bloquea va a un hilo (`camera.py`) o a un executor
 - `POST /api/lidar/scan` — ingesta manual de scan (fallback si no hay sllidar_ros2)
 - `GET /api/health`
 - `GET /api/models`, `POST /api/models/load`
-- `POST /api/mission/start`, `/api/mission/stop`
+- `POST /api/mission/start`, `/api/mission/stop` — **(2026-09-17) arrancan y paran la patrulla autónoma.** Se eliminaron `/api/autonomous/*`.
+- `POST /api/drive` `{accion: adelante|atras|izquierda|derecha|parar, escala, maniobra}` — manejo por pulsos (2026-09-17)
+- `GET /api/patrol`, `POST /api/patrol/record|clear|scan` — recorrido de patrulla (2026-09-16)
+- `POST /api/nav/reset_map` — resetea slam_toolbox y borra el recorrido (2026-09-17)
+- `GET /api/mapas`, `POST /api/mapas/guardar {nombre, sobrescribir}`, `POST /api/mapas/cargar {nombre}` (2026-09-17)
 - `GET /api/captures` (`?class=&limit=`), `POST /api/captures/clear`
 - `POST /api/session-report`
 - `GET /video` (MJPEG con overlay YOLO)
 - `WS /ws` — push: `env_telemetry, actuator_status, detection, capture,
   system_stats, health, pose, pose_source, lidar_scan, map, toast,
-  config_update, mission_state, obstacle_warning, captures_cleared`;
+  config_update, mission_state, obstacle_warning, captures_cleared,
+  lidar_distancias, patrol_event`
+  (`obstacle_warning` cambió el 2026-09-17: `{motivo, lado, distancia_m, umbral_m}`);
   recibe: `{type:"control", v, omega, scan}`, `{type:"emergency_stop"}`
 
 ### Galería de misión (capturas)
@@ -552,9 +652,10 @@ reporte de sesión completo, vaciar galería.
   (no hay encoder que mida la real) con giroscopio (`gyroZ`, MPU6050) vía
   peso `pose_gyro_trust`. Da `(x, y, theta_deg)` relativo al arranque, con
   deriva sin límite — **no es localización, es una estimación**.
-- `LidarReactive`: evasión reactiva simple — si hay obstáculo dentro del
+- ~~`LidarReactive`: evasión reactiva simple — si hay obstáculo dentro del
   arco frontal configurado y más cerca que el umbral, recorta la velocidad
-  lineal. No planea rutas, no rodea obstáculos, solo frena.
+  lineal.~~ **Reemplazado el 2026-09-17** por corredor del ancho del robot y
+  corte con antelación al deslizamiento. Ver sección 0.
 
 ### Capa ROS 2 (`ros_bridge.py` + `ros2_ws/src/agrobot_navigation/`) — opcional
 
@@ -591,10 +692,12 @@ funcionando con la capa casera de arriba — **nunca se rompe por falta de ROS**
 en modo navegación), Nav2 (`controller_server`, `planner_server`,
 `behavior_server`, `bt_navigator`, costmaps, `velocity_smoother`).
 
-**Estado real de esta capa: escrita pero NO compilada ni probada en
-hardware.** Pendiente: `colcon build`, confirmar puerto serie real del
-RPLIDAR C1 (se asume `/dev/ttyUSB0`), medir footprint real del robot
-(`nav2_params.yaml` usa círculo de 25cm supuesto).
+~~**Estado real de esta capa: escrita pero NO compilada ni probada en
+hardware.**~~ **Reemplazado el 2026-09-17:** compilada y corriendo bajo
+systemd. Nav2 activo dentro de `agrobot_mapping.launch.py` (sin
+`velocity_smoother` ni `collision_monitor`), LIDAR en `/dev/ttyUSB0`, huella
+medida 0,40 × 0,35 m. La acción `navigate_to_pose` la usa la patrulla, no el
+clic en el mapa (que se quitó del dashboard). Ver sección 0.
 
 ---
 
@@ -1251,6 +1354,8 @@ existiendo para eso y para el nodo LoRa; lo que ya no lo usa es el actuador.
   publicar a 10 Hz tras el reinicio, junto con `/scan_odom`.
 
 ## 12-BIS. HANDOFF — estado al cerrar el 2026-09-06
+
+> **Histórico.** El estado vigente está en la sección 0 (2026-09-17).
 
 Reescrito al final de la jornada. Lo de la version anterior que ya se
 resolvio se ha quitado; lo que sigue abierto se mantiene.
@@ -3334,6 +3439,13 @@ Cada entrada: fecha, qué cambió, por qué, archivos tocados.
 ## ENTRADA HISTORIAL: 2026-09-13 23:30 UTC
 ## MEJORAS DE SEGURIDAD: Evasión de Obstáculos + Parada Instantánea + Verificación Nav2
 
+> **CORRECCIÓN 2026-09-17:** lo que esta entrada describe **no llegó a
+> funcionar**. `ControladorEvasion` quedó enganchado detrás de una condición
+> que nunca se cumple (`hasattr(pose_estimator, '_lidar_scan')`), así que no
+> actuó nunca; `INICIAR_BOT_MEJORADO.sh` no existe; y Nav2 no se activó en
+> ningún arranque hasta el 2026-09-17. No citar estos resultados en la tesis
+> como implementados. Ver sección 0 y la entrada del 2026-09-16/17.
+
 **Por qué:** El robot no se detenía instantáneamente al detectar obstáculos, Nav2 fallaba silenciosamente sin verificación previa, y faltaba lógica reactiva de evasión.
 
 **Qué cambió:**
@@ -3411,3 +3523,58 @@ cd agrobot_system_2
 3. [ ] Calibración de DIST_CRITICA y DIST_PRECAUCIÓN según terreno
 4. [ ] (Futuro) Instalación de sensores ultrasónicos (4x HC-SR04) para redundancia
 5. [ ] (Futuro) Integración con costmaps de Nav2 (evasión coordenada con planeador)
+
+
+---
+
+## ENTRADA HISTORIAL: 2026-09-16 / 2026-09-17
+## Comunicación, SLAM, patrulla autónoma con Nav2, manejo por pulsos, frenado, mapas y git
+
+Todo verificado en el robot salvo lo marcado. Detalle del estado resultante
+en la sección 0.
+
+**Red.** Causa de "la Jetson se cuelga": AP en canal 1 y cliente `LoRa_Wan`
+en el 11 sobre la misma radio. Se sincronizó y se automatizó
+(`agrobot-sync-ap-channel.sh` + drop-in de hostapd). Se descartó poner el AP
+en el ESP32-C3: el enlace C3↔Jetson es UART a 115200 y no lleva vídeo.
+
+**SLAM.** Tres causas de caídas: (1) salto de reloj 1970→2026 con ROS
+corriendo → `agrobot-reloj-vigia`; (2) driver del LIDAR muriendo al arrancar
+→ `respawn`; (3) LIDAR desconectado físicamente (el respawn lo recupera al
+reconectar). Se probó y **retiró** `systemd-time-wait-sync`.
+
+**Patrulla autónoma.** Nueva `patrol.py`. Se unificaron los dos modos
+autónomos que había (`/api/mission/*` solo levantaba una bandera y
+`/api/autonomous/*` no lo llamaba nadie). No se movía porque el launch no
+tenía Nav2; ahora sí (4 nodos, ver sección 0) y con el costmap viendo el
+LIDAR (`data_type: LaserScan`). Arreglos en `ros_bridge.py`: guardar el handle
+de la meta (cancelar era un no-op), resultado de la meta, pose en `map` vía
+TF. **Sin probar aún con el robot moviéndose en autónomo.**
+
+**Manejo manual.** `pulse_drive.py` + `POST /api/drive` por HTTP (en el móvil
+el "mantener apretado" se cancelaba solo). Espacio = parada. Maniobra de
+giro para tierra blanda. Rampa con `tick()` a 20 Hz y hombre muerto: soltando
+el botón el robot seguía a ~0,66 m/s (medido con la clase real). La parada de
+emergencia ahora también detiene patrulla y pulsos; un "parar" ya no se
+descarta por el limitador del WebSocket. Aceleración 1,6→1,2 m/s² y
+4,5→3,5 rad/s².
+
+**Frenado.** Corredor del ancho del robot en vez de cono de ±21°. Tras
+medir que el robot desliza ~80 cm y confirmar el piso de PWM 200/255, el
+frenado pasó de reducción gradual a corte en `margen + deslizamiento`.
+
+**Dashboard.** Barra lateral ocultable y cajón en móvil; pestaña Navegación
+reducida a Manual (grabar) / Autónomo (patrullar); distancias LIDAR en la
+barra de estado; resetear mapa; mapas con nombre. Bugs corregidos: 7 de 8
+pestañas quedaban fuera de `.content` por un `</div>` sobrante;
+`addDetection` y `updateStats` lanzaban `TypeError` sobre elementos borrados
+(el banner de plaga fallaba a veces).
+
+**Proyecto.** Repo git creado. Copia de archivos de sistema en
+`jetson/systemd/`.
+
+**Archivos:** `jetson/backend/{jetson_server,patrol,pulse_drive,mapas,slam,
+ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.html`,
+`ros2_ws/src/agrobot_navigation/launch/agrobot_{mapping,navigation}.launch.py`,
+`ros2_ws/src/agrobot_navigation/config/nav2_params.yaml`, `INICIAR_BOT.sh`,
+`jetson/systemd/*`, `.gitignore`.

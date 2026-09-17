@@ -33,11 +33,23 @@
     "avance_libre_cm": 100,
     "lado_libre_cm": 60,
     "retroceso_libre_cm": 50,
-    "escaneo_periodo_s": 120
+    "escaneo_periodo_s": 120,
+    "escaneo_duracion_s": 3,
+    "escaneo_angulo_min": 25,
+    "escaneo_angulo_max": 110,
+    "escaneo_enciende_foco": true,
+    "sendero_activo": false,
+    "sendero_tolerancia_cm": 10,
+    "sendero_pared_max_cm": 150,
+    "sendero_vision": true,
+    "sendero_vision_peso": 0.5,
+    "sendero_verde_h_min": 30,
+    "sendero_verde_h_max": 90,
+    "sendero_verde_s_min": 60
   },
   "odometria_webcam": {
     "habilitada": true,
-    "publicar_ros": true,
+    "publicar_ros": false,
     "camara_altura_m": 0.3,
     "camara_inclinacion_deg": 15.5,
     "camara_hfov_deg": 71,
@@ -45,7 +57,9 @@
   },
   "control": {
     "max_v_mps": 1.1,
-    "max_omega_rps": 2.8
+    "max_omega_rps": 2.8,
+    "suavidad_duty": 0.6,
+    "suavidad_periodo_s": 0.3
   },
   "safety": {
     "heartbeat_stale_warn_s": 5,

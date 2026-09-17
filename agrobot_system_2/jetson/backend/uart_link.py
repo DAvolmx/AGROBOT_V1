@@ -164,13 +164,17 @@ class UartActuatorLink:
 
     def pack(self) -> bytes:
         flags = 0
-        # `_led` significa lo que dice: True = foco ENCENDIDO. Estaba
-        # invertido (`if not self._led`) y arrastraba tres fallos: el foco
-        # salía encendido al arrancar, la parada de emergencia lo ENCENDÍA
-        # (su comentario decía lo contrario) y el interruptor del dashboard
-        # mostraba lo opuesto a la realidad. La compensación estaba en
-        # jetson_server (`state.led_on = not cmd["led"]`); se quitó también.
-        if self._led:
+        # ⚠️ EL BIT VA INVERTIDO, y es necesario. `_led` True = foco
+        # ENCENDIDO, pero se manda el flag al revés porque:
+        #   · el firmware tiene LED_ACTIVO_EN_BAJO = true, así que "encender"
+        #     (FLAG_LED puesto) escribe el pin en BAJO;
+        #   · la etapa de potencia del foco de este robot es de lógica NORMAL:
+        #     se enciende con el pin en ALTO.
+        # Cambiar la constante del firmware no es opción: GPIO8 es pin de
+        # strapping y con el valor contrario la placa no arranca (ver la
+        # cabecera de esp32c3_actuator.ino). Así que la compensación vive
+        # aquí, en un solo sitio y explicada.
+        if not self._led:
             flags |= FLAG_LED
         if self._scan_once:
             flags |= FLAG_SCAN

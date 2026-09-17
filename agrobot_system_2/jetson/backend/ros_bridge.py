@@ -148,6 +148,12 @@ class AgroBotROSBridge:
             return "sin_meta"
         return self._node.estado_meta
 
+    def publish_odom_webcam(self, vx: float, vyaw: float, var_vx: float, var_vyaw: float):
+        """Odometría visual de la webcam -> /odom_webcam (odom3 del EKF).
+        Se llama desde el hilo de la odometría; `publish` de rclpy lo admite."""
+        if self.available:
+            self._node.publish_odom_webcam(vx, vyaw, var_vx, var_vyaw)
+
     def pose_en_mapa(self) -> dict | None:
         """Pose del robot en el marco `map`, o None si SLAM no publica TF."""
         if not self.available:
@@ -190,6 +196,7 @@ if ROS_AVAILABLE:
             # ---- publicadores hacia robot_localization ----
             self.imu_pub = self.create_publisher(Imu, "/imu/data_raw", 10)
             self.wheel_odom_pub = self.create_publisher(Odometry, "/wheel_odom", 10)
+            self.odom_webcam_pub = self.create_publisher(Odometry, "/odom_webcam", 10)
 
             # ---- cliente de acción Nav2 para "ir a este punto del mapa" ----
             self._nav_client = ActionClient(self, NavigateToPose, "navigate_to_pose")
@@ -230,6 +237,10 @@ if ROS_AVAILABLE:
                 "x": msg.pose.pose.position.x,
                 "y": msg.pose.pose.position.y,
                 "theta_deg": math.degrees(theta) % 360,
+                # velocidades del EKF: el dashboard las pone al lado de las de
+                # la webcam para poder calibrarla antes de fusionarla
+                "vx": msg.twist.twist.linear.x,
+                "vyaw": msg.twist.twist.angular.z,
             })
 
         def _map_cb(self, msg: "OccupancyGrid"):
@@ -371,6 +382,23 @@ if ROS_AVAILABLE:
                 GoalStatus.STATUS_SUCCEEDED: "exito",
                 GoalStatus.STATUS_CANCELED: "cancelada",
             }.get(status, "abortada")
+
+        def publish_odom_webcam(self, vx, vyaw, var_vx, var_vyaw):
+            msg = Odometry()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = "odom"
+            msg.child_frame_id = "base_link"
+            msg.twist.twist.linear.x = float(vx)
+            msg.twist.twist.angular.z = float(vyaw)
+            # Solo se miden vx y el giro; el resto con varianza enorme para
+            # que nadie lo tome como una medida de "cero".
+            for i in range(36):
+                msg.twist.covariance[i] = 0.0
+            for i in (7, 14, 21, 28):
+                msg.twist.covariance[i] = 1e6
+            msg.twist.covariance[0] = float(var_vx)
+            msg.twist.covariance[35] = float(var_vyaw)
+            self.odom_webcam_pub.publish(msg)
 
         def pose_en_mapa(self) -> dict | None:
             try:

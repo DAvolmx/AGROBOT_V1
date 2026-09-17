@@ -45,6 +45,7 @@ from obstacle_avoidance import ControladorEvasion, LecturasSensoresLIDAR
 from patrol import PatrolController
 from pulse_drive import ConductorPulsos, ACCIONES
 from mapas import GestorMapas, ErrorMapa
+from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
 
 # =============================================
 # ===== CONFIG =====
@@ -749,6 +750,25 @@ conductor: ConductorPulsos | None = None
 WAYPOINTS_PATH = _AQUI / "patrol_waypoints.json"
 
 
+odom_webcam: OdometriaWebcam | None = None
+
+
+def _servo_al_frente() -> tuple[bool, str]:
+    """¿La cámara mira al frente y quieta? Si no, la odometría visual leería
+    el giro del servo como giro del robot. Se mira lo que REPORTA el C3, no lo
+    que se le pidió: durante un barrido el firmware ignora el ángulo pedido."""
+    st = state.actuator_status or {}
+    if not st or time.time() - st.get("_received_at", 0) > 1.0:
+        return False, "sin estado del servo (¿C3 desconectado?)"
+    if st.get("scanning"):
+        return False, "cámara escaneando"
+    angulo = st.get("servo_angle")
+    frentes = {SERVO_HOME_DEG, SERVO_HOME_DEG + state.config["calibration"]["servo_offset_deg"]}
+    if angulo is None or min(abs(angulo - f) for f in frentes) > SERVO_TOLERANCIA_DEG:
+        return False, f"cámara girada ({angulo}°)"
+    return True, ""
+
+
 async def _bucle_rampa():
     """Hace avanzar la rampa del actuador a 20 Hz, llegue o no un comando."""
     while True:
@@ -1169,7 +1189,7 @@ async def calibration_update_handler(request: web.Request):
 # =============================================
 # ===== PARÁMETROS (SLAM / DETECCIÓN / SEGURIDAD) =====
 # =============================================
-PARAM_SECTIONS = ("slam", "detection", "safety", "control")
+PARAM_SECTIONS = ("slam", "detection", "safety", "control", "odometria_webcam")
 
 # Topes que un cliente NO puede sobrepasar por más que mande cualquier cosa
 # al POST. La sección `control` multiplica directamente lo que sale hacia
@@ -1574,6 +1594,8 @@ async def stats_loop():
         health_data = health.snapshot(cfg["heartbeat_stale_warn_s"], cfg["heartbeat_stale_err_s"])
 
         await state.broadcast({"type": "system_stats", "data": stats})
+        if odom_webcam is not None:
+            await state.broadcast({"type": "odom_webcam", "data": odom_webcam.snapshot()})
         await state.broadcast({"type": "health", "data": health_data})
         # solo emite el fallback casero si ROS todavía no ha mandado una
         # pose fusionada real — evita pisar la buena con la de dead-reckoning
@@ -1687,6 +1709,15 @@ async def start_background(app: web.Application):
     camera = CameraWorker(loop, _on_detection, lambda: state.config, health.beat)
     camera.set_model(app.get("yolo_model"))
     camera.start()
+
+    global odom_webcam
+    odom_webcam = OdometriaWebcam(
+        obtener_frame=camera.ultimo_frame,
+        get_config=lambda: state.config["odometria_webcam"],
+        servo_al_frente=_servo_al_frente,
+        publicar=ros_bridge.publish_odom_webcam,
+    )
+    odom_webcam.start()
     app["camera"] = camera
 
     app["stats_task"] = asyncio.create_task(stats_loop())

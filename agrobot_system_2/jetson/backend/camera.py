@@ -69,7 +69,9 @@ class CameraWorker:
         self._lock = threading.Lock()
 
         self._jpeg = None            # último frame comprimido (bytes)
-        self._frame_crudo = None     # último frame sin dibujar, para YOLO
+        self._frame_crudo = None     # último frame sin dibujar, para YOLO y odometría
+        self._frame_ts = 0.0         # time.monotonic() de la captura
+        self._frame_seq = 0          # sube con cada frame: permite saber si hay uno nuevo
         self._cajas = []             # últimas detecciones dibujables
         self._cajas_ts = 0.0
         self._ultimo_aviso = {}      # clase -> ts del último aviso emitido
@@ -126,6 +128,17 @@ class CameraWorker:
 
     def unsubscribe(self, q: asyncio.Queue):
         self._suscriptores.discard(q)
+
+    def ultimo_frame(self):
+        """(frame BGR sin dibujar, instante de captura, número de frame) o None.
+
+        No se copia: el hilo de captura crea un array nuevo por lectura y ya
+        no dibuja sobre él, así que quien lo reciba puede leerlo sin carrera
+        mientras no lo modifique."""
+        with self._lock:
+            if self._frame_crudo is None:
+                return None
+            return self._frame_crudo, self._frame_ts, self._frame_seq
 
     def snapshot(self) -> dict:
         return {"fps": round(self.fps, 1), "estado": self.estado,
@@ -186,7 +199,16 @@ class CameraWorker:
                 self._on_beat("camera")
                 with self._lock:
                     self._frame_crudo = frame
+                    self._frame_ts = time.monotonic()
+                    self._frame_seq += 1
                     cajas = list(self._cajas)
+
+                # Se dibuja sobre una COPIA. Antes se dibujaba sobre el mismo
+                # array guardado como "crudo": YOLO analizaba imágenes con sus
+                # propias cajas pintadas encima, y la odometría visual habría
+                # seguido esos rectángulos como si fueran el terreno.
+                if cajas:
+                    frame = frame.copy()
 
                 for c in cajas:
                     x1, y1, x2, y2 = c["xyxy"]

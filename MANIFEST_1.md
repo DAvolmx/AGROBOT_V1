@@ -75,10 +75,28 @@ cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
   Un reinicio de ROS sin cargar mapa empieza uno nuevo y el recorrido deja de
   valer.
 
-### Odometría visual (preparada, sin cámara todavía)
-- La webcam NexiGo N60 no sirve: monocular (sin escala) y sobre el servo de
-  escaneo. Decisión del usuario (2026-09-17): cámara de profundidad FIJA al
-  frente (RealSense D435i u OAK-D Lite).
+### Odometría visual con la webcam actual (activa en el backend, sin fusionar)
+- `jetson/backend/odometria_webcam.py`, pedida por el usuario el 2026-09-17
+  aun sabiendo los límites. Monocular + modelo de suelo plano: sigue rasgos
+  de la mitad baja (Lucas-Kanade), los proyecta al suelo con altura e
+  inclinación de la cámara y ajusta giro + avance con RANSAC.
+- Se PAUSA si el C3 no reporta el servo al frente (±3° de 98°), si está
+  escaneando, o con pocos rasgos. Quieto = mide cero.
+- Config `odometria_webcam` (altura 0,30 / inclinación 15° / hfov 70° /
+  adelante 0,15: **SIN MEDIR**). `habilitada`=true mide y muestra;
+  `publicar_ros`=false: no va al EKF hasta calibrar comparando con el EKF en
+  la pestaña SLAM & Telemetría. Publica `/odom_webcam` → `odom3` en ekf.yaml
+  (el EKF lo toma tras reiniciar `agrobot-ros`).
+- Validado: movimientos sintéticos sobre un fotograma real (giro exacto,
+  avance ±3–6 %, signos correctos) y 25 fotogramas reales quieto (cero exacto,
+  3,5 ms/cuadro). **No probado con el robot moviéndose** (el C3 no respondía).
+- Arreglo de paso en `camera.py`: las cajas de YOLO se dibujaban sobre el
+  mismo array que se guardaba como "frame crudo", así que YOLO analizaba
+  imágenes con sus propias cajas pintadas.
+
+### Odometría visual con cámara de profundidad (preparada, sin cámara todavía)
+- Decisión del usuario (2026-09-17): cámara de profundidad FIJA al
+  frente (RealSense D435i u OAK-D Lite), como mejora posterior a la webcam.
 - `launch/odometria_visual.launch.py` (incluido por el de mapeo, apagado por
   defecto) + `config/odometria_visual.yaml` → rtabmap `rgbd_odometry` publica
   `/odom_visual`. `ekf.yaml` ya lo fusiona como `odom2` (vx + giro); sin
@@ -123,7 +141,8 @@ cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
 3. Parachoques físico con finales de carrera directo al C3.
 4. Seguridad: clave del AP `12345678`, API sin autenticación.
 5. Arreglar `agrobot_navigation.launch.py`.
-6. Odometría visual: **preparada, falta la cámara** (ver abajo).
+6. Odometría visual: webcam **midiendo pero sin calibrar ni fusionar**;
+   cámara de profundidad **preparada, falta comprarla** (ver arriba).
 7. Pila para el RTC de la Jetson.
 8. Borrar `obstacle_avoidance.py` y corregir `REPORTE_MEJORAS_2026-09-13.md`.
 
@@ -3603,3 +3622,6 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
 - Odometría visual preparada (ver sección 0). `agrobot-ros.service` acepta
   `AGROBOT_LAUNCH_ARGS` desde `/etc/default/agrobot`.
 - Huella real del robot 0,40 × 0,35 m en `nav2_params.yaml` y config.
+- Odometría visual con la webcam (`odometria_webcam.py`, `/odom_webcam`,
+  `odom3` del EKF, tarjeta en SLAM & Telemetría). Apagada hacia el EKF hasta
+  calibrar. Arreglo de `camera.py` (cajas dibujadas sobre el frame crudo).

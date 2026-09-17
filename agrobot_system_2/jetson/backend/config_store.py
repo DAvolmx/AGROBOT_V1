@@ -62,6 +62,24 @@ DEFAULTS = {
         # comandada (dead-reckoning puro), 1 = confía solo en el giroscopio
         "pose_gyro_trust": 0.8,
     },
+    "odometria_webcam": {
+        # Odometría visual con la webcam (odometria_webcam.py). `habilitada`
+        # mide y lo muestra en el dashboard; `publicar_ros` además lo manda al
+        # EKF (/odom_webcam). Se deja apagado hasta comparar con el EKF: una
+        # fuente mal calibrada ya descontroló la pose una vez (el acelerómetro,
+        # 2026-09-06).
+        "habilitada": True,
+        "publicar_ros": False,
+        # SIN MEDIR. Altura del centro del lente sobre el suelo y cuánto mira
+        # hacia abajo. La escala del avance es proporcional a la altura.
+        "camara_altura_m": 0.30,
+        "camara_inclinacion_deg": 15.0,
+        # Campo de visión HORIZONTAL. Medirlo: poner la cámara a una distancia
+        # D de una pared y medir el ancho visible A: hfov = 2·atan(A / 2D).
+        "camara_hfov_deg": 70.0,
+        # Distancia del lente por delante del centro del robot.
+        "camara_adelante_m": 0.15,
+    },
     "control": {
         # Techos físicos del robot. Tienen que coincidir con V_MAX / VY_MAX /
         # OMEGA_MAX del firmware: si acá se pide más, el ESP32-C3 lo recorta

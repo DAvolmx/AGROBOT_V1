@@ -839,6 +839,47 @@ input[type="text"], select { font-family: inherit; }
 
     <!-- ================= SLAM & TELEMETRÍA ================= -->
     <div class="tab" id="tab-slam">
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0;">Odometría visual (webcam)</h3>
+          <span class="pill" id="ov-pill"><span class="dot"></span><span id="ov-estado">—</span></span>
+        </div>
+        <p class="hint" style="margin:10px 0 12px; line-height:1.5;">
+          Mide avance y giro siguiendo el suelo con la cámara. Se pausa sola si la cámara no mira al frente.
+          <b>Calibración:</b> mové el robot en línea recta y después girá; ajustá altura e inclinación hasta que
+          "Cámara" y "EKF" coincidan, y recién entonces activá <i>Enviar al EKF</i>
+          (el EKF la toma tras reiniciar <code>agrobot-ros</code>).
+        </p>
+        <table class="mono" style="width:100%; max-width:460px; border-collapse:collapse; font-size:14px; margin-bottom:12px;">
+          <tr style="color:var(--ink-soft);"><td></td><td style="text-align:right;">Cámara</td><td style="text-align:right;">EKF</td></tr>
+          <tr><td>Avance (m/s)</td><td style="text-align:right;" id="ov-vx">—</td><td style="text-align:right;" id="ov-ekf-vx">—</td></tr>
+          <tr><td>Giro (rad/s)</td><td style="text-align:right;" id="ov-vyaw">—</td><td style="text-align:right;" id="ov-ekf-vyaw">—</td></tr>
+          <tr style="color:var(--ink-soft);"><td>Rasgos · inliers · Hz</td><td colspan="2" style="text-align:right;" id="ov-calidad">—</td></tr>
+        </table>
+        <div class="toggle-row"><span style="font-size:15px;">Medir</span>
+          <label class="switch"><input type="checkbox" id="ov-habilitada"><div class="track"></div></label></div>
+        <div class="toggle-row"><span style="font-size:15px;">Enviar al EKF <span style="color:var(--ink-soft); font-size:13px;">(solo tras calibrar)</span></span>
+          <label class="switch"><input type="checkbox" id="ov-publicar"><div class="track"></div></label></div>
+        <div class="param-group" style="margin-top:12px;">
+          <div class="slider-row" style="margin-bottom:12px;">
+            <div class="label-row"><span>Altura del lente sobre el suelo</span><span class="v mono" id="ov-altura-val">—</span></div>
+            <input type="range" min="0.05" max="1.0" step="0.01" id="ov-altura">
+          </div>
+          <div class="slider-row" style="margin-bottom:12px;">
+            <div class="label-row"><span>Inclinación hacia abajo</span><span class="v mono" id="ov-incl-val">—</span></div>
+            <input type="range" min="-10" max="60" step="0.5" id="ov-incl">
+          </div>
+          <div class="slider-row" style="margin-bottom:12px;">
+            <div class="label-row"><span>Campo de visión horizontal</span><span class="v mono" id="ov-hfov-val">—</span></div>
+            <input type="range" min="40" max="130" step="1" id="ov-hfov">
+          </div>
+          <div class="slider-row">
+            <div class="label-row"><span>Lente por delante del centro</span><span class="v mono" id="ov-adelante-val">—</span></div>
+            <input type="range" min="-0.3" max="0.5" step="0.01" id="ov-adelante">
+          </div>
+        </div>
+        <button class="btn primary" id="ov-guardar" style="margin-top:12px;">Guardar calibración</button>
+      </div>
       <div class="grid-2">
         <div class="col">
           <div class="card">
@@ -1267,7 +1308,8 @@ input[type="text"], select { font-family: inherit; }
       case "mission_state": setMissionUI(msg.data.active); break;
       case "config_update": applyConfig(msg.data); if (msg.data.navigation) applyNavConfig(msg.data.navigation); break;
       case "health": renderHealth(msg.data); break;
-      case "pose": updatePose(msg.data); setPoseSource(msg.source); break;
+      case "pose": updatePose(msg.data); setPoseSource(msg.source); pintarVelEkf(msg.data); break;
+      case "odom_webcam": pintarOdomWebcam(msg.data); break;
       case "lidar_scan": lastScan = msg.data; dibujarRadarSiVisible(); break;
       case "map": setMap(msg.data); break;
       case "lidar_distancias": pintarDistancias(msg.data); break;
@@ -2218,6 +2260,7 @@ input[type="text"], select { font-family: inherit; }
       refreshSpeedLabel();
     }
     if (cfg.slam) {
+      if (cfg.odometria_webcam) aplicarConfigOdomWebcam(cfg.odometria_webcam);
       $("p-largo").value = cfg.slam.robot_largo_m; $("p-largo-val").textContent = cfg.slam.robot_largo_m.toFixed(2) + " m";
       $("p-ancho").value = cfg.slam.robot_ancho_m; $("p-ancho-val").textContent = cfg.slam.robot_ancho_m.toFixed(2) + " m";
       $("p-margen").value = cfg.slam.obstacle_margen_m; $("p-margen-val").textContent = cfg.slam.obstacle_margen_m.toFixed(2) + " m";
@@ -2239,6 +2282,10 @@ input[type="text"], select { font-family: inherit; }
     "p-err": (v) => $("p-err-val").textContent = v + " s",
     "p-accel-v": (v) => $("p-accel-v-val").textContent = parseFloat(v).toFixed(1) + " m/s²",
     "p-accel-omega": (v) => $("p-accel-omega-val").textContent = parseFloat(v).toFixed(1) + " rad/s²",
+    "ov-altura": (v) => $("ov-altura-val").textContent = parseFloat(v).toFixed(2) + " m",
+    "ov-incl": (v) => $("ov-incl-val").textContent = parseFloat(v).toFixed(1) + "°",
+    "ov-hfov": (v) => $("ov-hfov-val").textContent = v + "°",
+    "ov-adelante": (v) => $("ov-adelante-val").textContent = parseFloat(v).toFixed(2) + " m",
     "p-largo": (v) => $("p-largo-val").textContent = parseFloat(v).toFixed(2) + " m",
     "p-ancho": (v) => $("p-ancho-val").textContent = parseFloat(v).toFixed(2) + " m",
     "p-margen": (v) => $("p-margen-val").textContent = parseFloat(v).toFixed(2) + " m",
@@ -2252,6 +2299,51 @@ input[type="text"], select { font-family: inherit; }
   async function saveParams(section, body) {
     await fetch(`/api/params/${section}`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
   }
+
+  // ---------------------------------------------------------------
+  // Odometría visual (webcam)
+  // ---------------------------------------------------------------
+  function aplicarConfigOdomWebcam(c) {
+    $("ov-habilitada").checked = !!c.habilitada;
+    $("ov-publicar").checked = !!c.publicar_ros;
+    const pares = [["ov-altura", c.camara_altura_m], ["ov-incl", c.camara_inclinacion_deg],
+                   ["ov-hfov", c.camara_hfov_deg], ["ov-adelante", c.camara_adelante_m]];
+    for (const [id, v] of pares) { $(id).value = v; liveSliders[id](v); }
+  }
+
+  function pintarOdomWebcam(d) {
+    const midiendo = (d.estado || "").startsWith("midiendo");
+    $("ov-estado").textContent = d.estado || "—";
+    $("ov-pill").className = "pill" + (midiendo ? " ok" : d.estado === "deshabilitada" ? "" : " warn");
+    $("ov-vx").textContent = midiendo ? d.vx.toFixed(2) : "—";
+    $("ov-vyaw").textContent = midiendo ? d.vyaw.toFixed(2) : "—";
+    $("ov-calidad").textContent = `${d.rasgos} · ${d.inliers} · ${d.hz}`;
+  }
+
+  function pintarVelEkf(p) {
+    if (p.vx == null) return;
+    $("ov-ekf-vx").textContent = p.vx.toFixed(2);
+    $("ov-ekf-vyaw").textContent = p.vyaw.toFixed(2);
+  }
+
+  function datosOdomWebcam() {
+    return {
+      habilitada: $("ov-habilitada").checked,
+      publicar_ros: $("ov-publicar").checked,
+      camara_altura_m: parseFloat($("ov-altura").value),
+      camara_inclinacion_deg: parseFloat($("ov-incl").value),
+      camara_hfov_deg: parseFloat($("ov-hfov").value),
+      camara_adelante_m: parseFloat($("ov-adelante").value),
+    };
+  }
+  $("ov-guardar").addEventListener("click", () => saveParams("odometria_webcam", datosOdomWebcam()));
+  $("ov-habilitada").addEventListener("change", () => saveParams("odometria_webcam", datosOdomWebcam()));
+  $("ov-publicar").addEventListener("change", (e) => {
+    if (e.target.checked && !confirm("¿Ya comparaste Cámara con EKF moviendo el robot? Una odometría mal calibrada desvía la pose y el mapa.")) {
+      e.target.checked = false; return;
+    }
+    saveParams("odometria_webcam", datosOdomWebcam());
+  });
   $("p-detection-save").addEventListener("click", () => saveParams("detection", {
     confidence_threshold: parseFloat($("p-conf").value),
     clip_record_threshold: parseFloat($("p-clip").value),

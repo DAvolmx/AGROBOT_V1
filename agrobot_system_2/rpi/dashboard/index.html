@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgroBot · Gateway</title>
+<style>
+/* ===========================================================================
+   Paleta "Agricultura 5.0" — la MISMA que el dashboard de la Jetson.
+   Fondo claro a proposito: en campo esto se mira desde una tablet a pleno
+   sol, y sobre fondo oscuro la pantalla actua de espejo.
+   =========================================================================== */
+:root {
+  --bg: #e6f2e9;
+  --panel: #ffffff;
+  --panel-2: #f1f9f2;
+  --panel-3: #e3f3e7;
+  --line: #cfe3d2;
+  --line-fuerte: #a8ccae;
+
+  --ink: #0d1f14;
+  --ink-soft: #4e6a58;
+
+  /* `--accent` para fondos y graficos; `--accent-ink` para TEXTO: el verde
+     brillante sobre blanco no llega al contraste minimo en tamanos chicos. */
+  --accent: #00bd4f;
+  --accent-ink: #067a35;
+  --accent-soft: #ccfadd;
+
+  --lora: #9333ff;
+  --lora-ink: #6620c4;
+  --lora-soft: #efe0ff;
+
+  --tg: #00b0f0;
+  --tg-soft: #d2eefd;
+
+  --warn: #ff9500;
+  --warn-soft: #ffeecd;
+  --crit: #ff2d3f;
+  --crit-ink: #c4141f;
+  --warn-ink: #9c5400;
+  --crit-soft: #ffe0e2;
+
+  --radius: 14px;
+  --ease: cubic-bezier(.4, 0, .2, 1);
+  --sombra: 0 1px 2px rgba(22,40,28,.04), 0 8px 24px -18px rgba(22,40,28,.35);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: flex; min-height: 100vh;
+}
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+h2 { font-size: 18px; margin: 0; letter-spacing: .04em; }
+h3 { font-size: 16px; margin: 0 0 12px; font-weight: 650; }
+h4 { font-size: 15.5px; margin: 0; font-weight: 650; }
+code { background: var(--panel-3); padding: 1px 5px; border-radius: 4px; }
+
+/* ---------- estructura ---------- */
+nav {
+  width: 268px; flex: 0 0 268px; background: var(--panel);
+  border-right: 1px solid var(--line); padding: 20px 0 0;
+  display: flex; flex-direction: column;
+}
+.brand { padding: 0 20px 18px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.brand .badge {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: linear-gradient(150deg, var(--lora), #a855f7);
+  display: flex; align-items: center; justify-content: center; font-size: 22px;
+}
+.brand .nom { font-weight: 700; font-size: 19px; margin-top: 9px; }
+.brand .sub { font-size: 12px; color: var(--ink-soft); letter-spacing: .12em;
+              text-transform: uppercase; margin-top: 2px; }
+.nav-btn {
+  display: flex; align-items: center; gap: 10px; width: calc(100% - 20px);
+  margin: 1px 10px; padding: 9px 12px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--ink-soft); font: inherit; font-weight: 550;
+  cursor: pointer; text-align: left; transition: all .15s var(--ease);
+}
+.nav-btn:hover { background: var(--panel-2); color: var(--ink); }
+.nav-btn.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 650; }
+.sidebar-footer { margin-top: auto; padding: 14px 20px; border-top: 1px solid var(--line); }
+.sidebar-footer .row { display: flex; align-items: center; gap: 7px; font-size: 13.5px;
+                       color: var(--ink-soft); margin: 4px 0; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-fuerte); flex: 0 0 7px; }
+.dot.lora { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.dot.crit { background: var(--crit); box-shadow: 0 0 0 3px var(--crit-soft); }
+.dot.off  { background: var(--line-fuerte); }
+
+main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  height: 68px; flex: 0 0 68px; background: var(--panel);
+  border-bottom: 1px solid var(--line); display: flex; align-items: center;
+  justify-content: space-between; padding: 0 22px;
+}
+.pill { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px;
+        padding: 4px 11px; font-size: 13.5px; color: var(--ink-soft); }
+.content { padding: 20px 22px 32px; overflow-y: auto; }
+.tab { display: none; }
+.tab.on { display: block; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr; } }
+.col { display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line-fuerte);
+        border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--sombra); }
+.hint { font-size: 13.5px; color: var(--ink-soft); margin: 8px 0 0; }
+
+/* ---------- lecturas ---------- */
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media (max-width: 700px) { .stat-grid { grid-template-columns: repeat(2,1fr); } }
+.stat { background: var(--panel-2); border: 2px solid var(--line);
+        border-radius: 12px; padding: 15px 17px; }
+.stat .label { font-size: 12px; color: var(--ink-soft); text-transform: uppercase;
+               letter-spacing: .06em; font-weight: 600; }
+.stat .value { font-size: 34px; margin-top: 4px; font-weight: 650; letter-spacing: -.015em; }
+.stat .value small { font-size: 14px; color: var(--ink-soft); font-weight: 400; }
+.stat.sospechoso { border-color: var(--warn); background: var(--warn-soft); }
+
+/* Datos recuperados de la base, no en vivo. Se atenuan en vez de ocultarse:
+   siguen siendo la mejor informacion disponible, pero tienen que verse
+   distintos de una lectura de ahora. */
+body.datos-viejos .stat .value,
+body.datos-viejos #raw-payload { opacity: .45; }
+body.datos-viejos .stat { border-style: dashed; }
+
+.row-kv { display: flex; justify-content: space-between; align-items: center;
+          padding: 7px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.row-kv .k { color: var(--ink-soft); }
+.notavail { color: var(--ink-soft); font-style: italic; font-size: 14px; }
+
+.coverage { position: relative; height: 190px; display: flex;
+            align-items: center; justify-content: center; }
+.ring { position: absolute; aspect-ratio: 2/1; border: 1px solid var(--line-fuerte);
+        border-radius: 50%; opacity: .55; }
+
+.payload-preview {
+  background: var(--panel-3); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 13.5px;
+  white-space: pre; overflow-x: auto; color: var(--ink);
+}
+.payload-preview .k { color: var(--lora-ink); }
+.payload-preview .v { color: var(--accent-ink); }
+
+/* ---------- histogramas ---------- */
+.hist-controles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
+.hist-controles .sep { width: 1px; height: 18px; background: var(--line-fuerte); margin: 0 4px; }
+.chip {
+  border: 1px solid var(--line-fuerte); background: var(--panel); color: var(--ink-soft);
+  border-radius: 999px; padding: 4px 11px; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; transition: all .15s var(--ease); font-family: inherit;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent-ink); }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent);
+                             color: var(--accent-ink); }
+.hist-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 16px; }
+@media (max-width: 900px) { .hist-grid { grid-template-columns: 1fr; } }
+.hist-caja { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 8px;
+             background: var(--panel-2); }
+.hist-resumen { font-size: 13px; color: var(--ink-soft); margin: 2px 0 10px; }
+.hist-resumen b { color: var(--ink); font-weight: 600; }
+.hist-svg { width: 100%; height: 148px; display: block; overflow: visible; }
+/* Una sola serie por grafico, asi que un solo color: el histograma no
+   codifica identidad, codifica cuantas veces cayo el valor ahi. */
+.hist-svg .barra { fill: var(--accent); transition: fill .12s var(--ease); }
+.hist-svg .barra:hover { fill: var(--accent-ink); }
+.hist-svg .eje { stroke: var(--line-fuerte); stroke-width: 1; }
+.hist-svg .marca { font-size: 11px; fill: var(--ink-soft); font-family: ui-monospace, monospace; }
+.hist-svg .mediana { stroke: var(--lora); stroke-width: 2; stroke-dasharray: 3 3; }
+.hist-vacio { font-size: 13.5px; color: var(--ink-soft); padding: 34px 0; text-align: center; }
+
+/* ---------- botones ---------- */
+.btn {
+  border: 1px solid var(--line-fuerte); background: var(--panel); color: var(--ink);
+  border-radius: 9px; padding: 9px 14px; font: inherit; font-weight: 600;
+  cursor: pointer; transition: all .15s var(--ease);
+}
+.btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.btn.primario { background: var(--accent-ink); border-color: var(--accent); color: #fff; }
+.btn.primario:hover { background: #05622a; color: #fff; }
+.btn.peligro { background: var(--crit-ink); border-color: var(--crit); color: #fff; }
+.btn.peligro:hover { background: #9c0f19; color: #fff; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ---------- tablas ---------- */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
+     color: var(--ink-soft); padding: 7px 8px; border-bottom: 1px solid var(--line-fuerte); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); font-family: ui-monospace, monospace; }
+tr:hover td { background: var(--panel-2); }
+.tabla-scroll { overflow-x: auto; }
+
+/* ---------- log ---------- */
+.log-box { background: var(--panel-3); border: 1px solid var(--line); border-radius: 10px;
+           padding: 12px 14px; height: 320px; overflow-y: auto;
+           font-family: ui-monospace, monospace; font-size: 13.5px; }
+.log-box div { padding: 2px 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); }
+.log-box div:first-child { color: var(--ink); }
+
+/* ---------- telegram ---------- */
+.tg-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.tg-icono { width: 32px; height: 32px; border-radius: 9px; background: var(--tg-soft);
+            display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.switch { display: flex; align-items: center; justify-content: space-between;
+          padding: 8px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.switch input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.aviso { border-radius: 9px; padding: 10px 12px; font-size: 14px; margin-bottom: 12px; }
+.aviso.ok   { background: var(--accent-soft); color: var(--accent-ink); }
+.aviso.warn { background: var(--warn-soft);   color: var(--warn-ink); }
+.aviso.err  { background: var(--crit-soft);   color: var(--crit-ink); }
+
+/* ---------- toast ---------- */
+#toasts { position: fixed; right: 18px; bottom: 18px; display: flex;
+          flex-direction: column; gap: 8px; z-index: 50; }
+.toast { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+         border-radius: 9px; padding: 10px 14px; box-shadow: var(--sombra); max-width: 320px; }
+.toast.err { border-left-color: var(--crit); }
+.toast .t { font-weight: 650; font-size: 15px; }
+.toast .d { font-size: 13.5px; color: var(--ink-soft); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">
+    <div class="badge">📡</div>
+    <div class="nom">AgroBot</div>
+    <div class="sub">ChirpStack · Raspberry Pi</div>
+  </div>
+  <button class="nav-btn on" data-tab="t-dash"><span>🌱</span>Parcela</button>
+  <button class="nav-btn" data-tab="t-tg"><span>💬</span>Telegram</button>
+  <button class="nav-btn" data-tab="t-down"><span>🛑</span>Emergencia</button>
+  <button class="nav-btn" data-tab="t-hist"><span>🗂️</span>Histórico</button>
+  <div class="sidebar-footer">
+    <div class="row"><span class="dot off" id="lora-dot"></span><span id="lora-status">esperando paquete</span></div>
+    <div class="row"><span class="dot off" id="tg-dot"></span><span id="tg-status">Telegram sin configurar</span></div>
+  </div>
+</nav>
+
+<main>
+  <header class="topbar">
+    <h2>AGROBOT · GATEWAY</h2>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <div class="pill">Último paquete <span class="mono" id="last-packet-age" style="margin-left:5px;">—</span></div>
+      <div class="pill">Total <span class="mono" id="packet-count" style="margin-left:5px;">0</span></div>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- ================= PARCELA ================= -->
+    <div class="tab on" id="t-dash">
+      <div class="grid-2">
+        <div class="col">
+          <div class="card">
+            <h3>Últimas lecturas del nodo</h3>
+            <div class="stat-grid">
+              <div class="stat"><div class="label">CO₂</div><div class="value mono" id="d-co2">—<small> ppm</small></div></div>
+              <div class="stat"><div class="label">Temperatura</div><div class="value mono" id="d-temp">—<small> °C</small></div></div>
+              <div class="stat"><div class="label">Humedad</div><div class="value mono" id="d-hum">—<small> %</small></div></div>
+            </div>
+            <div class="row-kv" style="margin-top:14px;"><span class="k">Velocidad angular X / Y</span><span class="v mono" id="d-imu">— / — °/s</span></div>
+            <div class="row-kv" id="d-oor-row" style="display:none;"><span class="k">⚠️ Fuera de rango físico</span><span class="v mono" id="d-oor" style="color:var(--warn-ink);">—</span></div>
+            <div class="row-kv" id="d-miss-row" style="display:none;"><span class="k">⚠️ Sensor sin dato</span><span class="v mono" id="d-miss" style="color:var(--warn-ink);">—</span></div>
+            <div class="row-kv"><span class="k">GPS / batería</span><span class="notavail">sin módulo instalado en este firmware</span></div>
+          </div>
+
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <h3 style="margin:0;">Cobertura LoRa</h3>
+              <span class="mono" style="font-size:13.5px; color:var(--lora-ink);">RSSI <span id="rssi-val">—</span> dBm · SF<span id="sf-val">—</span></span>
+            </div>
+            <div class="coverage">
+              <div class="ring" style="height:45%;"></div>
+              <div class="ring" style="height:70%;"></div>
+              <div class="ring" style="height:95%;"></div>
+              <div style="position:relative; z-index:2; display:flex; flex-direction:column; align-items:center;">
+                <div style="width:46px; height:46px; border-radius:50%; background:var(--lora-soft); border:2px solid var(--lora); display:flex; align-items:center; justify-content:center;">📡</div>
+                <span class="mono" style="font-size:12px; color:var(--lora-ink); margin-top:5px;">HT-M02</span>
+              </div>
+            </div>
+            <p class="hint">Sin GPS no hay posición del robot en el mapa. Los anillos son solo una referencia visual: el dato real es el RSSI/SF del último paquete.</p>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="card">
+            <h3>Registro</h3>
+            <div class="log-box" id="log-box"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:1100px; margin:16px auto 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+          <h3 style="margin:0;">Distribución de los sensores</h3>
+          <span class="mono" style="font-size:13px; color:var(--ink-soft);" id="hist-estado">—</span>
+        </div>
+        <p class="hint" style="margin:4px 0 12px;">
+          Cuántas veces cayó cada sensor en cada rango. Sirve para lo que el valor
+          actual no dice: si la lectura de ahora es normal o es rara. La línea
+          morada a trazos es la mediana.
+        </p>
+        <div class="hist-controles" id="hist-controles">
+          <button class="chip" data-horas="1">1 h</button>
+          <button class="chip" data-horas="6">6 h</button>
+          <button class="chip" data-horas="24" aria-pressed="true">24 h</button>
+          <button class="chip" data-horas="168">7 días</button>
+          <span class="sep"></span>
+          <button class="chip" id="hist-auto" aria-pressed="true">↻ en vivo</button>
+        </div>
+        <div class="hist-grid" id="hist-grid"></div>
+      </div>
+
+      <div class="card" style="max-width:1100px; margin:0 auto;">
+        <h3>Último paquete decodificado</h3>
+        <div class="grid-2">
+          <div class="payload-preview" id="raw-payload">Esperando el primer paquete…</div>
+          <div class="col">
+            <div class="row-kv"><span class="k">Dev EUI</span><span class="v mono" id="p-eui">—</span></div>
+            <div class="row-kv"><span class="k">Hora</span><span class="v mono" id="p-ts">—</span></div>
+            <div class="row-kv"><span class="k">RSSI</span><span class="v mono" id="p-rssi">—</span></div>
+            <div class="row-kv"><span class="k">SNR</span><span class="v mono" id="p-snr">—</span></div>
+            <div class="row-kv"><span class="k">Spreading factor</span><span class="v mono" id="p-sf">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= TELEGRAM ================= -->
+    <div class="tab" id="t-tg">
+      <div class="grid-2">
+        <div class="col">
+          <div class="card">
+            <div class="tg-head">
+              <div class="tg-icono">💬</div>
+              <div>
+                <h4>Alarmas por Telegram</h4>
+                <div style="font-size:13.5px; color:var(--ink-soft);">La única pieza del sistema con salida a internet</div>
+              </div>
+            </div>
+            <div id="tg-aviso"></div>
+            <div class="row-kv"><span class="k">Token del bot</span><span class="v mono" id="tg-token">—</span></div>
+            <div class="row-kv"><span class="k">Chat vinculado</span><span class="v mono" id="tg-chat">—</span></div>
+            <div class="row-kv"><span class="k">Último error</span><span class="v mono" id="tg-err" style="color:var(--crit-ink);">—</span></div>
+            <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+              <button class="btn primario" id="tg-probar">Enviar prueba</button>
+              <button class="btn" id="tg-reporte">Enviar reporte</button>
+              <button class="btn" id="tg-toggle">Activar / silenciar</button>
+            </div>
+            <p class="hint">
+              Si no hay chat vinculado, abre Telegram, busca tu bot y mándale
+              <code>/start</code>. El gateway aprende el chat solo. Telegram no
+              permite que un bot escriba primero a alguien que no le ha hablado.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>Qué alarmas se envían</h3>
+            <div id="tg-alertas"></div>
+            <p class="hint">Los cambios se guardan al instante en la Raspberry Pi.</p>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="card">
+            <h3>Últimos envíos</h3>
+            <div class="log-box" id="tg-log"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= EMERGENCIA ================= -->
+    <div class="tab" id="t-down">
+      <div class="card" style="max-width:820px;">
+        <h3>Comandos de bajada (downlink)</h3>
+        <p class="hint" style="margin:0 0 14px;">
+          Van por la API de ChirpStack a la cola del dispositivo. El nodo es
+          <b>clase A</b>: solo escucha en dos ventanas cortas justo después de
+          cada envío, así que un comando tarda <b>hasta 30 s</b> en llegar. No es
+          un mando en tiempo real. Para frenar en el acto está el enlace directo
+          con el ESP32-C3.
+        </p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn peligro" data-cmd="EMERGENCY_STOP">🛑 Parada de emergencia</button>
+          <button class="btn" data-cmd="PARK">🅿️ Aparcar</button>
+          <button class="btn" data-cmd="PING">🏓 Ping</button>
+          <button class="btn" data-cmd="ACK">✅ ACK</button>
+        </div>
+        <p class="hint"><b>Ping</b> no mueve nada: sirve para comprobar que el camino completo funciona con el robot en marcha.</p>
+      </div>
+
+      <div class="card" style="max-width:820px; margin-top:16px;">
+        <h3>Comandos enviados</h3>
+        <div class="tabla-scroll">
+          <table>
+            <thead><tr><th>Hora</th><th>Comando</th><th>Estado</th></tr></thead>
+            <tbody id="down-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= HISTORICO ================= -->
+    <div class="tab" id="t-hist">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="margin:0;">Paquetes recibidos</h3>
+          <a class="btn" href="/api/history/export.csv" download>⬇ Exportar CSV</a>
+        </div>
+        <div class="tabla-scroll">
+          <table>
+            <thead><tr><th>Hora</th><th>CO₂</th><th>Temp</th><th>Hum</th><th>RSSI</th><th>SF</th><th>Avisos</th></tr></thead>
+            <tbody id="history-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<div id="toasts"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// ---------------------------------------------------------------
+// Navegacion
+// ---------------------------------------------------------------
+document.querySelectorAll(".nav-btn").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll(".nav-btn").forEach(x => x.classList.toggle("on", x === b));
+    document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.id === b.dataset.tab));
+  };
+});
+
+function toast(titulo, detalle, tipo) {
+  const d = document.createElement("div");
+  d.className = "toast" + (tipo === "err" ? " err" : "");
+  d.innerHTML = `<div class="t"></div><div class="d"></div>`;
+  d.querySelector(".t").textContent = titulo;
+  d.querySelector(".d").textContent = detalle || "";
+  $("toasts").appendChild(d);
+  setTimeout(() => d.remove(), 6000);
+}
+
+function log(txt) {
+  const box = $("log-box");
+  const line = document.createElement("div");
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${txt}`;
+  box.prepend(line);
+  while (box.children.length > 80) box.removeChild(box.lastChild);
+}
+
+function fmt(v, dec) {
+  if (v === null || v === undefined) return "—";
+  const a = Math.abs(v);
+  const d = dec !== undefined ? dec : (a >= 100 ? 0 : a >= 10 ? 1 : 2);
+  return v.toFixed(d);
+}
+
+// ---------------------------------------------------------------
+// Frescura del dato
+//
+// Un dato viejo mostrado como si fuera de ahora es peor que no mostrar nada:
+// el operador decide sobre un campo que ya no es asi. El umbral lo manda el
+// servidor (3 ciclos de transmision) para no duplicar la regla aqui.
+// ---------------------------------------------------------------
+let lastPacketAt = 0;
+let umbralObsoleto = 90;
+
+function textoEdad(s) {
+  if (s < 60) return `hace ${s}s`;
+  if (s < 3600) return `hace ${Math.round(s/60)}min`;
+  if (s < 86400) return `hace ${Math.round(s/3600)}h`;
+  return `hace ${Math.round(s/86400)}d`;
+}
+
+function refrescarFrescura() {
+  if (!lastPacketAt) {
+    $("lora-dot").className = "dot off";
+    $("lora-status").textContent = "sin datos todavía";
+    $("last-packet-age").textContent = "—";
+    document.body.classList.remove("datos-viejos");
+    return;
+  }
+  const secs = Math.round((Date.now() - lastPacketAt) / 1000);
+  $("last-packet-age").textContent = textoEdad(secs);
+  const viejo = secs > umbralObsoleto;
+  document.body.classList.toggle("datos-viejos", viejo);
+  if (viejo) {
+    $("lora-dot").className = "dot crit";
+    $("lora-status").textContent = `sin señal — último dato ${textoEdad(secs)}`;
+  } else {
+    $("lora-dot").className = "dot lora";
+    $("lora-status").textContent = "enlace activo";
+  }
+}
+setInterval(refrescarFrescura, 1000);
+
+// ---------------------------------------------------------------
+// Paquete
+// ---------------------------------------------------------------
+function updatePacket(d) {
+  lastPacketAt = (d.received_at || Date.now()/1000) * 1000;
+
+  $("d-co2").innerHTML  = `${Math.round(d.co2 ?? 0)}<small> ppm</small>`;
+  $("d-temp").innerHTML = `${(d.tempSCD ?? 0).toFixed(1)}<small> °C</small>`;
+  $("d-hum").innerHTML  = `${(d.humidity ?? 0).toFixed(1)}<small> %</small>`;
+  $("d-imu").textContent = `${(d.gyroX ?? 0).toFixed(1)} / ${(d.gyroY ?? 0).toFixed(1)} °/s`;
+  $("rssi-val").textContent = d.rssi ?? "—";
+  $("sf-val").textContent = d.sf ?? "—";
+
+  const oor = d._out_of_range || [];
+  $("d-oor-row").style.display = oor.length ? "flex" : "none";
+  if (oor.length) $("d-oor").textContent = oor.join(", ");
+
+  const miss = d._sensors_missing || [];
+  $("d-miss-row").style.display = miss.length ? "flex" : "none";
+  if (miss.length) $("d-miss").textContent = miss.join(", ");
+
+  const marcados = new Set([...oor, ...miss]);
+  [["d-co2","co2"], ["d-temp","tempSCD"], ["d-hum","humidity"]]
+    .forEach(([id, campo]) => {
+      $(id).closest(".stat").classList.toggle("sospechoso", marcados.has(campo));
+    });
+
+  $("p-eui").textContent  = d.dev_eui ?? "—";
+  $("p-ts").textContent   = new Date(lastPacketAt).toLocaleTimeString();
+  $("p-rssi").textContent = (d.rssi ?? "—") + " dBm";
+  $("p-snr").textContent  = (d.snr ?? "—") + " dB";
+  $("p-sf").textContent   = "SF" + (d.sf ?? "?");
+
+  $("raw-payload").innerHTML =
+    `{\n  <span class="k">"co2"</span>: <span class="v">${Math.round(d.co2 ?? 0)}</span>,\n` +
+    `  <span class="k">"tempSCD"</span>: <span class="v">${(d.tempSCD ?? 0).toFixed(2)}</span>,\n` +
+    `  <span class="k">"humidity"</span>: <span class="v">${(d.humidity ?? 0).toFixed(1)}</span>,\n` +
+    `  <span class="k">"accel"</span>: [<span class="v">${(d.accelX ?? 0).toFixed(2)}</span>, <span class="v">${(d.accelY ?? 0).toFixed(2)}</span>, <span class="v">${(d.accelZ ?? 0).toFixed(2)}</span>],\n` +
+    `  <span class="k">"gyro"</span>: [<span class="v">${(d.gyroX ?? 0).toFixed(1)}</span>, <span class="v">${(d.gyroY ?? 0).toFixed(1)}</span>, <span class="v">${(d.gyroZ ?? 0).toFixed(1)}</span>],\n` +
+    `  <span class="k">"_out_of_range"</span>: <span class="v">${JSON.stringify(oor)}</span>\n}`;
+
+  refrescarFrescura();
+}
+
+function addHistoryRow(d) {
+  const tbody = $("history-table");
+  const tr = document.createElement("tr");
+  const hora = new Date((d.received_at || Date.now()/1000) * 1000).toLocaleTimeString();
+  const avisos = [...(d._sensors_missing || []), ...(d._out_of_range || [])].join(", ");
+  [hora, Math.round(d.co2 ?? 0), fmt(d.tempSCD, 1), fmt(d.humidity, 1),
+   d.rssi ?? "—", "SF" + (d.sf ?? "?"), avisos || "—"]
+    .forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+  tbody.prepend(tr);
+  while (tbody.children.length > 300) tbody.removeChild(tbody.lastChild);
+}
+
+function renderDownlinks(lista) {
+  const tbody = $("down-table");
+  tbody.replaceChildren();
+  (lista || []).forEach(d => {
+    const tr = document.createElement("tr");
+    [new Date((d.sent_at || 0) * 1000).toLocaleTimeString(),
+     d.command || "—",
+     d.delivered ? "entregado" : "encolado"]
+      .forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    tbody.appendChild(tr);
+  });
+}
+
+// ---------------------------------------------------------------
+// WebSocket
+// ---------------------------------------------------------------
+let ws;
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => log("WebSocket conectado al gateway.");
+  ws.onclose = () => setTimeout(connect, 1500);
+  ws.onmessage = (evt) => handle(JSON.parse(evt.data));
+}
+connect();
+
+function handle(msg) {
+  if (msg.type === "snapshot") {
+    const historial = msg.data.history || [];
+    const est = msg.data.estado || {};
+    if (est.umbral_seg) umbralObsoleto = est.umbral_seg;
+
+    const ultimo = (msg.data.last_packet && Object.keys(msg.data.last_packet).length)
+      ? msg.data.last_packet : historial[0];
+    if (ultimo) updatePacket(ultimo);
+    if (est.hay_dato && est.obsoleto) {
+      log(`Último dato guardado, ${textoEdad(Math.round(est.edad_seg))}. No hay señal en vivo.`);
+    }
+    $("packet-count").textContent = msg.data.packet_count;
+    historial.slice().reverse().forEach(addHistoryRow);
+    renderDownlinks(msg.data.downlinks);
+    cargarHistogramas();
+
+  } else if (msg.type === "packet") {
+    updatePacket(msg.data);
+    $("packet-count").textContent = msg.packet_count;
+    addHistoryRow(msg.data);
+    if (histAuto) cargarHistogramas();
+    log(`📦 Paquete de ${msg.data.dev_eui} — RSSI ${msg.data.rssi ?? "?"} dBm`);
+
+  } else if (msg.type === "downlink_sent") {
+    log(`${msg.data.ok ? "✅" : "❌"} Downlink ${msg.data.command} ${msg.data.ok ? "encolado" : "falló"}`);
+    toast("Downlink", `${msg.data.command} ${msg.data.ok ? "encolado en ChirpStack" : "no se pudo enviar"}`,
+          msg.data.ok ? "ok" : "err");
+    refrescarTelegram();
+
+  } else if (msg.type === "alerta_externa") {
+    const d = msg.data || {};
+    const que = d.clase ? `${d.clase}${d.confianza ? ` (${(d.confianza*100).toFixed(0)}%)` : ""}`
+                        : (d.titulo || "evento");
+    log(`🐛 Alerta del robot: ${que}`);
+    toast("Alerta del robot", que, "err");
+    refrescarTelegram();
+  }
+}
+
+// ---------------------------------------------------------------
+// Histogramas
+//
+// Se piden al gateway ya binados. El navegador solo dibuja: la Raspberry
+// tiene el dato indexado y hacer la cuenta alli evita mandar miles de filas
+// por la red para recorrerlas en el aparato mas lento de los dos.
+// ---------------------------------------------------------------
+const HIST_CAMPOS = ["co2", "tempSCD", "humidity", "rssi", "gyroX"];
+let histHoras = 24, histAuto = true, histCargando = false;
+
+function dibujarHistograma(h) {
+  const caja = document.createElement("div");
+  caja.className = "hist-caja";
+  const t = document.createElement("h4");
+  t.textContent = `${h.etiqueta} (${h.unidad})`;
+  caja.appendChild(t);
+  const res = document.createElement("p");
+  res.className = "hist-resumen";
+  caja.appendChild(res);
+
+  if (!h.n) {
+    res.textContent = h.descartadas
+      ? `${h.descartadas} muestras, todas de un sensor que no responde`
+      : "sin muestras en este periodo";
+    const v = document.createElement("div");
+    v.className = "hist-vacio"; v.textContent = "Sin datos";
+    caja.appendChild(v);
+    return caja;
+  }
+
+  // Sensor clavado en un valor. Dibujar una barra unica aparentaria
+  // informacion sin tenerla; se dice con palabras, que ademas es el
+  // diagnostico util.
+  if (h.constante) {
+    res.innerHTML = `<b>${h.n}</b> muestras, todas iguales`;
+    const v = document.createElement("div");
+    v.className = "hist-vacio";
+    v.innerHTML = `Valor fijo en <b>${fmt(h.min)} ${h.unidad}</b>.<br>Un sensor real fluctúa: esto suele significar que no responde.`;
+    caja.appendChild(v);
+    return caja;
+  }
+
+  const desc = h.descartadas ? ` · <b>${h.descartadas}</b> descartadas (sensor sin responder)` : "";
+  res.innerHTML = `<b>${h.n}</b> muestras · mediana <b>${fmt(h.mediana)}</b> · rango <b>${fmt(h.min)}</b> a <b>${fmt(h.max)}</b>${desc}`;
+
+  const W = 300, H = 118, PAD_B = 16, PAD_T = 6;
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("class", "hist-svg");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `Histograma de ${h.etiqueta}. ${h.n} muestras entre ${fmt(h.min)} y ${fmt(h.max)} ${h.unidad}.`);
+
+  const maxN = Math.max(...h.bins.map(b => b.n)) || 1;
+  const alto = H - PAD_B - PAD_T;
+  const paso = W / h.bins.length;
+  const hueco = 2;   // sin separacion las barras se leen como una masa
+
+  h.bins.forEach((b, i) => {
+    if (!b.n) return;
+    const alturaBarra = Math.max(2, (b.n / maxN) * alto);
+    const r = document.createElementNS(NS, "rect");
+    r.setAttribute("x", (i * paso + hueco / 2).toFixed(2));
+    r.setAttribute("y", (H - PAD_B - alturaBarra).toFixed(2));
+    r.setAttribute("width", Math.max(1, paso - hueco).toFixed(2));
+    r.setAttribute("height", alturaBarra.toFixed(2));
+    r.setAttribute("rx", "2");
+    r.setAttribute("class", "barra");
+    const tip = document.createElementNS(NS, "title");
+    tip.textContent = `${fmt(b.desde)} a ${fmt(b.hasta)} ${h.unidad}\n${b.n} muestras (${(100*b.n/h.n).toFixed(1)} %)`;
+    r.appendChild(tip);
+    svg.appendChild(r);
+  });
+
+  // Mediana: da el centro real de la distribucion, que en datos con cola no
+  // coincide con la media.
+  const xMed = ((h.mediana - h.min) / (h.max - h.min)) * W;
+  const lm = document.createElementNS(NS, "line");
+  lm.setAttribute("x1", xMed.toFixed(2)); lm.setAttribute("x2", xMed.toFixed(2));
+  lm.setAttribute("y1", PAD_T); lm.setAttribute("y2", H - PAD_B);
+  lm.setAttribute("class", "mediana");
+  svg.appendChild(lm);
+
+  const eje = document.createElementNS(NS, "line");
+  eje.setAttribute("x1", 0); eje.setAttribute("x2", W);
+  eje.setAttribute("y1", H - PAD_B); eje.setAttribute("y2", H - PAD_B);
+  eje.setAttribute("class", "eje");
+  svg.appendChild(eje);
+
+  // Solo los dos extremos rotulados: una etiqueta por barra se solapa a este
+  // ancho y el valor exacto ya esta en el tooltip.
+  [[2, fmt(h.min), "start"], [W - 2, fmt(h.max), "end"]].forEach(([x, txt, anc]) => {
+    const e = document.createElementNS(NS, "text");
+    e.setAttribute("x", x); e.setAttribute("y", H - 4);
+    e.setAttribute("text-anchor", anc); e.setAttribute("class", "marca");
+    e.textContent = txt;
+    svg.appendChild(e);
+  });
+
+  caja.appendChild(svg);
+  return caja;
+}
+
+async function cargarHistogramas() {
+  if (histCargando) return;   // evita solaparse si entran paquetes seguidos
+  histCargando = true;
+  try {
+    const datos = await Promise.all(HIST_CAMPOS.map(async campo => {
+      const r = await fetch(`/api/histograma?campo=${campo}&horas=${histHoras}&bins=20`);
+      if (!r.ok) throw new Error(`${campo}: HTTP ${r.status}`);
+      return await r.json();
+    }));
+    $("hist-grid").replaceChildren(...datos.map(dibujarHistograma));
+    const total = datos.reduce((a, d) => Math.max(a, d.n || 0), 0);
+    $("hist-estado").textContent = `${total} paquetes · ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    // Un fallo aqui no puede tumbar el resto del panel: los histogramas son
+    // contexto, la telemetria en vivo es lo critico.
+    $("hist-estado").textContent = "no se pudieron cargar";
+    log(`Histogramas: ${e.message}`);
+  } finally {
+    histCargando = false;
+  }
+}
+
+$("hist-controles").addEventListener("click", (ev) => {
+  const b = ev.target.closest(".chip");
+  if (!b) return;
+  if (b.id === "hist-auto") {
+    histAuto = b.getAttribute("aria-pressed") !== "true";
+    b.setAttribute("aria-pressed", String(histAuto));
+    if (histAuto) cargarHistogramas();
+    return;
+  }
+  [...ev.currentTarget.querySelectorAll("[data-horas]")]
+    .forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  histHoras = Number(b.dataset.horas);
+  cargarHistogramas();
+});
+// Red de seguridad: si el robot deja de transmitir, el refresco por paquete
+// no dispara nunca y la hora del pie quedaria congelada sin explicacion.
+setInterval(() => { if (histAuto) cargarHistogramas(); }, 60000);
+
+// ---------------------------------------------------------------
+// Downlinks
+// ---------------------------------------------------------------
+$("t-down").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-cmd]");
+  if (!b) return;
+  const cmd = b.dataset.cmd;
+  // La parada de emergencia no se pide dos veces: si el operador la pulsa es
+  // porque hace falta ya. El resto tampoco necesita confirmacion porque
+  // ninguno es destructivo.
+  b.disabled = true;
+  try {
+    const r = await fetch("/api/downlink", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({command: cmd})
+    });
+    const d = await r.json();
+    if (!d.ok) toast("Downlink", `${cmd} no se pudo encolar`, "err");
+  } catch (e) {
+    toast("Downlink", `error de red: ${e.message}`, "err");
+  } finally {
+    b.disabled = false;
+  }
+});
+
+// ---------------------------------------------------------------
+// Telegram
+// ---------------------------------------------------------------
+const ETIQUETAS_ALERTA = {
+  plaga: "Plaga detectada por la Jetson",
+  sensor_fuera_rango: "Sensor fuera de rango físico",
+  sensor_caido: "Sensor sin dato",
+  enlace_perdido: "Enlace LoRa caído",
+  downlink: "Comando de emergencia enviado",
+  sistema: "Avisos del sistema",
+};
+
+let tgEstado = null;
+
+async function refrescarTelegram() {
+  try {
+    const d = await (await fetch("/api/telegram")).json();
+    tgEstado = d;
+    pintarTelegram(d);
+  } catch (e) { /* el panel no puede caerse por esto */ }
+}
+
+function pintarTelegram(d) {
+  const activo = d.enabled && d.configurado;
+  $("tg-dot").className = "dot " + (activo ? "lora" : "off");
+  $("tg-status").textContent = activo ? "Telegram activo"
+                             : d.tiene_token ? "Telegram sin vincular"
+                             : "Telegram sin configurar";
+
+  $("tg-token").textContent = d.tiene_token
+    ? (d.token_desde_entorno ? "cargado desde .env" : "guardado en el servidor")
+    : "no configurado";
+  $("tg-chat").textContent = d.chat_id || "sin vincular — manda /start al bot";
+  $("tg-err").textContent = d.last_error || "—";
+  $("tg-err").style.color = d.last_error ? "var(--crit)" : "var(--ink-soft)";
+
+  let aviso = "";
+  if (!d.tiene_token) {
+    aviso = `<div class="aviso err">Sin token. Ejecuta <code>./CONFIGURAR_TELEGRAM.sh &lt;token&gt;</code> en la Raspberry Pi y reinicia el gateway.</div>`;
+  } else if (!d.chat_id) {
+    aviso = `<div class="aviso warn">Falta vincular el chat. Abre Telegram, busca tu bot y mándale <code>/start</code>.</div>`;
+  } else if (!d.enabled) {
+    aviso = `<div class="aviso warn">Las alarmas están silenciadas. Pulsa «Activar / silenciar» o manda <code>/activar</code> al bot.</div>`;
+  } else {
+    aviso = `<div class="aviso ok">Todo listo: las alarmas del cultivo llegan a tu Telegram.</div>`;
+  }
+  $("tg-aviso").innerHTML = aviso;
+
+  const cont = $("tg-alertas");
+  cont.replaceChildren();
+  Object.entries(d.alerts || {}).forEach(([k, v]) => {
+    const row = document.createElement("label");
+    row.className = "switch";
+    const txt = document.createElement("span");
+    txt.textContent = ETIQUETAS_ALERTA[k] || k;
+    const inp = document.createElement("input");
+    inp.type = "checkbox"; inp.checked = !!v;
+    inp.onchange = async () => {
+      const alerts = {...(tgEstado.alerts || {}), [k]: inp.checked};
+      await fetch("/api/telegram", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({alerts})
+      });
+      refrescarTelegram();
+    };
+    row.append(txt, inp);
+    cont.appendChild(row);
+  });
+
+  const box = $("tg-log");
+  box.replaceChildren();
+  (d.log || []).slice(0, 40).forEach(e => {
+    const div = document.createElement("div");
+    const hora = new Date((e.ts || 0) * 1000).toLocaleTimeString();
+    div.textContent = `[${hora}] ${e.ok ? "✅" : "❌"} ${e.tipo}: ${(e.texto || "").replace(/<[^>]+>/g, "").slice(0, 90)}`;
+    box.appendChild(div);
+  });
+}
+
+$("tg-probar").onclick = async () => {
+  const r = await (await fetch("/api/telegram/test", {method: "POST"})).json();
+  toast("Telegram", r.ok ? "Mensaje de prueba enviado" : (r.error || "no se pudo enviar"),
+        r.ok ? "ok" : "err");
+  refrescarTelegram();
+};
+$("tg-reporte").onclick = async () => {
+  const r = await (await fetch("/api/telegram/report", {method: "POST"})).json();
+  toast("Telegram", r.ok ? "Reporte enviado" : (r.error || "no se pudo enviar"),
+        r.ok ? "ok" : "err");
+  refrescarTelegram();
+};
+$("tg-toggle").onclick = async () => {
+  if (!tgEstado) return;
+  await fetch("/api/telegram", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({enabled: !tgEstado.enabled})
+  });
+  refrescarTelegram();
+};
+
+refrescarTelegram();
+setInterval(refrescarTelegram, 20000);
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>agrobot_navigation</name>
+  <version>1.0.0</version>
+  <description>
+    Bringup de navegación de AgroBot: driver del RPLIDAR (sllidar_ros2),
+    localización (robot_localization), mapeo (slam_toolbox) y navegación
+    (nav2). No contiene nodos propios en Python — el puente entre estos
+    tópicos ROS y el backend de AgroBot (UDP hacia el ESP32-C3, WebSocket
+    hacia el dashboard) vive en jetson/backend/ros_bridge.py, embebido en
+    el mismo proceso de jetson_server.py.
+  </description>
+  <maintainer email="agrobot@example.com">AgroBot</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>sllidar_ros2</exec_depend>
+  <exec_depend>robot_localization</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

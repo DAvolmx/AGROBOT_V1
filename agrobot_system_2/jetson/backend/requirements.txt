@@ -1,0 +1,17 @@
+aiohttp>=3.9
+opencv-python>=4.8
+numpy>=1.24
+psutil>=5.9
+# Opcional — sin esto el video sirve igual, solo sin overlay de detección:
+ultralytics>=8.3
+# Opcional — GPU%/temperatura reales en la pestaña Sistema (requiere
+# instalar el daemon jtop una vez y reiniciar: sudo systemctl restart jtop.service):
+jetson-stats>=4.2
+
+# ROS 2 (rclpy) NO se instala por pip — viene del entorno ROS del sistema.
+# Antes de "pip install -r requirements.txt", correr:
+#   source /opt/ros/<distro>/setup.bash
+# así rclpy queda visible en el mismo venv/python que usa jetson_server.py.
+# Sin esto, ros_bridge.py se vuelve no-op automáticamente y el sistema
+# sigue funcionando con el PoseEstimator/LidarReactive caseros de slam.py.
+

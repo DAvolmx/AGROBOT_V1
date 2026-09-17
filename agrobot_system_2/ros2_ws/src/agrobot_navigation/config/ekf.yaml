@@ -1,0 +1,103 @@
+# robot_localization — EKF que reemplaza al PoseEstimator casero de slam.py.
+#
+# Fusiona TRES fuentes desde 2026-09-06:
+#   - /odom_rf2o      : odometría por casamiento de scans del LIDAR (rf2o).
+#                       Es la ÚNICA medida real de traslación que tiene el
+#                       robot: no hay encoders, y hasta ahora el avance era
+#                       una suposición en lazo abierto. Se fusiona solo `vx`.
+#   - /imu/data_raw   : MPU6050 real, vía UDP -> ros_bridge.py -> aquí. Desde
+#                       2026-09-06 llega a 20 Hz en vez de una muestra cada
+#                       30 s. Solo se usa velocidad angular (yaw rate) y
+#                       aceleración lineal; NO se usa orientación absoluta (no
+#                       hay magnetómetro, así que orientation_covariance[0]
+#                       = -1 le dice al EKF "ignora la orientación").
+#   - /wheel_odom     : NO es un encoder — es la velocidad COMANDADA que ya se
+#                       le mandó al ESP32-C3. Se CONSERVA, pero degradada a
+#                       `odom1` y solo con el giro comandado, porque ahora hay
+#                       una medida real de avance que la sustituye. Sirve de
+#                       red: si el LIDAR se queda sin estructura contra la que
+#                       casar (campo abierto, niebla de polvo), el filtro no
+#                       se queda ciego del todo.
+#
+# ⚠️ AVISO SOBRE rf2o EN ESTE ROBOT. El chasis lleva suspensión de recorrido
+# largo y el LIDAR va a ~30 cm del suelo. Con 2° de cabeceo el haz ya toca el
+# suelo a 8.6 m, y el casamiento de scans interpreta ese suelo entrando y
+# saliendo como traslación que no existe. Por eso el scan se recorta por rango
+# antes de llegar aquí y por eso la covarianza de rf2o NO se pone optimista.
+# Hay que validarlo empujando el robot una distancia medida.
+#
+# Salida: /odometry/filtered — esto es lo que consume Nav2 como odom real,
+# y lo que el dashboard muestra como "pose fusionada" en vez del filtro
+# complementario manual de antes.
+ekf_filter_node:
+  ros__parameters:
+    frequency: 20.0
+    two_d_mode: true
+    publish_tf: true
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    odom0: /odom_rf2o
+    # Matriz 15: [x,y,z | roll,pitch,yaw | vx,vy,vz | vroll,vpitch,vyaw | ax,ay,az]
+    #
+    # De rf2o se toma SOLO `vx`, la velocidad de avance. Ni la posición ni el
+    # giro:
+    #   - La posición absoluta de rf2o deriva sin límite, como toda odometría.
+    #     Fusionar velocidad y dejar que el EKF integre es lo correcto.
+    #   - El giro NO se le coge porque el giróscopo lo mide mejor y más rápido
+    #     (20 Hz frente a los 10 del LIDAR), y porque el yaw de rf2o es
+    #     justamente lo que se corrompe cuando el cabeceo mete suelo falso en
+    #     el scan. Que cada sensor aporte donde es bueno.
+    #   - `vy` en false: el robot es diferencial. Ponerlo en true haría que el
+    #     EKF tomara el cero del mensaje como una medida firme de "no hubo
+    #     deriva lateral", y en un skid-steer el patinaje sí la produce.
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, false,
+                   false, false, false]
+    odom0_differential: false
+    odom0_relative: false
+
+    # La velocidad comandada, degradada. Ya no aporta avance —para eso está
+    # rf2o— pero su giro comandado sigue siendo una pista barata cuando el
+    # LIDAR no tiene contra qué casar.
+    odom1: /wheel_odom
+    odom1_config: [false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, true,
+                   false, false, false]
+    odom1_differential: false
+    odom1_relative: false
+
+    imu0: /imu/data_raw
+    # Del IMU se toma SOLO la velocidad angular en yaw (indice 11).
+    #
+    # La aceleracion lineal (ax, ay: indices 12 y 13) estaba en `true` y hay
+    # que dejarla en `false`. Medido el 2026-09-06: con el robot INMOVIL sobre
+    # una mesa, la pose del EKF llego a x = 5839 m, y = -1181 m. Casi seis
+    # kilometros sin moverse.
+    #
+    # La causa es aritmetica, no un fallo del filtro. El acelerometro marca un
+    # sesgo constante de ~0.15 g en X (inclinacion del montaje mas offset del
+    # MPU6050). Integrar 1.5 m/s^2 dos veces durante 100 s da ~7.5 km. Sin una
+    # medida de POSICION que corrija, la deriva es cuadratica y no acotada.
+    #
+    # El daño no se quedaba en la pose: slam_toolbox intentaba construir un
+    # mapa que abarcara esos kilometros a 5 cm de resolucion y pasaba de 69 MB
+    # a 3 GB en 84 segundos, camino de tumbar la placa.
+    #
+    # La documentacion de robot_localization ya avisa de que fusionar
+    # aceleracion rara vez ayuda y es peligrosa sin correccion de posicion.
+    # El avance real lo aporta rf2o (`odom0`, vx) y el giro el giroscopo.
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_differential: false
+    imu0_relative: true
+    imu0_remove_gravitational_acceleration: true

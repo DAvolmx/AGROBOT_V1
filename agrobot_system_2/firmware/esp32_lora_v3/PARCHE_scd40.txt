@@ -1,0 +1,58 @@
+// ===========================================================================
+// PARCHE MINIMO — arregla el cero periodico del SCD40.
+//
+// QUE HACER: en tu firmware que YA funciona, busca la funcion scd40_read()
+// y reemplazala ENTERA por esta. Desde la linea que empieza por
+// "void scd40_read(" hasta su llave de cierre. NO copies esto al principio
+// del archivo ni toques nada mas.
+//
+// POR QUE el cero: el SCD40 entrega una medida nueva cada 5 SEGUNDOS. Tu
+// codigo pide read_measurement 5 MILISEGUNDOS despues de mandar el comando,
+// sin preguntar antes si hay medida lista. Cuando coincide con una medida
+// fresca sale un valor bueno; cuando no, el sensor no contesta, la lectura
+// se queda corta y se escriben ceros. De ahi el patron de valor-valor-cero.
+//
+// Dos cambios, los dos pequenos:
+//
+//   1. Se consulta get_data_ready_status (0xE4B8) antes de leer.
+//   2. Cuando no hay medida nueva se SALE SIN ESCRIBIR, conservando los
+//      ultimos valores buenos, en vez de machacarlos con ceros. Un valor de
+//      hace 30 s es informacion util; un cero es una medicion falsa que el
+//      servidor no puede distinguir de "el aire tiene 0 ppm de CO2".
+// ===========================================================================
+
+void scd40_read(uint16_t* co2, float* temperature, float* humidity) {
+  // Ojo con los `return` de esta funcion: NINGUNO escribe en los punteros.
+  // Es deliberado. Al no tocarlos, sensorData conserva la ultima lectura
+  // valida y el paquete sale con ella en vez de con un cero inventado.
+  if (!scd40_ok) return;
+
+  // --- 1) ¿hay medida nueva? ---
+  Wire.beginTransmission(SCD40_ADDR);
+  Wire.write(0xE4); Wire.write(0xB8);          // get_data_ready_status
+  if (Wire.endTransmission() != 0) return;
+  delay(2);
+  if (Wire.requestFrom((uint8_t)SCD40_ADDR, (uint8_t)3) < 3) return;
+  uint8_t st[3];
+  for (int i = 0; i < 3; i++) st[i] = Wire.read();
+  if (((((uint16_t)st[0] << 8) | st[1]) & 0x07FF) == 0) return;   // aun no
+
+  // --- 2) leerla ---
+  Wire.beginTransmission(SCD40_ADDR);
+  Wire.write(0xEC); Wire.write(0x05);          // read_measurement
+  if (Wire.endTransmission() != 0) return;
+  delay(2);
+  if (Wire.requestFrom((uint8_t)SCD40_ADDR, (uint8_t)9) < 9) return;
+  uint8_t data[9];
+  for (int i = 0; i < 9; i++) data[i] = Wire.read();
+
+  // 0 ppm no existe en el aire: es una medida invalida, no un dato.
+  uint16_t co2_raw = ((uint16_t)data[0] << 8) | data[1];
+  if (co2_raw == 0) return;
+
+  *co2 = co2_raw;
+  int16_t temp_raw = (int16_t)(((uint16_t)data[3] << 8) | data[4]);
+  *temperature = -45.0 + 175.0 * (temp_raw / 65536.0);
+  uint16_t hum_raw = ((uint16_t)data[6] << 8) | data[7];
+  *humidity = 100.0 * (hum_raw / 65536.0);
+}

@@ -1,0 +1,50 @@
+# Pila de ROS del AgroBot (LIDAR, filtro de scan, rf2o, EKF, slam_toolbox).
+# Ver agrobot-backend.service para el porqué de la supervisión.
+
+[Unit]
+# Freno al bucle de reinicios: si cae mas de 10 veces en 5 minutos es un
+# fallo de verdad y reiniciar sin parar solo lo esconde. Se queda en
+# 'failed', que es visible con `systemctl status`.
+StartLimitBurst=10
+StartLimitIntervalSec=300
+Description=AgroBot - pila ROS 2 (LIDAR, odometria laser, SLAM)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jetson
+WorkingDirectory=/home/jetson/Desktop/AGROBOT/agrobot_system_2/ros2_ws
+
+# `bash -lc` porque hace falta sourcear dos setup.bash antes de lanzar, y
+# systemd no ejecuta shell por su cuenta.
+# El launch NO va fijo aqui. El robot tiene dos modos y el dashboard avisa si
+# falta el que espera:
+#   agrobot_mapping.launch.py    SLAM construye el mapa desde cero. SIN Nav2.
+#   agrobot_navigation.launch.py Nav2 sobre un mapa ya guardado.
+# Se elige en /etc/default/agrobot (una linea). Si ese fichero no existe se
+# usa mapeo, que es el modo seguro: no carga un mapa que quiza no esta ni
+# planifica rutas sin querer.
+EnvironmentFile=-/etc/default/agrobot
+ExecStart=/bin/bash -lc 'source /opt/ros/jazzy/setup.bash && source install/setup.bash && exec ros2 launch agrobot_navigation "${AGROBOT_LAUNCH:-agrobot_mapping.launch.py}"'
+
+Restart=always
+RestartSec=8
+
+# El LIDAR necesita que el puerto serie quede libre antes de reabrirlo. Matar
+# el grupo entero evita el 'SL_RESULT_OPERATION_TIMEOUT' que aparecia al
+# reiniciar con nodos huerfanos vivos.
+KillMode=control-group
+TimeoutStopSec=15
+
+# slam_toolbox crece con el grafo de poses. Medido el 2026-09-06: 1768 MB con
+# el robot quieto (ver los umbrales en slam_toolbox_mapping.yaml). 3G da
+# margen; al tocar este numero recordar que la placa tiene 7.4 GB y el backend
+# se lleva ~1.7.
+MemoryMax=3G
+
+StandardOutput=append:/home/jetson/Desktop/AGROBOT/agrobot_system_2/logs/ros.log
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target

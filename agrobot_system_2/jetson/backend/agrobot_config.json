@@ -1,0 +1,43 @@
+{
+  "calibration": {
+    "servo_offset_deg": 0,
+    "gyro_bias_x_dps": 0,
+    "gyro_bias_y_dps": 0,
+    "gyro_bias_z_dps": 0
+  },
+  "hardware": {
+    "camera_enabled": true,
+    "lidar_baud": 460800,
+    "actuator_port": "/dev/ttyTHS1",
+    "actuator_baud": 115200
+  },
+  "ai": {
+    "active_model": "ip102_pest_yolo11s.pt"
+  },
+  "detection": {
+    "confidence_threshold": 0.67,
+    "clip_record_threshold": 0.77
+  },
+  "slam": {
+    "robot_largo_m": 0.4,
+    "robot_ancho_m": 0.35,
+    "obstacle_margen_m": 0.15,
+    "obstacle_decel_mps2": 0.8,
+    "pose_gyro_trust": 0.85
+  },
+  "control": {
+    "max_v_mps": 1.5,
+    "max_omega_rps": 4.0
+  },
+  "safety": {
+    "heartbeat_stale_warn_s": 5,
+    "heartbeat_stale_err_s": 20,
+    "max_linear_accel_mps2": 1.2,
+    "max_angular_accel_rps2": 3.5
+  },
+  "navigation": {
+    "mode": "localization",
+    "map_name": "agrobot_map",
+    "last_goal": null
+  }
+}

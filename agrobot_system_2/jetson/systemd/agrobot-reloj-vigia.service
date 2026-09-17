@@ -1,0 +1,11 @@
+[Unit]
+Description=AgroBot - reinicia ROS una vez cuando NTP sincroniza el reloj
+After=agrobot-ros.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/agrobot-reloj-vigia.sh
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

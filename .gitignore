@@ -1,0 +1,40 @@
+# Compilación de ROS 2: se regenera con `colcon build --symlink-install`
+agrobot_system_2/ros2_ws/build/
+agrobot_system_2/ros2_ws/install/
+agrobot_system_2/ros2_ws/log/
+
+# Paquetes de terceros clonados dentro del workspace. Son repos git propios,
+# sin cambios locales: se reclonan (URL y commit en MANIFEST_1.md).
+agrobot_system_2/ros2_ws/src/rf2o_laser_odometry/
+agrobot_system_2/ros2_ws/src/sllidar_ros2/
+
+# Datos que genera el robot al funcionar, no código
+agrobot_system_2/logs/
+agrobot_system_2/captures/
+agrobot_system_2/session_reports/
+agrobot_system_2/jetson/backend/captures/
+agrobot_system_2/jetson/backend/videos/
+agrobot_system_2/jetson/backend/session_reports/
+agrobot_system_2/jetson/backend/patrol_waypoints.json
+
+# Mapas guardados: pueden pesar mucho y cambian con cada sesión de campo
+agrobot_system_2/maps/
+
+# Pesos de entrenamiento. `best.pt` es idéntico a los modelos desplegados en
+# jetson/backend/models/ (que sí se versionan); `last.pt` y la carpeta
+# TRUNCADO no se usan. Las gráficas y CSV del entrenamiento sí se guardan.
+agrobot_system_2/models/runs/*/weights/
+agrobot_system_2/models/runs_TRUNCADO_no_usar/
+
+# Python
+__pycache__/
+*.pyc
+
+# Copias de seguridad sueltas: para eso está git
+*.bak
+*.bak_*
+*.udp.bak
+
+# Credenciales (token de Telegram, etc.)
+.env
+*.env.local

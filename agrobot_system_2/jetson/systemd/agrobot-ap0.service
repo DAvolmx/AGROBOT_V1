@@ -1,0 +1,24 @@
+[Unit]
+# Crea el vif virtual de AP sobre la MISMA radio que el cliente Wi-Fi.
+# El Intel 8265 soporta 1 cliente + 1 AP a la vez (ver 'iw list', "valid
+# interface combinations"), así que la Jetson puede seguir en LoRa_Wan con
+# internet mientras sirve JETSON_AP a los ESP32.
+Description=AgroBot — interfaz virtual ap0 (modo dual AP+cliente)
+After=network.target
+Before=hostapd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# El '-' inicial ignora el fallo si ap0 no existía: hace idempotente el arranque
+ExecStartPre=-/sbin/iw dev ap0 del
+ExecStart=/sbin/iw phy phy0 interface add ap0 type __ap
+# MAC distinta de la del cliente: dos interfaces con la misma MAC en el
+# mismo phy hacen que el driver rechace la segunda
+ExecStart=/sbin/ip link set ap0 address 76:70:fd:e3:ec:70
+ExecStart=/sbin/ip addr add 192.168.12.1/24 dev ap0
+ExecStart=/sbin/ip link set ap0 up
+ExecStop=-/sbin/iw dev ap0 del
+
+[Install]
+WantedBy=multi-user.target

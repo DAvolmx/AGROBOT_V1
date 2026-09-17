@@ -1,0 +1,10 @@
+# Modo de la pila ROS del AgroBot. Se instala en /etc/default/agrobot.
+#
+#   agrobot_mapping.launch.py     SLAM construye el mapa desde cero. SIN Nav2.
+#                                 Es el modo por defecto y el seguro.
+#   agrobot_navigation.launch.py  Nav2 sobre un mapa YA GUARDADO. Si el
+#                                 dashboard dice "Nav2 no respondio", es que
+#                                 la pila esta en mapeo y hace falta este.
+#
+# Tras cambiarlo:  sudo systemctl restart agrobot-ros
+AGROBOT_LAUNCH=agrobot_mapping.launch.py

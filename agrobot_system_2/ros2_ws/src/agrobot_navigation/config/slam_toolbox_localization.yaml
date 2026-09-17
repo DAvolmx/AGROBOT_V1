@@ -1,0 +1,19 @@
+# Modo LOCALIZACIÓN — se usa una vez que ya existe un mapa guardado
+# (maps/agrobot_map.yaml). El robot se ubica dentro de ese mapa en vez de
+# construir uno nuevo; esto es lo que corre durante una misión autónoma
+# normal, para que Nav2 tenga contra qué planear rutas.
+slam_toolbox:
+  ros__parameters:
+    solver_plugin: solver_plugins::CeresSolver
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    mode: localization
+    map_file_name: maps/agrobot_map
+    resolution: 0.05
+    max_laser_range: 12.0
+    transform_publish_period: 0.05
+    tf_buffer_duration: 30.0
+    transform_timeout: 0.5
+    use_tf_timestamp_bias: false

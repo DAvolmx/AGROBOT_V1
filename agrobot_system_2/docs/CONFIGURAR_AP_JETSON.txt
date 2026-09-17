@@ -1,0 +1,253 @@
+===============================================================================
+  ESTADO: EL AP YA ESTÁ CREADO Y FUNCIONANDO  (2026-09-02)
+===============================================================================
+Se montó en MODO DUAL: la Jetson sirve el AP `JETSON_AP` en 192.168.12.1 Y AL
+MISMO TIEMPO sigue conectada como cliente a `LoRa_Wan` con internet. No hay
+que elegir entre una y otra. El chip (Intel 8265 / iwlwifi) soporta
+1 cliente + 1 AP simultáneos — la advertencia que decía lo contrario en
+versiones anteriores de este archivo era incorrecta.
+
+Todo arranca solo al encender, con tres servicios systemd:
+
+    systemctl status agrobot-ap0       # crea el vif ap0 + IP 192.168.12.1
+    systemctl status agrobot-hostapd   # el AP en sí (SSID JETSON_AP)
+    systemctl status agrobot-dhcp      # DHCP, pool .100-.150
+
+Comprobar de un vistazo:
+
+    ip -4 -o addr show | grep -E "ap0|wlP1p1s0"
+    iw dev ap0 info
+    iw dev ap0 station dump            # clientes conectados
+
+⚠️ EL AP Y EL CLIENTE COMPARTEN CANAL (hoy el 1). La radio es una sola: si se
+le piden dos canales tiene que repartirse el tiempo y la conexión se degrada.
+Si `LoRa_Wan` cambia de canal, actualizar `channel=` en
+/etc/hostapd/agrobot.conf y reiniciar agrobot-hostapd. Ver el canal actual:
+
+    iw dev wlP1p1s0 info | grep channel
+
+⚠️ NO hay NAT entre las dos redes, a propósito: el tráfico Jetson<->ESP32 es
+todo local dentro de 192.168.12.0/24 y el robot no necesita más.
+
+PARA DESHACERLO por completo:
+
+    sudo systemctl disable --now agrobot-dhcp agrobot-hostapd agrobot-ap0
+    sudo rm /etc/systemd/system/agrobot-{ap0,hostapd,dhcp}.service
+    sudo rm /etc/NetworkManager/conf.d/99-agrobot-ap0.conf
+    sudo rm /etc/hostapd/agrobot.conf
+    sudo systemctl daemon-reload && sudo nmcli general reload
+
+Lo que sigue abajo es el procedimiento manual original, que se conserva como
+referencia y para reconstruirlo desde cero en otra máquina.
+
+================================================================================
+AGROBOT — CREAR EL ACCESS POINT WI-FI EN LA JETSON  (192.168.12.1)
+================================================================================
+Verificado contra: Jetson Orin Nano 8GB, Ubuntu 24.04, L4T R39.2 (JetPack 7),
+interfaz Wi-Fi = wlP1p1s0, NetworkManager gestionando la red.
+
+Comprobá tu nombre de interfaz antes de empezar:
+    nmcli device status
+Si no es "wlP1p1s0", reemplazalo en TODOS los comandos de abajo.
+
+--------------------------------------------------------------------------------
+⚠️  LEE ESTO ANTES DE EJECUTAR NADA
+--------------------------------------------------------------------------------
+La Jetson tiene UNA sola placa Wi-Fi. Al convertirla en Access Point DEJA DE
+ESTAR CONECTADA a tu red actual: se cae internet y se cae cualquier sesión SSH
+que estés usando por Wi-Fi.
+
+  -> Hacé esto con monitor+teclado conectados, o por SSH sobre CABLE ETHERNET.
+  -> Si te quedás afuera, el paso 6 (revertir) requiere acceso físico.
+
+Al terminar, la Jetson NO va a tener internet. Es el diseño previsto: la red del
+AP es aislada y la única salida al exterior es LoRaWAN, que no pasa por el AP.
+Si necesitás instalar paquetes o actualizar, revertí primero (paso 6).
+
+--------------------------------------------------------------------------------
+PLAN DE DIRECCIONES  (esto es lo que elimina la confusión de IPs)
+--------------------------------------------------------------------------------
+  192.168.12.1     Jetson (el AP, gateway)         <- fija, la crea el AP
+  192.168.12.50    ESP32-C3 actuador (motores)     <- fija, EN SU FIRMWARE
+  192.168.12.51    ESP32 LoRa V3 (sensores)        <- fija, por RESERVA DHCP
+  192.168.12.100
+       a .150      celulares / laptops del operador <- pool DHCP libre
+
+Por qué dos métodos distintos:
+  - El ESP32-C3 fija su IP en el propio firmware con WiFi.config() (ya está
+    hecho en esp32c3_actuator.ino). No depende del AP para nada.
+  - El firmware de la ESP32 LoRa V3 está marcado como CONGELADO en el
+    MANIFEST ("verificado en campo, no se modifica la lógica"), así que no se
+    le toca el código: se le fija la IP desde el AP con una reserva DHCP por
+    dirección MAC. Mismo resultado, sin tocar firmware verificado.
+
+Nota: .50 y .51 quedan FUERA del rango 100-150 que reparte el DHCP a propósito.
+Si estuvieran dentro, el AP podría entregarle esa misma IP a un celular y
+tendrías dos equipos peleando por la misma dirección.
+
+================================================================================
+PASO 1 — Anotar la MAC de la ESP32 LoRa V3
+================================================================================
+Necesitás su MAC para la reserva DHCP. Tres formas:
+
+  a) Por el monitor serie del Arduino IDE: casi todos los sketches la imprimen
+     al conectar. Buscá una línea tipo "MAC: A1:B2:C3:D4:E5:F6".
+  b) Subiendo temporalmente a OTRA placa el sketch de ejemplo que imprime
+     WiFi.macAddress() (no hace falta tocar el firmware de producción).
+  c) Después de levantar el AP, dejala conectar por DHCP y mirá:
+         sudo journalctl -u NetworkManager | grep -i dhcp
+     o bien:  ip neigh show dev wlP1p1s0
+
+Anotala acá para no perderla:
+
+     ESP32 LoRa V3  MAC = ________________________
+
+================================================================================
+PASO 2 — Crear el Access Point
+================================================================================
+El SSID y la clave TIENEN que coincidir con los del firmware del ESP32-C3
+(esp32c3_actuator.ino, líneas WIFI_SSID / WIFI_PASSWORD). Por defecto:
+
+     SSID  = JETSON_AP
+     CLAVE = 12345678
+
+La clave de 8 caracteres es el mínimo que acepta WPA2 y es DÉBIL. Como la red
+está aislada y sin salida a internet el riesgo es acotado, pero si cambiás la
+clave acordate de cambiarla también en el .ino y reflashear.
+
+Comandos (una sola vez; el perfil queda guardado):
+
+    sudo nmcli connection add type wifi ifname wlP1p1s0 con-name AGROBOT_AP \
+        autoconnect yes ssid JETSON_AP
+
+    sudo nmcli connection modify AGROBOT_AP \
+        802-11-wireless.mode ap \
+        802-11-wireless.band bg \
+        802-11-wireless.channel 6 \
+        ipv4.method shared \
+        ipv4.addresses 192.168.12.1/24 \
+        ipv6.method disabled
+
+    sudo nmcli connection modify AGROBOT_AP \
+        wifi-sec.key-mgmt wpa-psk \
+        wifi-sec.proto rsn \
+        wifi-sec.pairwise ccmp \
+        wifi-sec.group ccmp \
+        wifi-sec.psk "12345678"
+
+Explicación de lo importante:
+  - ipv4.method shared  -> NetworkManager levanta solo un dnsmasq que hace de
+                           servidor DHCP en esa interfaz. Es lo que reparte IPs.
+  - band bg / channel 6 -> 2.4 GHz. OBLIGATORIO: los ESP32 no ven 5 GHz.
+  - ipv6 disabled       -> los nodos son IPv4 puros, evita ruido innecesario.
+
+================================================================================
+PASO 3 — Rango DHCP + reserva de IP fija para la LoRa V3
+================================================================================
+El dnsmasq que levanta NetworkManager lee los archivos de esta carpeta:
+
+    sudo mkdir -p /etc/NetworkManager/dnsmasq-shared.d
+    sudo nano /etc/NetworkManager/dnsmasq-shared.d/agrobot.conf
+
+Pegá esto (reemplazando la MAC por la que anotaste en el PASO 1):
+
+    # Pool que se reparte a celulares/laptops del operador
+    dhcp-range=192.168.12.100,192.168.12.150,12h
+
+    # IP fija para la ESP32 LoRa V3 (firmware congelado: no se le puede
+    # poner la IP por código, así que se la fija el AP por su MAC)
+    dhcp-host=A1:B2:C3:D4:E5:F6,192.168.12.51,agrobot-lora,infinite
+
+    # El ESP32-C3 (192.168.12.50) NO necesita entrada acá: fija su IP en el
+    # firmware con WiFi.config(). Se deja documentado para que nadie meta
+    # otro equipo en esa dirección.
+
+Guardá (Ctrl+O, Enter, Ctrl+X) y aplicá:
+
+    sudo nmcli connection down AGROBOT_AP 2>/dev/null
+    sudo nmcli connection up AGROBOT_AP
+
+================================================================================
+PASO 4 — Verificar que quedó bien
+================================================================================
+    # ¿La Jetson tiene la IP del AP?
+    ip -4 addr show wlP1p1s0 | grep inet
+        -> tiene que decir:  inet 192.168.12.1/24
+
+    # ¿El perfil está activo?
+    nmcli -t -f NAME,TYPE,DEVICE con show --active
+
+    # ¿Se ve el SSID desde el celular?
+    #   Buscá la red "JETSON_AP" en la lista de Wi-Fi del teléfono y conectate.
+    #   Deberías recibir una IP entre .100 y .150 y poder abrir:
+    #       http://192.168.12.1:8080
+
+    # ¿Quién se conectó y con qué IP?
+    ip neigh show dev wlP1p1s0
+
+    # ¿El backend puede bindear ahora?
+    cd ~/Desktop/AGROBOT/agrobot_system_2/jetson/backend && ./arrancar.sh
+        -> tiene que imprimir "[UDP] ... ↔ 192.168.12.1:5001" SIN el aviso de
+           que cayó a 0.0.0.0. Si sigue avisando, el AP no quedó levantado.
+
+================================================================================
+PASO 5 — Que arranque solo al encender la Jetson
+================================================================================
+    sudo nmcli connection modify AGROBOT_AP connection.autoconnect yes
+    sudo nmcli connection modify AGROBOT_AP connection.autoconnect-priority 100
+
+Si tenés OTRO perfil Wi-Fi guardado (ej. tu red de casa), va a competir por la
+misma placa al arrancar. Desactivale el autoconnect:
+
+    nmcli -t -f NAME connection show          # listá los perfiles
+    sudo nmcli connection modify "NOMBRE_DE_TU_RED" connection.autoconnect no
+
+Probá reiniciando y verificando de nuevo el PASO 4.
+
+================================================================================
+PASO 6 — REVERTIR (volver a conectarte a una red normal)
+================================================================================
+    sudo nmcli connection down AGROBOT_AP
+    sudo nmcli connection modify AGROBOT_AP connection.autoconnect no
+    sudo nmcli device wifi connect "NOMBRE_DE_TU_RED" password "TU_CLAVE"
+
+Para borrar el AP del todo:
+    sudo nmcli connection delete AGROBOT_AP
+    sudo rm /etc/NetworkManager/dnsmasq-shared.d/agrobot.conf
+
+================================================================================
+SI ALGO NO FUNCIONA
+================================================================================
+* "Los ESP32 no ven la red"
+  -> Casi siempre es la banda. Verificá que quedó en 2.4 GHz:
+         nmcli connection show AGROBOT_AP | grep -i band
+     Tiene que decir "bg". Los ESP32 no soportan 5 GHz.
+
+* "El celular se conecta pero no recibe IP"
+  -> El dnsmasq de NetworkManager no arrancó o el archivo del PASO 3 tiene un
+     error de sintaxis. Mirá:  sudo journalctl -u NetworkManager -n 50
+
+* "El ESP32-C3 no aparece en 192.168.12.50"
+  -> Abrí su monitor serie a 115200. Si dice "WiFi.config() falló" o no conecta,
+     revisá que SSID/clave del .ino coincidan EXACTO con los del PASO 2
+     (mayúsculas incluidas). Recordá que el control por BLUETOOTH funciona igual
+     aunque el Wi-Fi no conecte: abrí bluetooth/agrobot_bt.html y conectate.
+
+* "El backend sigue avisando que cayó a 0.0.0.0"
+  -> La IP 192.168.12.1 no está asignada. Repetí el PASO 4, primer comando.
+
+* "Se levanta el AP pero pierdo el acceso a la Jetson"
+  -> Conectate a la red JETSON_AP desde tu laptop/celular y entrá por
+     ssh jetson@192.168.12.1  (o directamente al dashboard en :8080).
+
+================================================================================
+RECORDATORIO: EL ESP32-C3 NECESITA REFLASHEO
+================================================================================
+El firmware actual usa el protocolo UDP v2 y agrega la capa Bluetooth. Si la
+placa todavía tiene la versión vieja:
+  - por UDP: descarta los paquetes por tamaño y el robot NO se mueve
+    (falla segura a propósito, no comportamiento errático);
+  - por BLE: no se anuncia como "AgroBot-C3" y el mando por celular no la
+    encuentra.
+Compilá y subí firmware/esp32c3_actuator/esp32c3_actuator.ino desde el Arduino
+IDE con la placa "ESP32C3 Dev Module" seleccionada.

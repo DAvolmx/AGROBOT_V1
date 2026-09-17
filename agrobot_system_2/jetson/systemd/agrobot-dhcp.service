@@ -1,0 +1,21 @@
+[Unit]
+Description=AgroBot — DHCP del AP (dnsmasq solo en ap0)
+After=agrobot-hostapd.service
+Requires=agrobot-ap0.service
+
+[Service]
+Type=simple
+# --bind-interfaces + --except-interface=lo: solo atiende ap0, para no pelear
+# con el systemd-resolved que ya escucha en 127.0.0.53
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --interface=ap0 \
+  --bind-interfaces --except-interface=lo \
+  --listen-address=192.168.12.1 \
+  --dhcp-range=192.168.12.100,192.168.12.150,255.255.255.0,12h \
+  --dhcp-option=option:router,192.168.12.1 \
+  --dhcp-option=option:dns-server,192.168.12.1 \
+  --no-hosts --log-dhcp
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

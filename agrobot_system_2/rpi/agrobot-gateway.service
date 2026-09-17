@@ -1,0 +1,53 @@
+# =============================================================================
+# agrobot-gateway.service — arranca el gateway al encender la Raspberry Pi.
+#
+# Instalar (en la Pi):
+#     sudo cp ~/Desktop/AGROBOT.2/rpi/agrobot-gateway.service /etc/systemd/system/
+#     sudo systemctl daemon-reload
+#     pkill -f gateway_server.py          # evita dos instancias a la vez
+#     sudo systemctl enable --now agrobot-gateway
+#
+# Comprobar:
+#     systemctl status agrobot-gateway
+#     journalctl -u agrobot-gateway -f
+#
+# Por que hace falta: hasta ahora el gateway se lanzaba a mano con
+# INICIAR_SERVER.sh. Al reiniciar la Pi no lo levantaba nadie, asi que el
+# dashboard, el historico y las alarmas de Telegram quedaban caidos sin que
+# nada lo indicara. ChirpStack y Mosquitto SI arrancan solos (contenedores
+# docker), de ahi que pareciera que "todo esta bien menos Telegram".
+# =============================================================================
+[Unit]
+Description=AgroBot - gateway LoRaWAN (dashboard :8092, Telegram, historico)
+Documentation=file:/home/admin/Desktop/AGROBOT.2/MANIFEST_1.md
+# Mosquitto y ChirpStack viven en contenedores. Si docker todavia no levanto,
+# el gateway arranca igual: su cliente MQTT usa connect_async y reintenta
+# solo. Este After solo evita el reintento inutil del arranque normal.
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/Desktop/AGROBOT.2/rpi/server
+
+# Aqui viven el token de Telegram y la API key de ChirpStack. El archivo es
+# 600 y nunca se copia al repositorio.
+EnvironmentFile=/home/admin/Desktop/AGROBOT.2/.env
+
+# -u desactiva el buffer de Python. Sin el, los print del gateway se quedan
+# atascados en el buffer y journalctl no muestra nada justo cuando se
+# consulta el log porque algo fallo.
+ExecStart=/home/admin/Desktop/AGROBOT.2/rpi/server/venv/bin/python -u gateway_server.py
+
+Restart=always
+RestartSec=10
+# Sin limite de reintentos: si la Pi arranca antes que la red, el servicio
+# tiene que seguir intentandolo en vez de rendirse a los 5 intentos, que es
+# lo que hace systemd por defecto y dejaria el gateway muerto tras un
+# arranque lento.
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

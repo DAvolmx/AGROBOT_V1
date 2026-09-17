@@ -1,0 +1,66 @@
+# Backend del AgroBot bajo systemd.
+#
+# Por qué existe: hasta ahora el sistema se lanzaba con INICIAR_BOT.sh, que no
+# vigila nada. Si el backend moría —y el 2026-09-06 lo mató el OOM killer tres
+# veces— se quedaba muerto hasta que alguien lo notaba. Para una jornada de 3
+# horas sin nadie delante eso no sirve.
+#
+# Con esto, un fallo cuesta 5 segundos de servicio en vez de la jornada entera.
+#
+# INSTALAR:
+#   sudo cp jetson/systemd/*.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl start agrobot-backend agrobot-ros
+#   sudo systemctl enable agrobot-backend agrobot-ros   # opcional: al arrancar
+#
+# ⚠️ NO usar a la vez que INICIAR_BOT.sh: los dos abren el puerto 8080 y el
+# segundo falla. Son alternativas, no complementos.
+
+[Unit]
+# Freno al bucle de reinicios: si cae mas de 10 veces en 5 minutos es un
+# fallo de verdad y reiniciar sin parar solo lo esconde. Se queda en
+# 'failed', que es visible con `systemctl status`.
+StartLimitBurst=10
+StartLimitIntervalSec=300
+Description=AgroBot - backend Jetson (dashboard 8080, camara, UDP, UART)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jetson
+WorkingDirectory=/home/jetson/Desktop/AGROBOT/agrobot_system_2
+# `bash -lc` porque el backend NECESITA rclpy, y rclpy solo existe despues de
+# sourcear ROS. La primera version de esta unidad lanzaba `python3` a secas y
+# el backend arrancaba SIN puente ROS: sin /imu/data_raw, sin /cmd_vel, sin
+# mapa y sin pose fusionada. No daba error visible, solo funcionaba a medias.
+# Se sourcean los dos: el ROS del sistema y el workspace del robot (rf2o y
+# sllidar viven ahi).
+ExecStart=/bin/bash -lc 'source /opt/ros/jazzy/setup.bash && source /home/jetson/Desktop/AGROBOT/agrobot_system_2/ros2_ws/install/setup.bash && exec python3 -u jetson/backend/jetson_server.py'
+
+
+# Reinicio SIEMPRE, incluida una salida limpia: si el proceso termina por lo
+# que sea, el robot se queda sin mando y sin telemetria. Volver a levantarlo
+# es preferible a cualquier motivo por el que se fuera.
+Restart=always
+RestartSec=5
+
+# Tope de memoria del SERVICIO. Es la diferencia entre "se cae el sistema" y
+# "se reinicia un servicio": sin esto, cuando la memoria se agota el kernel
+# elige victima a nivel global y puede llevarse por delante otra cosa. Con el
+# tope, el unico que muere es este, y vuelve en 5 s.
+# Medido el 2026-09-06:
+#   ~1.7 GB en meseta SIN el puente ROS
+#   ~2.8 GB de pico CON rclpy cargado (DDS, suscripcion al mapa, buffers de
+#   scan). Con el tope en 3G el servicio se moria y se reiniciaba varias
+#   veces por hora sin que hubiera ninguna fuga: el limite estaba mal puesto,
+#   no el programa.
+# 4G deja margen sobre ese pico y sigue dejando 3.4 GB libres para ROS y el
+# resto del sistema.
+MemoryMax=4G
+
+StandardOutput=append:/home/jetson/Desktop/AGROBOT/agrobot_system_2/logs/backend.log
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target

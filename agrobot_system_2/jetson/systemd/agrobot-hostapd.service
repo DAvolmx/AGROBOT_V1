@@ -1,0 +1,13 @@
+[Unit]
+Description=AgroBot — hostapd del AP JETSON_AP sobre ap0
+After=agrobot-ap0.service
+Requires=agrobot-ap0.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/hostapd /etc/hostapd/agrobot.conf
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

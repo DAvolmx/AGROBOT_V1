@@ -1,0 +1,7 @@
+[Unit]
+Description=AgroBot - sincroniza el canal del AP con el del cliente Wi-Fi
+After=agrobot-hostapd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/agrobot-sync-ap-channel.sh reiniciar

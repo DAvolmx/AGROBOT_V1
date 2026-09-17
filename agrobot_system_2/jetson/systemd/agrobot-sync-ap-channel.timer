@@ -1,0 +1,10 @@
+[Unit]
+Description=AgroBot - revisa cada minuto que el AP y el cliente compartan canal
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=60
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target

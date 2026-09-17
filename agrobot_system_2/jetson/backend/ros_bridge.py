@@ -111,6 +111,8 @@ class AgroBotROSBridge:
         self._node = None
         self._executor = None
         self._thread = None
+        self._parando = False
+        self.fallos_spin = 0
         self.nav_goal_status = "sin misión"
 
         if not self.available:
@@ -120,9 +122,32 @@ class AgroBotROSBridge:
         self._node = _BridgeNode(on_cmd_vel, on_scan_points, on_fused_pose, on_map)
         self._executor = rclpy.executors.SingleThreadedExecutor()
         self._executor.add_node(self._node)
-        self._thread = threading.Thread(target=self._executor.spin, daemon=True)
+        self._thread = threading.Thread(target=self._girar_vigilado, daemon=True)
         self._thread.start()
         print("[ROS] puente iniciado — nodo 'agrobot_bridge' escuchando /cmd_vel, /scan, /odometry/filtered, /map")
+
+    def _girar_vigilado(self):
+        """Mantiene vivo el hilo del ejecutor pase lo que pase.
+
+        Una excepción dentro de un callback de ROS mataba este hilo y el
+        backend se quedaba sin LIDAR, sin mapa y sin navegación, pero con el
+        proceso vivo: desde fuera parecía que "el sistema se cae" sin motivo
+        (2026-09-17, un RuntimeError en el callback de /cmd_vel). Ahora se
+        registra y se sigue girando."""
+        while not self._parando:
+            try:
+                self._executor.spin()
+                return                      # salida limpia
+            except Exception as exc:
+                self.fallos_spin += 1
+                print(f"[ROS] el ejecutor falló ({type(exc).__name__}: {exc}); "
+                      f"reintento {self.fallos_spin}", flush=True)
+                time.sleep(0.5)
+
+    @property
+    def vivo(self) -> bool:
+        """El puente sigue atendiendo callbacks de ROS."""
+        return bool(self.available and self._thread is not None and self._thread.is_alive())
 
     def publish_imu(self, accel: dict, gyro: dict):
         if self.available:
@@ -176,6 +201,7 @@ class AgroBotROSBridge:
     def shutdown(self):
         if not self.available:
             return
+        self._parando = True
         try:
             self._executor.shutdown()
             self._node.destroy_node()
@@ -194,17 +220,22 @@ if ROS_AVAILABLE:
             self._on_map = on_map
 
             # ---- Nav2 -> actuador (vía el mismo UDP binario de siempre) ----
-            self.create_subscription(Twist, "/cmd_vel", self._cmd_vel_cb, 10)
+            self.create_subscription(
+                Twist, "/cmd_vel", lambda m: self._seguro("cmd_vel", self._cmd_vel_cb, m), 10)
 
             # ---- sllidar_ros2 -> radar del dashboard + evasión reactiva ----
-            self.create_subscription(LaserScan, "/scan", self._scan_cb, qos_profile_sensor_data)
+            self.create_subscription(
+                LaserScan, "/scan", lambda m: self._seguro("scan", self._scan_cb, m),
+                qos_profile_sensor_data)
 
             # ---- robot_localization (EKF) -> pose fusionada real ----
-            self.create_subscription(Odometry, "/odometry/filtered", self._odom_cb, 10)
+            self.create_subscription(
+                Odometry, "/odometry/filtered", lambda m: self._seguro("odom", self._odom_cb, m), 10)
 
             # ---- slam_toolbox -> mini-mapa del dashboard ----
             self._ultimo_mapa = 0.0
-            self.create_subscription(OccupancyGrid, "/map", self._map_cb, 10)
+            self.create_subscription(
+                OccupancyGrid, "/map", lambda m: self._seguro("map", self._map_cb, m), 10)
 
             # ---- publicadores hacia robot_localization ----
             self.imu_pub = self.create_publisher(Imu, "/imu/data_raw", 10)
@@ -224,6 +255,19 @@ if ROS_AVAILABLE:
             # corrección de slam_toolbox.
             self._tf_buffer = Buffer()
             self._tf_listener = TransformListener(self._tf_buffer, self)
+            self._fallos = {}
+
+        def _seguro(self, nombre, fn, *args):
+            """Un callback que revienta mata el hilo del ejecutor y con él
+            todo ROS dentro del backend (pasó el 2026-09-17). Se registra y
+            se sigue."""
+            try:
+                fn(*args)
+            except Exception as exc:
+                self._fallos[nombre] = self._fallos.get(nombre, 0) + 1
+                if self._fallos[nombre] <= 3:
+                    self.get_logger().error(
+                        f"callback {nombre} falló ({type(exc).__name__}: {exc})")
 
         def _cmd_vel_cb(self, msg: "Twist"):
             # `msg.linear.y` se descarta: el robot es diferencial. Nav2 está

@@ -67,6 +67,9 @@ DEFAULTS = {
         # del máximo. Los motores no bajan de ~78 % de potencia, así que esto
         # solo limita el tope; para ir "despacio" lo que vale son los pulsos.
         "escala_velocidad": 0.5,
+        # Un punto del recorrido cada tantos metros recorridos (grabación
+        # automática y exploración). 0,50 m lo pidió el usuario el 2026-09-17.
+        "distancia_puntos_m": 0.50,
     },
     "odometria_webcam": {
         # Odometría visual con la webcam (odometria_webcam.py). `habilitada`

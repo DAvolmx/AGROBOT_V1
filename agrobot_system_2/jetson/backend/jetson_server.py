@@ -408,7 +408,7 @@ class ActuatorController:
         """Llega desde una trama del C3 por el serie, no desde un socket."""
         state.actuator_status = status
         health.beat("esp32c3")
-        _lanzar(state.broadcast({"type": "actuator_status", "data": status}), "actuator_status")
+        _schedule(state.broadcast({"type": "actuator_status", "data": status}))
 
     def send_command(self, v_ref: float, omega_ref: float, scan_cmd: int):
         """Fija la velocidad pedida y aplica un paso de rampa.
@@ -458,7 +458,13 @@ class ActuatorController:
             ahora = time.monotonic()
             if aviso is not None and ahora - self._ultimo_aviso_t > 0.25:
                 self._ultimo_aviso_t = ahora
-                _lanzar(state.broadcast({"type": "obstacle_warning", "data": aviso}), "obstacle_warning")
+                # _schedule y NO _lanzar: `send_command` también se llama desde
+                # el hilo de ROS (callback de /cmd_vel de Nav2), donde no hay
+                # bucle de eventos. `_lanzar` lanzaba ahí RuntimeError y la
+                # excepción MATABA el hilo del puente ROS: el backend se
+                # quedaba sin LIDAR, sin mapa y sin poder navegar, con el
+                # proceso vivo y respondiendo HTTP (2026-09-17).
+                _schedule(state.broadcast({"type": "obstacle_warning", "data": aviso}))
             v_ref = v_seg
 
         pose_estimator.on_command(v_ref, omega_ref)
@@ -535,6 +541,8 @@ def _ros_on_cmd_vel(v_ref: float, omega_ref: float):
 # scan completo, que es donde la resolución sí importa: perder el único rayo
 # que da contra una rama fina es perder el frenado.
 RADAR_MAX_PUNTOS = 200
+_ultimo_envio_lidar = 0.0
+_ultimo_envio_pose = 0.0
 
 
 def _decimar(points: list[dict], maximo: int) -> list[dict]:
@@ -556,9 +564,17 @@ def _ros_on_scan_points(points: list[dict]):
     """sllidar_ros2 publicó /scan — alimenta la evasión reactiva + el radar."""
     lidar_reactive.ingest_scan(points)
     health.beat("lidar")
+    # Al dashboard se manda a 4 Hz, no a 10: el scan decimado son ~10 kB por
+    # mensaje y por WiFi compartido eso era ~100 kB/s solo de radar, que es
+    # parte de la latencia que se notaba. La evasión sigue usando los 10 Hz.
+    global _ultimo_envio_lidar
+    ahora = time.monotonic()
+    if ahora - _ultimo_envio_lidar < 0.25:
+        return
+    _ultimo_envio_lidar = ahora
+    cfg = state.config["slam"]
     _schedule(state.broadcast({"type": "lidar_scan",
                                "data": _decimar(points, RADAR_MAX_PUNTOS)}))
-    cfg = state.config["slam"]
     _schedule(state.broadcast({"type": "lidar_distancias", "data": {
         **lidar_reactive.distancias(cfg),
         "margen_m": cfg["obstacle_margen_m"],
@@ -567,8 +583,12 @@ def _ros_on_scan_points(points: list[dict]):
 
 def _ros_on_fused_pose(pose: dict):
     """robot_localization publicó /odometry/filtered — reemplaza al PoseEstimator casero."""
-    global ros_fused_pose
+    global ros_fused_pose, _ultimo_envio_pose
     ros_fused_pose = pose
+    ahora = time.monotonic()
+    if ahora - _ultimo_envio_pose < 0.12:      # ~8 Hz al dashboard
+        return
+    _ultimo_envio_pose = ahora
     _schedule(state.broadcast({"type": "pose", "data": pose, "source": "ros_ekf"}))
 
 
@@ -1252,7 +1272,7 @@ async def calibration_update_handler(request: web.Request):
 # =============================================
 # ===== PARÁMETROS (SLAM / DETECCIÓN / SEGURIDAD) =====
 # =============================================
-PARAM_SECTIONS = ("slam", "detection", "safety", "control", "odometria_webcam")
+PARAM_SECTIONS = ("slam", "detection", "safety", "control", "odometria_webcam", "autonomia")
 
 # Topes que un cliente NO puede sobrepasar por más que mande cualquier cosa
 # al POST. La sección `control` multiplica directamente lo que sale hacia
@@ -1777,6 +1797,7 @@ async def start_background(app: web.Application):
         is_scanning=_patrol_is_scanning,
         on_event=_patrol_event,
         ruta_waypoints=WAYPOINTS_PATH,
+        distancia_puntos=lambda: state.config["autonomia"]["distancia_puntos_m"],
     )
     print(f"[patrulla] lista — {len(patrol.waypoints)} waypoints grabados")
 
@@ -1789,6 +1810,7 @@ async def start_background(app: web.Application):
         escanear=patrol.escanear,
         on_event=lambda d: _evento("exploracion", d),
         grabar_recorrido=lambda activa: patrol.grabacion_auto(activa),
+        edad_scan=lidar_reactive.edad_scan_s,
     )
 
     pose_estimator.gyro_weight = state.config["slam"]["pose_gyro_trust"]

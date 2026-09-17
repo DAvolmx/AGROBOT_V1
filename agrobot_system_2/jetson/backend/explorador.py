@@ -40,6 +40,7 @@ RETROCESO_LIBRE_M = 0.50  # hace falta esto detrás para poder retroceder
 SCAN_PERIODO_S = 120.0
 SCAN_SWEEP_S = 10.0
 
+SCAN_VIEJO_S = 1.0        # sin scan más reciente que esto, no se explora
 ATASCO_S = 25.0           # sin moverse tanto tiempo = atascado
 ATASCO_MOVIMIENTO_M = 0.2
 DESATASCO_GIROS = 3       # pulsos de giro seguidos al desatascarse
@@ -47,8 +48,9 @@ DESATASCO_GIROS = 3       # pulsos de giro seguidos al desatascarse
 
 class ExploradorReactivo:
     def __init__(self, *, distancias, get_pose, conducir, parar,
-                 escanear, on_event, grabar_recorrido):
+                 escanear, on_event, grabar_recorrido, edad_scan):
         self._distancias = distancias      # () -> {adelante, atras, izquierda, derecha}
+        self._edad_scan = edad_scan        # () -> segundos desde el último /scan
         self._get_pose = get_pose          # () -> {x, y, theta_deg} | None
         self._conducir = conducir          # (accion) -> None  (pulso)
         self._parar = parar                # () -> None
@@ -72,6 +74,10 @@ class ExploradorReactivo:
     def iniciar(self) -> tuple[bool, str]:
         if self.activo:
             return False, "la exploración ya está corriendo"
+        # Sin LIDAR fresco el robot estaría avanzando a ciegas, y con 80 cm
+        # de deslizamiento eso termina en golpe.
+        if self._edad_scan() > SCAN_VIEJO_S:
+            return False, "sin datos del LIDAR — revisá el cable y que el SLAM esté corriendo"
         self.activo = True
         self.pulsos = self.giros = self.desatascos = self.escaneos = 0
         self._ultimo_escaneo = 0.0        # primer barrido nada más arrancar
@@ -133,6 +139,13 @@ class ExploradorReactivo:
                     self.escaneos += 1
                     # el tiempo parado barriendo no cuenta como atasco
                     self._ref_t = time.monotonic()
+                    continue
+
+                # El LIDAR puede caerse en marcha (el driver murió 34 veces
+                # en un arranque): si eso pasa, parar, no seguir a ciegas.
+                if self._edad_scan() > SCAN_VIEJO_S:
+                    self.estado = "pausada: sin datos del LIDAR"
+                    self._parar()
                     continue
 
                 if self._atascado():

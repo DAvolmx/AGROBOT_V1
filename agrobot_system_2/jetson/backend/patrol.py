@@ -50,10 +50,10 @@ TICK_S = 0.5                  # cadencia del bucle de vigilancia
 # barriendo en bucle delante del primer arbusto enfermo que encontrara.
 COOLDOWN_DETECCION_S = 30.0
 
-# Grabación automática del recorrido mientras se conduce a mano: un punto
-# cada tanto avance. 1,5 m es lo que pidió el usuario: suficiente para que la
-# patrulla luego repita la trayectoria sin acumular cientos de puntos.
-DISTANCIA_AUTO_M = 1.5
+# Grabación automática del recorrido: un punto cada tanto avance. La
+# distancia la fija la config (`autonomia.distancia_puntos_m`, 0,50 m); este
+# valor solo se usa si esa clave no estuviera.
+DISTANCIA_AUTO_M = 0.50
 TICK_AUTO_S = 0.2
 
 
@@ -65,7 +65,9 @@ class PatrolController:
     """
 
     def __init__(self, *, send_nav_goal, cancel_nav_goal, estado_meta, get_pose,
-                 trigger_scan, is_scanning, on_event, ruta_waypoints: Path):
+                 trigger_scan, is_scanning, on_event, ruta_waypoints: Path,
+                 distancia_puntos=lambda: DISTANCIA_AUTO_M):
+        self._distancia_puntos = distancia_puntos
         self._send_nav_goal = send_nav_goal      # (x, y, theta_deg) -> bool
         self._cancel_nav_goal = cancel_nav_goal  # ()
         self._estado_meta = estado_meta          # () -> "en_curso" | "exito" | "abortada" | ...
@@ -154,7 +156,7 @@ class PatrolController:
         self._emitir({"evento": "punto_auto", "total": len(self.waypoints)})
         if self._tarea_auto is None or self._tarea_auto.done():
             self._tarea_auto = asyncio.create_task(self._bucle_auto())
-        return True, f"grabando un punto cada {DISTANCIA_AUTO_M:g} m"
+        return True, f"grabando un punto cada {self._distancia_puntos():g} m"
 
     async def _bucle_auto(self):
         """Suelta un punto cada DISTANCIA_AUTO_M recorridos. Mide sobre la
@@ -166,7 +168,7 @@ class PatrolController:
                 if pose is None or self._auto_ultima is None:
                     continue
                 if math.hypot(pose["x"] - self._auto_ultima[0],
-                              pose["y"] - self._auto_ultima[1]) >= DISTANCIA_AUTO_M:
+                              pose["y"] - self._auto_ultima[1]) >= self._distancia_puntos():
                     self._auto_ultima = (pose["x"], pose["y"])
                     self.agregar_waypoint(pose["x"], pose["y"], pose.get("theta_deg", 0.0))
                     self._emitir({"evento": "punto_auto", "total": len(self.waypoints)})
@@ -369,5 +371,5 @@ class PatrolController:
             "escaneos": self.escaneos,
             "proximo_escaneo_s": round(restante if self.activo else SCAN_PERIODO_S, 1),
             "auto_activa": self.auto_activa,
-            "distancia_auto_m": DISTANCIA_AUTO_M,
+            "distancia_auto_m": self._distancia_puntos(),
         }

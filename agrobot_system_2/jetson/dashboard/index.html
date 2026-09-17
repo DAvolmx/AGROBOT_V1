@@ -775,9 +775,14 @@ input[type="text"], select { font-family: inherit; }
           <button class="btn peligro" id="btn-wp-borrar">Borrar recorrido</button>
         </div>
         <div class="toggle-row">
-          <span style="font-size:15px;">Grabar solo mientras conduzco
-            <span style="color:var(--ink-soft); font-size:13px;">(un punto cada 1,5 m)</span></span>
+          <span style="font-size:15px;">Grabar solo mientras conduzco</span>
           <label class="switch"><input type="checkbox" id="auto-grabar"><div class="track"></div></label>
+        </div>
+        <div class="slider-row" style="margin-top:10px;">
+          <div class="label-row"><span>Un punto cada</span><span class="v mono" id="p-dist-puntos-val">0.50 m</span></div>
+          <input type="range" min="0.2" max="5" step="0.1" value="0.5" id="p-dist-puntos">
+          <p class="hint" style="margin-top:6px;">Vale para la grabación mientras conducís y para la exploración.
+            Se aplica al soltar el control.</p>
         </div>
         <div class="row-kv"><span class="k">Puntos grabados</span><span class="v mono" id="patrol-n">0</span></div>
         <ol class="mono" id="patrol-lista" style="margin:10px 0 0; padding-left:22px; font-size:13px; color:var(--ink-soft); line-height:1.7;"></ol>
@@ -1789,6 +1794,11 @@ input[type="text"], select { font-family: inherit; }
   });
   $("btn-expl-off").addEventListener("click", () => fetch("/api/exploracion/stop", { method: "POST" }));
 
+  // `change` y no `input`: guardar en cada píxel del arrastre sería un POST
+  // por movimiento del dedo.
+  $("p-dist-puntos").addEventListener("change", (e) =>
+    saveParams("autonomia", { distancia_puntos_m: parseFloat(e.target.value) }));
+
   $("auto-grabar").addEventListener("change", async (e) => {
     const res = await fetch("/api/patrol/auto", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -2339,6 +2349,10 @@ input[type="text"], select { font-family: inherit; }
     }
     if (cfg.slam) {
       if (cfg.odometria_webcam) aplicarConfigOdomWebcam(cfg.odometria_webcam);
+      if (cfg.autonomia && $("p-dist-puntos") !== document.activeElement) {
+        $("p-dist-puntos").value = cfg.autonomia.distancia_puntos_m;
+        liveSliders["p-dist-puntos"](cfg.autonomia.distancia_puntos_m);
+      }
       $("p-largo").value = cfg.slam.robot_largo_m; $("p-largo-val").textContent = cfg.slam.robot_largo_m.toFixed(2) + " m";
       $("p-ancho").value = cfg.slam.robot_ancho_m; $("p-ancho-val").textContent = cfg.slam.robot_ancho_m.toFixed(2) + " m";
       $("p-margen").value = cfg.slam.obstacle_margen_m; $("p-margen-val").textContent = cfg.slam.obstacle_margen_m.toFixed(2) + " m";
@@ -2364,6 +2378,7 @@ input[type="text"], select { font-family: inherit; }
     "ov-incl": (v) => $("ov-incl-val").textContent = parseFloat(v).toFixed(1) + "°",
     "ov-hfov": (v) => $("ov-hfov-val").textContent = v + "°",
     "ov-adelante": (v) => $("ov-adelante-val").textContent = parseFloat(v).toFixed(2) + " m",
+    "p-dist-puntos": (v) => $("p-dist-puntos-val").textContent = parseFloat(v).toFixed(2) + " m",
     "p-largo": (v) => $("p-largo-val").textContent = parseFloat(v).toFixed(2) + " m",
     "p-ancho": (v) => $("p-ancho-val").textContent = parseFloat(v).toFixed(2) + " m",
     "p-margen": (v) => $("p-margen-val").textContent = parseFloat(v).toFixed(2) + " m",

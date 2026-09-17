@@ -38,7 +38,7 @@ import numpy as np
 # cómputo en una Jetson que también corre YOLO y SLAM.
 ANCHO, ALTO = 320, 240
 HZ_MAX = 15.0
-MIN_RASGOS = 60               # por debajo se vuelven a buscar
+MIN_RASGOS = 60               # si quedan menos tras seguirlos, se reponen
 MAX_RASGOS = 220
 MIN_INLIERS = 12
 SUELO_MIN_M, SUELO_MAX_M = 0.25, 2.5   # lejos del robot el error por píxel crece mucho
@@ -138,9 +138,15 @@ class OdometriaWebcam:
                             cv2.COLOR_BGR2GRAY)
 
         geo = _Geometria(cfg)
-        if self._prev_gris is None or self._prev_pts is None or len(self._prev_pts) < MIN_RASGOS:
+        # Umbral de SEGUIR, no de buscar. Antes se volvía a buscar mientras
+        # hubiera menos de MIN_RASGOS: con una vista que solo da 58 rasgos
+        # (medido en el robot el 2026-09-17) buscaba en cada cuadro y nunca
+        # llegaba a medir. Con MIN_INLIERS ya se puede ajustar el movimiento.
+        if self._prev_gris is None or self._prev_pts is None or len(self._prev_pts) < MIN_INLIERS:
             self._prev_pts = self._buscar_rasgos(cv2, gris, geo)
             self._prev_gris, self._prev_ts = gris, ts
+            self.rasgos = 0 if self._prev_pts is None else len(self._prev_pts)
+            self.inliers = 0
             self.estado = "buscando rasgos"
             return
 
@@ -157,14 +163,18 @@ class OdometriaWebcam:
         p1 = sig.reshape(-1, 2)[ok]
         self.rasgos = len(p1)
 
-        # El cuadro actual pasa a ser el anterior, con los rasgos que siguen
-        # vivos; si quedan pocos se buscan de nuevo en el próximo paso.
+        # El cuadro actual pasa a ser el anterior. Si se perdieron muchos
+        # rasgos se reponen YA sobre este cuadro, para que el siguiente paso
+        # siga midiendo en vez de gastar un cuadro en buscar.
         self._prev_gris, self._prev_ts = gris, ts
-        self._prev_pts = p1.reshape(-1, 1, 2).astype(np.float32)
+        if len(p1) < MIN_RASGOS:
+            nuevos = self._buscar_rasgos(cv2, gris, geo)
+            self._prev_pts = nuevos if nuevos is not None else p1.reshape(-1, 1, 2).astype(np.float32)
+        else:
+            self._prev_pts = p1.reshape(-1, 1, 2).astype(np.float32)
 
         if len(p1) < MIN_INLIERS:
             self.estado = "pausada: pocos rasgos (suelo sin textura o cámara tapada)"
-            self._prev_pts = None
             return
 
         if float(np.median(np.linalg.norm(p1 - p0, axis=1))) < QUIETO_PX:

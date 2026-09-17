@@ -44,6 +44,7 @@ from camera import CameraWorker
 from obstacle_avoidance import ControladorEvasion, LecturasSensoresLIDAR
 from patrol import PatrolController
 from pulse_drive import ConductorPulsos, ACCIONES
+from mapas import GestorMapas, ErrorMapa
 
 # =============================================
 # ===== CONFIG =====
@@ -1396,6 +1397,56 @@ async def nav_reset_map_handler(request: web.Request):
                              status=200 if ok else 502)
 
 
+# =============================================
+# ===== MAPAS CON NOMBRE =====
+# =============================================
+# Carpeta propia, distinta de MAPS_DIR (esa es la del map_saver de Nav2).
+mapas = GestorMapas(_AQUI.parent.parent / "maps")
+
+
+async def mapas_listar_handler(request: web.Request):
+    return web.json_response({"mapas": mapas.listar()})
+
+
+async def mapas_guardar_handler(request: web.Request):
+    """POST /api/mapas/guardar  {"nombre": "invernadero", "sobrescribir": false}"""
+    body = await request.json()
+    try:
+        info = await mapas.guardar(body.get("nombre", ""), patrol.waypoints if patrol else [],
+                                   bool(body.get("sobrescribir", False)))
+    except ErrorMapa as exc:
+        existe = "ya existe" in str(exc)
+        return web.json_response({"ok": False, "error": str(exc), "existe": existe},
+                                 status=409 if existe else 400)
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Mapa guardado",
+        "message": f"«{info['nombre']}» con {info['puntos']} punto(s) de recorrido.",
+    }})
+    return web.json_response({"ok": True, **info})
+
+
+async def mapas_cargar_handler(request: web.Request):
+    """POST /api/mapas/cargar  {"nombre": "invernadero"}
+
+    Reemplaza el mapa en memoria de slam_toolbox y el recorrido de la
+    patrulla. El robot tiene que estar en la base donde empezó ese mapa."""
+    if patrol is not None and patrol.activo:
+        return web.json_response(
+            {"ok": False, "error": "detené la patrulla antes de cargar otro mapa"}, status=409)
+    body = await request.json()
+    try:
+        waypoints = await mapas.cargar(body.get("nombre", ""))
+    except ErrorMapa as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    if patrol is not None:
+        patrol.reemplazar_waypoints(waypoints)
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Mapa cargado",
+        "message": f"«{body.get('nombre')}» con {len(waypoints)} punto(s). El SLAM sigue ampliándolo.",
+    }})
+    return web.json_response({"ok": True, "puntos": len(waypoints)})
+
+
 async def nav_mode_handler(request: web.Request):
     """GET: modo actual. POST {"mode": "mapping"|"localization"}: solo lo anota
     para la UI — relanzar los nodos ROS correctos se hace a mano (ver README),
@@ -1710,6 +1761,9 @@ def create_app() -> web.Application:
     app.router.add_post("/api/video/record", video_record_handler)
     app.router.add_post("/api/drive", drive_handler)
     app.router.add_post("/api/nav/reset_map", nav_reset_map_handler)
+    app.router.add_get("/api/mapas", mapas_listar_handler)
+    app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)
+    app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
     app.router.add_get("/api/patrol", patrol_status_handler)
     app.router.add_post("/api/patrol/record", patrol_record_handler)
     app.router.add_post("/api/patrol/clear", patrol_clear_handler)

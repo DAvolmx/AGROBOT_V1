@@ -116,6 +116,13 @@ class PatrolController:
         return self.agregar_waypoint(pose.get("x", 0.0), pose.get("y", 0.0),
                                      pose.get("theta_deg", 0.0))
 
+    def reemplazar_waypoints(self, waypoints: list[dict]):
+        """Pone el recorrido de un mapa recién cargado."""
+        self.waypoints = [{"x": float(w["x"]), "y": float(w["y"]),
+                           "theta_deg": float(w.get("theta_deg", 0.0))} for w in waypoints]
+        self.indice = 0
+        self._guardar()
+
     def borrar_waypoints(self):
         self.waypoints = []
         self.indice = 0

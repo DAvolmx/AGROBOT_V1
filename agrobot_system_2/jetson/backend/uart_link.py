@@ -164,7 +164,13 @@ class UartActuatorLink:
 
     def pack(self) -> bytes:
         flags = 0
-        if not self._led:
+        # `_led` significa lo que dice: True = foco ENCENDIDO. Estaba
+        # invertido (`if not self._led`) y arrastraba tres fallos: el foco
+        # salía encendido al arrancar, la parada de emergencia lo ENCENDÍA
+        # (su comentario decía lo contrario) y el interruptor del dashboard
+        # mostraba lo opuesto a la realidad. La compensación estaba en
+        # jetson_server (`state.led_on = not cmd["led"]`); se quitó también.
+        if self._led:
             flags |= FLAG_LED
         if self._scan_once:
             flags |= FLAG_SCAN

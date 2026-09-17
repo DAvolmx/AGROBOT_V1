@@ -44,9 +44,11 @@ ACCIONES = ("adelante", "atras", "izquierda", "derecha")
 
 
 class ConductorPulsos:
-    def __init__(self, *, send_command, emergency_stop):
+    def __init__(self, *, send_command, emergency_stop, get_config=None):
         self._send_command = send_command    # (v, omega, scan)
         self._emergency_stop = emergency_stop
+        self._get_config = get_config or (lambda: {"suavidad_duty": 1.0,
+                                                   "suavidad_periodo_s": 0.3})
         self._cola: deque[tuple[float, float, float]] = deque()
         self._accion_actual: str | None = None
         self._tarea: asyncio.Task | None = None
@@ -95,6 +97,34 @@ class ConductorPulsos:
         self._accion_actual = None
         self._emergency_stop()
 
+    async def _tramo(self, v, w, dur):
+        """Ejecuta un tramo TROCEADO, para poder ir más lento que el mínimo
+        del hardware.
+
+        Los motores no bajan del 78 % de potencia: pedir media velocidad no
+        frena casi nada. Lo que sí funciona es alternar empuje y rueda libre
+        varias veces por segundo (`suavidad_duty` del ciclo con velocidad, el
+        resto a cero). El robot avanza a tirones cortos pero mucho más lento
+        y más controlable, sin tocar el firmware.
+        """
+        cfg = self._get_config()
+        duty = min(1.0, max(0.15, float(cfg.get("suavidad_duty", 1.0))))
+        periodo = max(0.1, float(cfg.get("suavidad_periodo_s", 0.3)))
+        fin = time.monotonic() + dur
+        while time.monotonic() < fin:
+            if duty >= 0.99:
+                self._send_command(v, w, 0)
+                await asyncio.sleep(TICK_S)
+                continue
+            fin_on = min(fin, time.monotonic() + periodo * duty)
+            while time.monotonic() < fin_on:
+                self._send_command(v, w, 0)
+                await asyncio.sleep(TICK_S)
+            fin_off = min(fin, time.monotonic() + periodo * (1.0 - duty))
+            while time.monotonic() < fin_off:
+                self._send_command(0.0, 0.0, 0)
+                await asyncio.sleep(TICK_S)
+
     def _cancelar_tarea(self):
         if self._tarea is not None and not self._tarea.done():
             self._tarea.cancel()
@@ -104,10 +134,7 @@ class ConductorPulsos:
         try:
             while self._cola:
                 v, w, dur = self._cola.popleft()
-                fin = time.monotonic() + dur
-                while time.monotonic() < fin:
-                    self._send_command(v, w, 0)
-                    await asyncio.sleep(TICK_S)
+                await self._tramo(v, w, dur)
             # Objetivo a cero: el `tick()` del actuador baja la rampa hasta
             # parar del todo, sin tirón.
             self._send_command(0.0, 0.0, 0)

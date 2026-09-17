@@ -3670,3 +3670,25 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   `escaneo_periodo_s`, `distancia_puntos_cm`.
 - Las distancias del dashboard van en cm.
 - El explorador no arranca ni continúa sin LIDAR fresco (< 1 s).
+
+**Añadido el 2026-09-18:**
+- **Seguir senderos** (`sendero.py`): mide el desvío del centro del camino por
+  LIDAR (distancia a la hilera de cada lado) y por cámara (la tierra no es
+  verde, HSV), los combina con un peso configurable y corrige con pulsos de
+  giro. Se activa desde el panel de Exploración; todos sus umbrales están en
+  Parámetros → Seguir senderos.
+- **El barrido de cámara lo hace la Jetson**, no el firmware: mueve el servo
+  paso a paso a 20 Hz, con duración y ángulos configurables, y enciende el
+  foco durante el barrido devolviéndolo a como estaba. Ya no se usa el flag
+  FLAG_SCAN. Así se puede ir más lento sin reprogramar el ESP32.
+- **Suavizado por software** (`pulse_drive`): como los motores no bajan del
+  78 % de potencia, cada pulso se trocea (`control.suavidad_duty` del ciclo
+  con empuje, el resto rueda libre). Medido con la clase real: al 60 % del
+  ciclo la velocidad media baja de 0,47 a 0,26 m/s; al 30 %, a 0,07.
+- ⚠️ **El foco estaba invertido en `uart_link.pack`** (`if not self._led`):
+  salía encendido al arrancar, la parada de emergencia lo ENCENDÍA y el
+  interruptor del dashboard mostraba lo contrario. Corregido en el origen y
+  quitada la compensación de `jetson_server`.
+- El canal del AP se sincroniza ahora por temporizador cada minuto
+  (`agrobot-sync-ap-channel.timer`): el router cambia de canal solo y volvía a
+  dejarlo desparejado (11 vs 1), que es enlace intermitente y latencia.

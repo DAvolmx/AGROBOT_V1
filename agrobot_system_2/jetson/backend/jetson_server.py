@@ -47,6 +47,7 @@ from pulse_drive import ConductorPulsos, ACCIONES
 from mapas import GestorMapas, ErrorMapa
 from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
 from explorador import ExploradorReactivo
+from sendero import SeguidorSendero
 
 # =============================================
 # ===== CONFIG =====
@@ -700,7 +701,7 @@ async def ws_handler(request: web.Request):
                 if "servo_angle" in cmd:
                     state.servo_angle = clamp_servo(float(cmd["servo_angle"]))
                 if "led" in cmd:
-                    state.led_on = not bool(cmd["led"])  # INVERTIDA: 1→0, 0→1
+                    state.led_on = bool(cmd["led"])
                 actuator_proto.send_actuator_update()
                 await state.broadcast({"type": "actuator_setpoint", "data": {
                     "servo_angle": state.servo_angle,
@@ -775,6 +776,7 @@ async def video_handler(request: web.Request):
 patrol: PatrolController | None = None
 conductor: ConductorPulsos | None = None
 explorador: ExploradorReactivo | None = None
+seguidor_sendero: SeguidorSendero | None = None
 
 WAYPOINTS_PATH = _AQUI / "patrol_waypoints.json"
 
@@ -852,18 +854,47 @@ async def drive_handler(request: web.Request):
     return web.json_response({"ok": True, "accion": accion})
 
 
-def _patrol_scan_now():
-    """Robot quieto y flag de barrido arriba.
-
-    El firmware solo arranca el barrido en el flanco (`if (FLAG_SCAN &&
-    !scanning)`), así que repetir la petición durante un barrido en curso no
-    lo reinicia ni lo corta."""
-    if actuator_proto is not None:
-        actuator_proto.send_command(0.0, 0.0, 1)
+def _foco(encendido: bool):
+    """Enciende o apaga el foco de escaneo."""
+    state.led_on = encendido
 
 
-def _patrol_is_scanning() -> bool:
-    return bool((state.actuator_status or {}).get("scanning", False))
+async def _barrido_camara():
+    """Barrido de la cámara HECHO AQUÍ, moviendo el servo paso a paso.
+
+    Antes se levantaba el flag FLAG_SCAN y el barrido lo hacía el firmware,
+    con duración y recorrido fijos (10 s, 25→110°). Haciéndolo por software
+    se ajustan desde el dashboard sin reprogramar el ESP32, y se puede ir
+    más lento para que las fotos salgan nítidas.
+
+    El robot se deja parado durante el barrido: un servo barriendo mientras
+    el robot avanza da fotos movidas."""
+    cfg = state.config["autonomia"]
+    dur = max(0.5, float(cfg["escaneo_duracion_s"]))
+    a0, a1 = int(cfg["escaneo_angulo_min"]), int(cfg["escaneo_angulo_max"])
+    paso_s = 0.05                      # 20 pasos por segundo
+    n = max(1, int(dur / paso_s))
+    volver = state.servo_angle
+    foco_previo = state.led_on
+    try:
+        if actuator_proto is not None:
+            actuator_proto.send_command(0.0, 0.0, 0)
+        if cfg["escaneo_enciende_foco"]:
+            _foco(True)
+        for i in range(n + 1):
+            state.servo_angle = clamp_servo(a0 + (a1 - a0) * i / n)
+            if actuator_proto is not None:
+                actuator_proto.send_actuator_update()
+            await asyncio.sleep(paso_s)
+    finally:
+        # Vuelve a donde estaba el slider: si no, la odometría visual se
+        # queda pausada para siempre por "cámara girada".
+        state.servo_angle = volver
+        state.led_on = foco_previo          # el foco vuelve como estaba
+        if actuator_proto is not None:
+            actuator_proto.send_actuator_update()
+        await state.broadcast({"type": "actuator_setpoint", "data": {
+            "servo_angle": state.servo_angle, "led": state.led_on}})
 
 
 def _conducir_pulso(accion: str):
@@ -1784,7 +1815,8 @@ async def start_background(app: web.Application):
 
     global conductor
     conductor = ConductorPulsos(send_command=actuator_proto.send_command,
-                                emergency_stop=actuator_proto.emergency_stop)
+                                emergency_stop=actuator_proto.emergency_stop,
+                                get_config=lambda: state.config["control"])
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
 
     # Patrulla autónoma. Se crea acá y no arriba porque sus callbacks
@@ -1796,15 +1828,19 @@ async def start_background(app: web.Application):
         estado_meta=ros_bridge.estado_meta,
         # En `map`, el mismo marco en que Nav2 recibe las metas.
         get_pose=ros_bridge.pose_en_mapa,
-        trigger_scan=_patrol_scan_now,
-        is_scanning=_patrol_is_scanning,
+        barrido=_barrido_camara,
         on_event=_patrol_event,
         ruta_waypoints=WAYPOINTS_PATH,
         distancia_puntos=lambda: state.config["autonomia"]["distancia_puntos_cm"],
     )
     print(f"[patrulla] lista — {len(patrol.waypoints)} waypoints grabados")
 
-    global explorador
+    global seguidor_sendero, explorador
+    seguidor_sendero = SeguidorSendero(
+        get_config=lambda: state.config["autonomia"],
+        # Enlace tardío: la cámara se crea DESPUÉS que esto. Resolverla aquí
+        # dejaba el seguidor sin cámara para siempre.
+        obtener_frame=lambda: camera.ultimo_frame() if camera is not None else None)
     explorador = ExploradorReactivo(
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
         get_pose=ros_bridge.pose_en_mapa,
@@ -1815,6 +1851,7 @@ async def start_background(app: web.Application):
         grabar_recorrido=lambda activa: patrol.grabacion_auto(activa),
         edad_scan=lidar_reactive.edad_scan_s,
         get_config=lambda: state.config["autonomia"],
+        seguidor=seguidor_sendero,
     )
 
     pose_estimator.gyro_weight = state.config["slam"]["pose_gyro_trust"]

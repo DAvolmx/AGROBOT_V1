@@ -81,6 +81,31 @@ DEFAULTS = {
         "lado_libre_cm": 60,         # para considerar un lado como salida
         "retroceso_libre_cm": 50,    # para poder retroceder
         "escaneo_periodo_s": 120,    # cada cuánto se para a barrer con la cámara
+        # El barrido lo hace el BACKEND moviendo el servo paso a paso (como
+        # el slider), no el flag de escaneo del firmware: así la duración y el
+        # recorrido se cambian desde el dashboard sin reprogramar el ESP32.
+        # Los ángulos se recortan igual a 25..110° en protocol.py.
+        "escaneo_duracion_s": 10,
+        "escaneo_angulo_min": 25,
+        "escaneo_angulo_max": 110,
+        # Encender el foco mientras barre (lo apaga al terminar, dejándolo
+        # como estaba). El firmware ya no lo enciende solo: un actuador de
+        # potencia no debe tener vías de encendido automático fuera de control
+        # de la Jetson, porque si el barrido se corta se queda encendido.
+        "escaneo_enciende_foco": True,
+        # --- Seguir senderos (sendero.py) ---
+        # Con esto activo, en vez de vagar el robot intenta ir centrado por el
+        # camino: entre hileras con el LIDAR y/o por el color del suelo.
+        "sendero_activo": False,
+        "sendero_tolerancia_cm": 10,     # desvío que se tolera sin corregir
+        "sendero_pared_max_cm": 150,     # más allá, ese lado no cuenta como hilera
+        "sendero_vision": True,          # usar también la cámara
+        # 0 = solo LIDAR, 1 = solo cámara. 0.5 = ambas por igual.
+        "sendero_vision_peso": 0.5,
+        # Qué se considera vegetación en HSV de OpenCV (matiz 0..179).
+        "sendero_verde_h_min": 30,
+        "sendero_verde_h_max": 90,
+        "sendero_verde_s_min": 60,
     },
     "odometria_webcam": {
         # Odometría visual con la webcam (odometria_webcam.py). `habilitada`
@@ -108,6 +133,12 @@ DEFAULTS = {
         # donde esa fracción se convierte a unidades reales.
         "max_v_mps": 0.55,
         "max_omega_rps": 1.5,
+        # Suavizado por software. Los motores no bajan del 78 % de potencia
+        # (PWM 200..255 en el firmware), así que para ir más lento se trocea
+        # el pulso: manda velocidad una fracción `suavidad_duty` de cada
+        # ciclo y cero el resto. duty 1.0 = como antes, sin trocear.
+        "suavidad_duty": 0.6,
+        "suavidad_periodo_s": 0.30,
     },
     "safety": {
         "heartbeat_stale_warn_s": 5,

@@ -44,7 +44,9 @@ DESATASCO_GIROS = 3       # pulsos de giro seguidos al desatascarse
 
 class ExploradorReactivo:
     def __init__(self, *, distancias, get_pose, conducir, parar,
-                 escanear, on_event, grabar_recorrido, edad_scan, get_config):
+                 escanear, on_event, grabar_recorrido, edad_scan, get_config,
+                 seguidor=None):
+        self._seguidor = seguidor          # SeguidorSendero | None
         self._get_config = get_config      # () -> sección `autonomia` de la config
         self._distancias = distancias      # () -> {adelante, atras, izquierda, derecha}
         self._edad_scan = edad_scan        # () -> segundos desde el último /scan
@@ -61,6 +63,7 @@ class ExploradorReactivo:
         self.giros = 0
         self.desatascos = 0
         self.escaneos = 0
+        self.correcciones = 0
         self._tarea: asyncio.Task | None = None
         self._ultimo_escaneo = 0.0
         self._ultimo_lado = "izquierda"
@@ -77,6 +80,7 @@ class ExploradorReactivo:
             return False, "sin datos del LIDAR — revisá el cable y que el SLAM esté corriendo"
         self.activo = True
         self.pulsos = self.giros = self.desatascos = self.escaneos = 0
+        self.correcciones = 0
         self._ultimo_escaneo = 0.0        # primer barrido nada más arrancar
         self._ref_pose, self._ref_t = None, time.monotonic()
         self._grabar_recorrido(True)      # deja el rastro del recorrido
@@ -93,9 +97,12 @@ class ExploradorReactivo:
         self.estado = "detenido"
 
     def snapshot(self) -> dict:
-        return {"activo": self.activo, "estado": self.estado, "pulsos": self.pulsos,
-                "giros": self.giros, "desatascos": self.desatascos,
-                "escaneos": self.escaneos}
+        d = {"activo": self.activo, "estado": self.estado, "pulsos": self.pulsos,
+             "giros": self.giros, "desatascos": self.desatascos,
+             "escaneos": self.escaneos, "correcciones": self.correcciones}
+        if self._seguidor is not None:
+            d["sendero"] = self._seguidor.snapshot()
+        return d
 
     # ------------------------------------------------------------------
     def _emitir(self, **data):
@@ -159,6 +166,15 @@ class ExploradorReactivo:
                 izq, der = self._hueco(d, "izquierda"), self._hueco(d, "derecha")
 
                 if frente >= avance_libre:
+                    # Con sitio delante, antes de avanzar se mira si hay que
+                    # recentrarse en el sendero. La corrección es un pulso de
+                    # giro corto: este chasis no sabe girar "un poco".
+                    correccion = self._correccion_sendero()
+                    if correccion is not None:
+                        self.estado = f"sendero: {self._seguidor.estado}"
+                        self._conducir(correccion)
+                        self.correcciones += 1
+                        continue
                     self.estado = f"avanzando ({frente:.2f} m libres)"
                     self._conducir("adelante")
                     self.pulsos += 1
@@ -190,6 +206,16 @@ class ExploradorReactivo:
             self._parar()
             self._emitir(evento="error", detalle=str(exc))
             print(f"[exploración] bucle abortado: {type(exc).__name__}: {exc}", flush=True)
+
+    def _correccion_sendero(self):
+        if self._seguidor is None:
+            return None
+        try:
+            import cv2
+            return self._seguidor.correccion(cv2, self._distancias())
+        except Exception as exc:
+            self._emitir(evento="error_sendero", detalle=str(exc))
+            return None
 
     async def _desatascar(self):
         """El robot cree que se mueve pero la pose no cambia: rueda patinando,

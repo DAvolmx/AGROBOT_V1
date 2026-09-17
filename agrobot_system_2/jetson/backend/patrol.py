@@ -35,11 +35,6 @@ import math
 import time
 from pathlib import Path
 
-# El barrido dura lo que dure en el firmware (SCAN_SWEEP_MS = 10000 en
-# esp32c3_actuator.ino). Si allá se cambia, acá también: este valor solo
-# dice cuánto hay que esperar antes de volver a mover el robot.
-SCAN_SWEEP_S = 10.0
-
 SCAN_PERIODO_S = 120.0        # un barrido cada 2 minutos de patrulla
 WAYPOINT_TOL_M = 0.35         # a esta distancia se da por llegado
 GOAL_TIMEOUT_S = 90.0         # si no llega, se pasa al siguiente y se sigue
@@ -65,15 +60,14 @@ class PatrolController:
     """
 
     def __init__(self, *, send_nav_goal, cancel_nav_goal, estado_meta, get_pose,
-                 trigger_scan, is_scanning, on_event, ruta_waypoints: Path,
+                 barrido, on_event, ruta_waypoints: Path,
                  distancia_puntos=lambda: DISTANCIA_AUTO_CM):
         self._distancia_puntos = distancia_puntos
         self._send_nav_goal = send_nav_goal      # (x, y, theta_deg) -> bool
         self._cancel_nav_goal = cancel_nav_goal  # ()
         self._estado_meta = estado_meta          # () -> "en_curso" | "exito" | "abortada" | ...
         self._get_pose = get_pose                # () -> {x, y, theta_deg}
-        self._trigger_scan = trigger_scan        # () — manda v=0, omega=0, scan=1
-        self._is_scanning = is_scanning          # () -> bool (bit1 del status del C3)
+        self._barrido = barrido                  # corutina() — mueve el servo y vuelve
         self._on_event = on_event                # (dict) — al dashboard
         self._ruta = ruta_waypoints
 
@@ -231,12 +225,10 @@ class PatrolController:
             self._meta_cancelada = True
             await asyncio.sleep(0.3)      # que se vacíe el /cmd_vel en vuelo
 
-            self._trigger_scan()
             self.escaneos += 1
             self.ultimo_escaneo = time.monotonic()
             self._emitir({"evento": "escaneo", "motivo": motivo, "total": self.escaneos})
-
-            await asyncio.sleep(SCAN_SWEEP_S + 0.5)
+            await self._barrido()
         finally:
             self._escaneando = False
             self.estado = "navegando" if self.activo else "detenido"
@@ -251,7 +243,7 @@ class PatrolController:
         ahora = time.monotonic()
         if ahora - self._ultima_deteccion_escaneada < COOLDOWN_DETECCION_S:
             return False
-        if self._is_scanning():
+        if self._escaneando:
             return False
         self._ultima_deteccion_escaneada = ahora
         asyncio.create_task(self.escanear("planta detectada"))

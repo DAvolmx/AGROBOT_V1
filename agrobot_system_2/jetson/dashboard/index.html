@@ -732,7 +732,8 @@ input[type="text"], select { font-family: inherit; }
                   <label class="switch"><input type="checkbox" id="led-toggle"><div class="track"></div></label>
                 </div>
                 <button class="btn" id="scan-btn">Escanear planta</button>
-                <p class="hint">El barrido automático toma el control del servo durante 10 s; al terminar vuelve a lo que marcan estos controles.</p>
+                <p class="hint">El barrido lo hace la Jetson moviendo el servo; al terminar vuelve a lo que marca este control.
+                  Duración y recorrido se ajustan en <b>Parámetros → Autonomía</b>.</p>
               </div>
             </div>
           </div>
@@ -818,9 +819,16 @@ input[type="text"], select { font-family: inherit; }
           <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px;">
             <span>Avances: <b class="mono" id="expl-pulsos">0</b></span>
             <span>Giros: <b class="mono" id="expl-giros">0</b></span>
+            <span>Correcciones: <b class="mono" id="expl-correcciones">0</b></span>
             <span>Desatascos: <b class="mono" id="expl-desatascos">0</b></span>
             <span>Barridos: <b class="mono" id="expl-escaneos">0</b></span>
           </div>
+          <div class="toggle-row" style="margin-top:12px;">
+            <span style="font-size:15px;">Seguir sendero
+              <span style="color:var(--ink-soft); font-size:13px;">(centrarse entre hileras)</span></span>
+            <label class="switch"><input type="checkbox" id="sendero-activo"><div class="track"></div></label>
+          </div>
+          <div class="hint mono" id="sendero-estado" style="margin-top:6px; font-size:13px;">—</div>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px;">
           <span>Puntos: <b class="mono" id="patrol-n2">0</b></span>
@@ -1096,6 +1104,16 @@ input[type="text"], select { font-family: inherit; }
                 <div class="label-row"><span>Velocidad angular máx.</span><span class="v mono" id="p-max-omega-val">1.5 rad/s</span></div>
                 <input type="range" min="0.1" max="4" step="0.1" value="1.5" id="p-max-omega">
               </div>
+              <div class="slider-row" style="margin-top:14px;">
+                <div class="label-row"><span>Suavidad: empuje por ciclo</span><span class="v mono" id="p-duty-val">60 %</span></div>
+                <input type="range" min="15" max="100" step="5" value="60" id="p-duty">
+                <p class="hint" style="margin-top:6px;">Los motores no bajan del 78 % de potencia, así que para ir más lento
+                  la Jetson trocea el pulso: empuja esta fracción de cada ciclo y suelta el resto. 100 % = sin trocear.</p>
+              </div>
+              <div class="slider-row" style="margin-top:14px;">
+                <div class="label-row"><span>Suavidad: duración del ciclo</span><span class="v mono" id="p-periodo-val">0.30 s</span></div>
+                <input type="range" min="0.1" max="1" step="0.05" value="0.30" id="p-periodo">
+              </div>
             </div>
             <button class="btn primary" id="p-control-save">Guardar</button>
           </div>
@@ -1157,12 +1175,60 @@ input[type="text"], select { font-family: inherit; }
                 <div class="label-row"><span>Acelerador en autónomo</span><span class="v mono" id="p-escala-val">50 %</span></div>
                 <input type="range" min="10" max="100" step="5" value="50" id="p-escala">
               </div>
-              <div class="slider-row">
+              <div class="slider-row" style="margin-bottom:14px;">
                 <div class="label-row"><span>Barrido de cámara cada</span><span class="v mono" id="p-escaneo-val">120 s</span></div>
                 <input type="range" min="15" max="600" step="15" value="120" id="p-escaneo">
               </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Duración del barrido</span><span class="v mono" id="p-barrido-dur-val">10 s</span></div>
+                <input type="range" min="2" max="60" step="1" value="10" id="p-barrido-dur">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Barrido: ángulo inicial</span><span class="v mono" id="p-barrido-min-val">25°</span></div>
+                <input type="range" min="25" max="110" step="1" value="25" id="p-barrido-min">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>Barrido: ángulo final</span><span class="v mono" id="p-barrido-max-val">110°</span></div>
+                <input type="range" min="25" max="110" step="1" value="110" id="p-barrido-max">
+              </div>
             </div>
             <button class="btn primary" id="p-autonomia-save" style="margin-bottom:18px;">Guardar</button>
+
+            <h3>Seguir senderos</h3>
+            <p class="hint" style="margin-bottom:12px;">Mide el desvío del centro del camino de dos formas y las combina:
+              por <b>LIDAR</b> (distancia a la hilera de cada lado, funciona de noche pero necesita algo a ambos lados) y por
+              <b>cámara</b> (la tierra no es verde; sirve sin paredes pero depende de la luz). Corrige con pulsos de giro.</p>
+            <div class="param-group">
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Desvío que se tolera sin corregir</span><span class="v mono" id="p-sd-tol-val">10 cm</span></div>
+                <input type="range" min="2" max="60" step="1" value="10" id="p-sd-tol">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Más lejos que esto no es hilera</span><span class="v mono" id="p-sd-pared-val">150 cm</span></div>
+                <input type="range" min="30" max="400" step="10" value="150" id="p-sd-pared">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Peso de la cámara (0 = solo LIDAR)</span><span class="v mono" id="p-sd-peso-val">50 %</span></div>
+                <input type="range" min="0" max="100" step="5" value="50" id="p-sd-peso">
+              </div>
+              <div class="toggle-row" style="margin-bottom:14px;">
+                <span style="font-size:15px;">Usar la cámara</span>
+                <label class="switch"><input type="checkbox" id="p-sd-vision" checked><div class="track"></div></label>
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Verde: matiz mínimo</span><span class="v mono" id="p-sd-hmin-val">30</span></div>
+                <input type="range" min="0" max="179" step="1" value="30" id="p-sd-hmin">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Verde: matiz máximo</span><span class="v mono" id="p-sd-hmax-val">90</span></div>
+                <input type="range" min="0" max="179" step="1" value="90" id="p-sd-hmax">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>Verde: saturación mínima</span><span class="v mono" id="p-sd-smin-val">60</span></div>
+                <input type="range" min="0" max="255" step="5" value="60" id="p-sd-smin">
+              </div>
+            </div>
+            <button class="btn primary" id="p-sendero-save" style="margin-bottom:18px;">Guardar</button>
 
             <h3>Fusión de pose (sin encoders)</h3>
             <div class="slider-row">
@@ -1817,7 +1883,13 @@ input[type="text"], select { font-family: inherit; }
     $("expl-pill").className = "pill" + (d.activo ? " ok" : "");
     $("expl-pulsos").textContent = d.pulsos;
     $("expl-giros").textContent = d.giros;
+    $("expl-correcciones").textContent = d.correcciones ?? 0;
     $("expl-desatascos").textContent = d.desatascos;
+    if (d.sendero) {
+      const s = d.sendero;
+      $("sendero-estado").textContent =
+        `${s.estado} · LIDAR ${s.error_lidar_cm ?? "—"} cm · cámara ${s.error_vision ?? "—"} · ${s.vision}`;
+    }
     $("expl-escaneos").textContent = d.escaneos;
     $("btn-expl-on").disabled = !!d.activo;
     $("btn-expl-off").disabled = !d.activo;
@@ -1834,10 +1906,18 @@ input[type="text"], select { font-family: inherit; }
   // `change` y no `input`: guardar en cada píxel del arrastre sería un POST
   // por movimiento del dedo.
   function aplicarConfigAutonomia(a) {
+    if ($("sendero-activo") !== document.activeElement) $("sendero-activo").checked = !!a.sendero_activo;
+    if ($("p-sd-vision") !== document.activeElement) $("p-sd-vision").checked = !!a.sendero_vision;
     const pares = [["p-dist-puntos", a.distancia_puntos_cm], ["p-avance", a.avance_libre_cm],
                    ["p-lado", a.lado_libre_cm], ["p-retro", a.retroceso_libre_cm],
                    ["p-escala", Math.round(a.escala_velocidad * 100)],
-                   ["p-escaneo", a.escaneo_periodo_s]];
+                   ["p-escaneo", a.escaneo_periodo_s],
+                   ["p-barrido-dur", a.escaneo_duracion_s],
+                   ["p-barrido-min", a.escaneo_angulo_min], ["p-barrido-max", a.escaneo_angulo_max],
+                   ["p-sd-tol", a.sendero_tolerancia_cm], ["p-sd-pared", a.sendero_pared_max_cm],
+                   ["p-sd-peso", Math.round(a.sendero_vision_peso * 100)],
+                   ["p-sd-hmin", a.sendero_verde_h_min], ["p-sd-hmax", a.sendero_verde_h_max],
+                   ["p-sd-smin", a.sendero_verde_s_min]];
     for (const [id, v] of pares) {
       if ($(id) !== document.activeElement) { $(id).value = v; liveSliders[id](v); }
     }
@@ -1849,7 +1929,22 @@ input[type="text"], select { font-family: inherit; }
     retroceso_libre_cm: parseFloat($("p-retro").value),
     escala_velocidad: parseFloat($("p-escala").value) / 100,
     escaneo_periodo_s: parseFloat($("p-escaneo").value),
+    escaneo_duracion_s: parseFloat($("p-barrido-dur").value),
+    escaneo_angulo_min: parseFloat($("p-barrido-min").value),
+    escaneo_angulo_max: parseFloat($("p-barrido-max").value),
   }));
+
+  $("p-sendero-save").addEventListener("click", () => saveParams("autonomia", {
+    sendero_tolerancia_cm: parseFloat($("p-sd-tol").value),
+    sendero_pared_max_cm: parseFloat($("p-sd-pared").value),
+    sendero_vision_peso: parseFloat($("p-sd-peso").value) / 100,
+    sendero_vision: $("p-sd-vision").checked,
+    sendero_verde_h_min: parseFloat($("p-sd-hmin").value),
+    sendero_verde_h_max: parseFloat($("p-sd-hmax").value),
+    sendero_verde_s_min: parseFloat($("p-sd-smin").value),
+  }));
+  $("sendero-activo").addEventListener("change", (e) =>
+    saveParams("autonomia", { sendero_activo: e.target.checked }));
 
   $("p-dist-puntos").addEventListener("change", (e) =>
     saveParams("autonomia", { distancia_puntos_cm: parseFloat(e.target.value) }));
@@ -2238,7 +2333,13 @@ input[type="text"], select { font-family: inherit; }
     sendActuator({ servo_angle: parseInt(e.target.value, 10) });
   });
   $("led-toggle").addEventListener("change", (e) => sendActuator({ led: e.target.checked }));
-  $("scan-btn").addEventListener("click", () => { sendControl(0, 0, true); toast("success", "Escaneo iniciado", "Barrido de la cámara durante 10 s."); });
+  // El barrido lo hace el backend moviendo el servo (antes lo hacía el
+  // firmware con duración fija). Duración y ángulos se ajustan en Parámetros.
+  $("scan-btn").addEventListener("click", async () => {
+    const res = await fetch("/api/patrol/scan", { method: "POST" });
+    toast(res.ok ? "success" : "warning", "Barrido de cámara",
+          res.ok ? "El robot se detiene y barre con la cámara." : "No se pudo iniciar.");
+  });
 
   function applyActuatorSetpoint(sp) {
     if (!sp) return;
@@ -2400,6 +2501,10 @@ input[type="text"], select { font-family: inherit; }
       maxVel = { v: cfg.control.max_v_mps, omega: cfg.control.max_omega_rps };
       $("p-max-v").value = cfg.control.max_v_mps; $("p-max-v-val").textContent = Number(cfg.control.max_v_mps).toFixed(2) + " m/s";
       $("p-max-omega").value = cfg.control.max_omega_rps; $("p-max-omega-val").textContent = Number(cfg.control.max_omega_rps).toFixed(1) + " rad/s";
+      for (const [id, v] of [["p-duty", Math.round((cfg.control.suavidad_duty ?? 1) * 100)],
+                             ["p-periodo", cfg.control.suavidad_periodo_s ?? 0.3]]) {
+        if ($(id) !== document.activeElement) { $(id).value = v; liveSliders[id](v); }
+      }
       refreshSpeedLabel();
     }
     if (cfg.slam) {
@@ -2437,6 +2542,15 @@ input[type="text"], select { font-family: inherit; }
     "p-retro": (v) => $("p-retro-val").textContent = v + " cm",
     "p-escala": (v) => $("p-escala-val").textContent = Math.round(v) + " %",
     "p-escaneo": (v) => $("p-escaneo-val").textContent = v + " s",
+    "p-barrido-dur": (v) => $("p-barrido-dur-val").textContent = v + " s",
+    "p-barrido-min": (v) => $("p-barrido-min-val").textContent = v + "°",
+    "p-barrido-max": (v) => $("p-barrido-max-val").textContent = v + "°",
+    "p-sd-tol": (v) => $("p-sd-tol-val").textContent = v + " cm",
+    "p-sd-pared": (v) => $("p-sd-pared-val").textContent = v + " cm",
+    "p-sd-peso": (v) => $("p-sd-peso-val").textContent = v + " %",
+    "p-sd-hmin": (v) => $("p-sd-hmin-val").textContent = v,
+    "p-sd-hmax": (v) => $("p-sd-hmax-val").textContent = v,
+    "p-sd-smin": (v) => $("p-sd-smin-val").textContent = v,
     "p-largo": (v) => $("p-largo-val").textContent = v + " cm",
     "p-ancho": (v) => $("p-ancho-val").textContent = v + " cm",
     "p-margen": (v) => $("p-margen-val").textContent = v + " cm",
@@ -2446,6 +2560,8 @@ input[type="text"], select { font-family: inherit; }
     "p-gyro": (v) => $("p-gyro-val").textContent = parseFloat(v).toFixed(2),
     "p-max-v": (v) => { $("p-max-v-val").textContent = parseFloat(v).toFixed(2) + " m/s"; maxVel.v = parseFloat(v); refreshSpeedLabel(); },
     "p-max-omega": (v) => $("p-max-omega-val").textContent = parseFloat(v).toFixed(1) + " rad/s",
+    "p-duty": (v) => $("p-duty-val").textContent = Math.round(v) + " %",
+    "p-periodo": (v) => $("p-periodo-val").textContent = parseFloat(v).toFixed(2) + " s",
   };
   Object.entries(liveSliders).forEach(([id, fn]) => $(id).addEventListener("input", (e) => fn(e.target.value)));
 
@@ -2508,6 +2624,8 @@ input[type="text"], select { font-family: inherit; }
     max_angular_accel_rps2: parseFloat($("p-accel-omega").value),
   }));
   $("p-control-save").addEventListener("click", () => saveParams("control", {
+    suavidad_duty: parseFloat($("p-duty").value) / 100,
+    suavidad_periodo_s: parseFloat($("p-periodo").value),
     max_v_mps: parseFloat($("p-max-v").value),
     max_omega_rps: parseFloat($("p-max-omega").value),
   }));

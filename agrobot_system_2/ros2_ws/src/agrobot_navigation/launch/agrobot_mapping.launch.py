@@ -37,7 +37,11 @@ from launch_ros.actions import Node
 # Las medidas son del montaje real: ajustar si se mueve el LIDAR o la IMU.
 # Orden de argumentos: x y z yaw pitch roll frame_padre frame_hijo
 LIDAR_XYZ = ("0.0", "0.0", "0.18")   # LIDAR 18 cm por encima del centro de base_link
-LIDAR_RPY = ("0.0", "0.0", "0.0")    # yaw pitch roll — 0 = mirando al frente del robot
+# yaw = pi: con el C1 montado segun la flecha de la carcasa, el 0 grados que
+# publica sllidar_ros2 apunta HACIA ATRAS del robot (medido 2026-09-19: una
+# persona 90 cm detras aparecia en 0 grados). Mantener igual que
+# LIDAR_YAW_DEG de backend/ros_bridge.py.
+LIDAR_RPY = ("3.141592653589793", "0.0", "0.0")    # yaw pitch roll
 IMU_XYZ = ("0.0", "0.0", "0.05")
 
 # CP2102N del RPLIDAR C1 (10c4:ea60). Si se cambia el LIDAR, sacar el nuevo

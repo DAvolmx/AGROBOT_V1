@@ -815,6 +815,51 @@ async def _bucle_rampa():
         await asyncio.sleep(1.0 / CMD_SEND_HZ)
 
 
+# El CP2102N del LIDAR se cae del USB y vuelve al segundo (4 veces en 15 min
+# el 2026-09-19). sllidar_node NO muere: queda bloqueado sobre el puerto
+# viejo, así que el `respawn` del launch nunca actúa y /scan calla hasta
+# reiniciar ROS. Sin scans el freno por LIDAR bloquea adelante/atrás.
+# Matar el driver colgado deja que el respawn lo relance sobre el puerto nuevo.
+LIDAR_DISPOSITIVO = Path("/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_"
+                         "Bridge_Controller_5e723775cd73ef11b311cf8c8fcc3fa0-if00-port0")
+LIDAR_MUDO_S = 4.0          # sin scan este tiempo con el USB presente = colgado
+LIDAR_ENTRE_REINICIOS_S = 20.0   # arranque del driver + respawn_delay, con holgura
+_SLLIDAR_PATRON = "sllidar_ros2/lib/sllidar_ros2/sllidar_node"
+
+
+def _matar_sllidar() -> bool:
+    """SIGTERM y, si sigue vivo (bloqueado en el puerto), SIGKILL."""
+    r = subprocess.run(["pkill", "-TERM", "-f", _SLLIDAR_PATRON], capture_output=True)
+    if r.returncode != 0:
+        return False
+    time.sleep(1.5)
+    subprocess.run(["pkill", "-KILL", "-f", _SLLIDAR_PATRON], capture_output=True)
+    return True
+
+
+async def _vigia_lidar():
+    ultimo_reinicio = time.monotonic()
+    while True:
+        await asyncio.sleep(1.0)
+        try:
+            if not ros_bridge.available:
+                continue
+            ahora = time.monotonic()
+            if (lidar_reactive.edad_scan_s() < LIDAR_MUDO_S
+                    or not LIDAR_DISPOSITIVO.exists()
+                    or ahora - ultimo_reinicio < LIDAR_ENTRE_REINICIOS_S):
+                continue
+            ultimo_reinicio = ahora
+            if await asyncio.to_thread(_matar_sllidar):
+                print("[lidar] driver sin publicar con el USB presente — relanzado", flush=True)
+                await state.broadcast({"type": "toast", "data": {
+                    "kind": "warning", "title": "LIDAR reconectado",
+                    "message": "El LIDAR se cayó del USB; se relanzó el driver.",
+                }})
+        except Exception as exc:
+            print(f"[lidar] vigía falló: {type(exc).__name__}: {exc}", flush=True)
+
+
 # =============================================
 # ===== MANEJO MANUAL POR PULSOS =====
 # =============================================
@@ -1841,6 +1886,7 @@ async def start_background(app: web.Application):
                                 emergency_stop=actuator_proto.emergency_stop,
                                 get_config=lambda: state.config["control"])
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
+    app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
 
     # Patrulla autónoma. Se crea acá y no arriba porque sus callbacks
     # necesitan el `actuator_proto` que se acaba de construir.

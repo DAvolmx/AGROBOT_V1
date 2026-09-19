@@ -87,6 +87,10 @@ class PoseEstimator:
 
 # Sin scan fresco no se sabe qué hay delante ni detrás.
 SCAN_VIEJO_S = 0.6
+# Holgura sobre la carrocería para descartar retornos del propio robot.
+HUELLA_TOLERANCIA_M = 0.02
+# Margen a cada lado del camino que barre el robot (skid-steer: deriva algo).
+CORREDOR_HOLGURA_M = 0.05
 
 
 class LidarReactive:
@@ -107,10 +111,10 @@ class LidarReactive:
 
     def ingest_scan(self, points: list[dict]):
         self.last_scan = points
-        self.last_scan_at = time.time()
+        self.last_scan_at = time.monotonic()
 
     def edad_scan_s(self) -> float:
-        return math.inf if self.last_scan_at is None else time.time() - self.last_scan_at
+        return math.inf if self.last_scan_at is None else time.monotonic() - self.last_scan_at
 
     def distancias(self, cfg: dict) -> dict:
         """Hueco libre desde cada cara de la carrocería, en METROS.
@@ -146,12 +150,27 @@ class LidarReactive:
             d = p["distance_m"]
             if not (0.05 < d < math.inf):
                 continue
+            # Dentro de la huella del robot solo puede estar el propio robot
+            # (chasis, cables, cámara): el 2026-09-19 esos reflejos a 5-15 cm
+            # daban "0 cm libres" y bloqueaban adelante/atrás sin obstáculo.
+            rad = math.radians(p["angle_deg"])
+            lateral = abs(d * math.sin(rad))
+            if (abs(d * math.cos(rad)) <= ml + HUELLA_TOLERANCIA_M
+                    and lateral <= ma + HUELLA_TOLERANCIA_M):
+                continue
             a = _wrap180(p["angle_deg"])
             abs_a = abs(a)
+            # Adelante/atrás: solo lo que queda en el camino que barre la
+            # carrocería yendo recto. Con cono de 45° una pared paralela a
+            # 12 cm del costado caía en el sector frontal y bloqueaba el
+            # avance sin estar en la trayectoria (2026-09-19).
+            en_camino = lateral <= ma + CORREDOR_HOLGURA_M
             if abs_a <= semi_frontal:
-                adelante = min(adelante, d - ml)
+                if en_camino:
+                    adelante = min(adelante, d - ml)
             elif abs_a >= 180.0 - semi_frontal:
-                atras = min(atras, d - ml)
+                if en_camino:
+                    atras = min(atras, d - ml)
             elif abs(a - 90.0) <= semi_lateral:
                 izquierda = min(izquierda, d - ma)
             elif abs(a + 90.0) <= semi_lateral:

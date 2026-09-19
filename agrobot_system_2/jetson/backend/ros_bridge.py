@@ -41,6 +41,12 @@ import time
 MAPA_PERIODO_S = 1.0
 MAPA_MAX_CELDAS = 250_000
 
+# Giro del LIDAR respecto al robot. Con el C1 montado según la flecha de la
+# carcasa, el 0° de sllidar_ros2 mira HACIA ATRÁS (2026-09-19: una persona a
+# 90 cm detrás salía en 0°). Debe coincidir con el yaw de LIDAR_RPY en
+# ros2_ws/src/agrobot_navigation/launch/*.launch.py.
+LIDAR_YAW_DEG = 180.0
+
 
 # El MOTIVO del fallo se guarda, no se descarta. Antes este `except` se
 # tragaba la excepción y el dashboard mostraba "ROS no disponible" sin más:
@@ -286,11 +292,14 @@ if ROS_AVAILABLE:
             self._on_cmd_vel(float(msg.linear.x), float(msg.angular.z))
 
         def _scan_cb(self, msg: "LaserScan"):
+            # El scan viene en el frame `laser`; el freno y el radar trabajan
+            # en el del robot (0° = adelante). Ver LIDAR_YAW_DEG.
             points = []
             angle = msg.angle_min
             for r in msg.ranges:
                 if msg.range_min <= r <= msg.range_max:
-                    points.append({"angle_deg": math.degrees(angle), "distance_m": float(r)})
+                    grados = (math.degrees(angle) + LIDAR_YAW_DEG + 180.0) % 360.0 - 180.0
+                    points.append({"angle_deg": grados, "distance_m": float(r)})
                 angle += msg.angle_increment
             self._on_scan_points(points)
 

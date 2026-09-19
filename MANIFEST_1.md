@@ -679,6 +679,12 @@ robot. Lo que bloquea va a un hilo (`camera.py`) o a un executor
 - `GET /api/mapas`, `POST /api/mapas/guardar {nombre, sobrescribir}`, `POST /api/mapas/cargar {nombre}` (2026-09-17)
 - `GET /api/captures` (`?class=&limit=`), `POST /api/captures/clear`
 - `POST /api/session-report`
+- `POST /api/nav_cal/start`, `/api/nav_cal/stop`, `GET /api/nav_cal/status` — calibración de navegación (2026-09-19)
+- `POST /api/training/correct_pose {x, y, theta_deg}` — publica `/initialpose` para corregir la pose del robot en SLAM (2026-09-19)
+- `POST /api/training/save_furrows {furrows}`, `POST /api/training/save_scan_points {scan_points}` — guarda surcos y puntos de escaneo en `~/.agrobot/training/` (2026-09-19)
+- `POST /api/training/generate_route {furrows, scan_points, spacing_m}` — genera waypoints boustrophedon y los carga en la patrulla (2026-09-19)
+- `GET /api/training/data` — retorna surcos, puntos de escaneo y correcciones guardados (2026-09-19)
+- `POST /api/training/log_correction {type, vx, omega}` — registra correcciones de conducción para aprendizaje (2026-09-19)
 - `GET /video` (MJPEG con overlay YOLO)
 - `WS /ws` — push: `env_telemetry, actuator_status, detection, capture,
   system_stats, health, pose, pose_source, lidar_scan, map, toast,
@@ -3727,3 +3733,37 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   `ekf.yaml`, `nav2_params.yaml`, `agrobot_mapping.launch.py`, `patrol.py`,
   `jetson_server.py`, `navigation_logger.py`, `analizar_navegacion.py`,
   `dashboard/index.html`.
+
+- **2026-09-19** — **Dashboard de entrenamiento (`training.html`) + endpoints
+  de corrección de pose y trazado de surcos.**
+
+  Dashboard separado que corre en paralelo al principal (`/training.html`),
+  orientado a la fase de entrenamiento del robot en campo:
+
+  - **Mapa en tiempo real** renderizado en canvas desde el WebSocket (`/map`,
+    `/pose`). El operador ve el occupancy grid de slam_toolbox con la pose
+    del robot actualizada a 8 Hz.
+  - **Corrección de pose** con clic: publica `/initialpose`
+    (`PoseWithCovarianceStamped`) para reposicionar el robot en el mapa sin
+    reiniciar SLAM. Covarianza moderada (0.25 m², 0.068 rad²).
+  - **Dibujar surcos/filas de cultivo** sobre el mapa (herramienta de líneas
+    por clic, doble clic termina). Se guardan en `~/.agrobot/training/`.
+  - **Puntos de escaneo** 🌱: clic coloca un marcador de planta en el mapa,
+    que se incluirá como parada en la ruta generada.
+  - **Generación automática de waypoints** a partir de surcos y puntos de
+    escaneo: interpola a lo largo de cada surco con el espaciado elegido,
+    alternando dirección en surcos consecutivos (boustrophedon). Los
+    waypoints se cargan directamente en la patrulla.
+  - **Manejo manual** con botones y teclado (WASD/flechas), con control de
+    velocidad. Cada corrección de conducción se registra para aprendizaje.
+  - **Configuración de conos y cinemática** (frontal, lateral, margen,
+    velocidades) directamente desde el dashboard de entrenamiento.
+  - **Guardar/cargar mapas** y **enviar metas a Nav2** con clic.
+
+  Backend: 6 endpoints nuevos `/api/training/*` en `jetson_server.py`.
+  Persistencia en `~/.agrobot/training/training_data.json`.
+  ROS bridge: método `publish_initial_pose` + publisher `/initialpose` +
+  import de `PoseWithCovarianceStamped`.
+
+  Archivos tocados: `ros_bridge.py`, `jetson_server.py`,
+  `dashboard/training.html` (nuevo).

@@ -2037,6 +2037,137 @@ async def nav_cal_status_handler(request: web.Request):
     return web.json_response(_nav_cal_stats)
 
 
+# =============================================
+# ===== ENTRENAMIENTO / TRAINING DASHBOARD =====
+# =============================================
+TRAINING_DIR = Path.home() / ".agrobot" / "training"
+
+_training_data = {
+    "furrows": [],
+    "scan_points": [],
+    "corrections": [],
+}
+
+
+def _load_training_data():
+    f = TRAINING_DIR / "training_data.json"
+    if f.exists():
+        try:
+            _training_data.update(json.loads(f.read_text()))
+        except Exception:
+            pass
+
+
+def _save_training_data():
+    TRAINING_DIR.mkdir(parents=True, exist_ok=True)
+    (TRAINING_DIR / "training_data.json").write_text(
+        json.dumps(_training_data, indent=2))
+
+
+_load_training_data()
+
+
+async def training_correct_pose_handler(request: web.Request):
+    if not ros_bridge.available:
+        return web.json_response(
+            {"error": "ROS no disponible"}, status=503)
+    body = await request.json()
+    x, y = float(body["x"]), float(body["y"])
+    theta = float(body.get("theta_deg", 0.0))
+    ros_bridge.publish_initial_pose(x, y, theta)
+    _training_data["corrections"].append({
+        "ts": time.time(), "x": x, "y": y, "theta_deg": theta})
+    _save_training_data()
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Pose corregida",
+        "message": f"x={x:.2f} y={y:.2f} θ={theta:.0f}°",
+    }})
+    return web.json_response({"ok": True})
+
+
+async def training_save_furrows_handler(request: web.Request):
+    body = await request.json()
+    _training_data["furrows"] = body.get("furrows", [])
+    _save_training_data()
+    return web.json_response({"ok": True, "count": len(_training_data["furrows"])})
+
+
+async def training_save_scan_points_handler(request: web.Request):
+    body = await request.json()
+    _training_data["scan_points"] = body.get("scan_points", [])
+    _save_training_data()
+    return web.json_response({"ok": True, "count": len(_training_data["scan_points"])})
+
+
+async def training_generate_route_handler(request: web.Request):
+    body = await request.json()
+    furrows = body.get("furrows", _training_data.get("furrows", []))
+    spacing_m = float(body.get("spacing_m", 0.5))
+    waypoints = []
+    for fi, furrow in enumerate(furrows):
+        pts = furrow.get("points", [])
+        if len(pts) < 2:
+            continue
+        total_len = 0
+        segs = []
+        for i in range(1, len(pts)):
+            dx = pts[i]["x"] - pts[i-1]["x"]
+            dy = pts[i]["y"] - pts[i-1]["y"]
+            seg_len = math.sqrt(dx*dx + dy*dy)
+            segs.append(seg_len)
+            total_len += seg_len
+        if total_len < 0.01:
+            continue
+        n_pts = max(2, int(total_len / spacing_m) + 1)
+        for j in range(n_pts):
+            frac = j / (n_pts - 1)
+            target_dist = frac * total_len
+            accum = 0
+            for i, sl in enumerate(segs):
+                if accum + sl >= target_dist:
+                    t = (target_dist - accum) / sl if sl > 0 else 0
+                    wx = pts[i]["x"] + t * (pts[i+1]["x"] - pts[i]["x"])
+                    wy = pts[i]["y"] + t * (pts[i+1]["y"] - pts[i]["y"])
+                    dx = pts[i+1]["x"] - pts[i]["x"]
+                    dy = pts[i+1]["y"] - pts[i]["y"]
+                    theta = math.degrees(math.atan2(dy, dx))
+                    waypoints.append({"x": round(wx, 3), "y": round(wy, 3),
+                                      "theta_deg": round(theta, 1)})
+                    break
+                accum += sl
+        if fi % 2 == 1:
+            waypoints[-n_pts:] = reversed(waypoints[-n_pts:])
+    scan_pts = body.get("scan_points", _training_data.get("scan_points", []))
+    for sp in scan_pts:
+        waypoints.append({"x": sp["x"], "y": sp["y"], "theta_deg": 0,
+                          "scan": True})
+    if patrol is not None and waypoints:
+        patrol.reemplazar_waypoints(
+            [{"x": w["x"], "y": w["y"], "theta_deg": w.get("theta_deg", 0)}
+             for w in waypoints if not w.get("scan")])
+    return web.json_response({"ok": True, "waypoints": waypoints,
+                              "count": len(waypoints)})
+
+
+async def training_data_handler(request: web.Request):
+    return web.json_response(_training_data)
+
+
+async def training_log_correction_handler(request: web.Request):
+    body = await request.json()
+    entry = {
+        "ts": time.time(),
+        "type": body.get("type", "drive"),
+        "vx": body.get("vx", 0),
+        "omega": body.get("omega", 0),
+        "pose": current_pose(),
+    }
+    _training_data["corrections"].append(entry)
+    if len(_training_data["corrections"]) % 20 == 0:
+        _save_training_data()
+    return web.json_response({"ok": True})
+
+
 def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/ws", ws_handler)
@@ -2080,6 +2211,14 @@ def create_app() -> web.Application:
     app.router.add_post("/api/nav_cal/stop", nav_cal_stop_handler)
     app.router.add_get("/api/nav_cal/status", nav_cal_status_handler)
     app.router.add_static("/captures", CAPTURES_DIR, show_index=False)
+
+    # --- Training dashboard endpoints ---
+    app.router.add_post("/api/training/correct_pose", training_correct_pose_handler)
+    app.router.add_post("/api/training/save_furrows", training_save_furrows_handler)
+    app.router.add_post("/api/training/save_scan_points", training_save_scan_points_handler)
+    app.router.add_post("/api/training/generate_route", training_generate_route_handler)
+    app.router.add_get("/api/training/data", training_data_handler)
+    app.router.add_post("/api/training/log_correction", training_log_correction_handler)
 
     # La raíz sirve el dashboard directamente. Antes `add_static("/")` con
     # show_index=True devolvía un LISTADO DE DIRECTORIO en `/`: el operador

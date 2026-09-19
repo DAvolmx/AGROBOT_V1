@@ -53,7 +53,7 @@ try:
     from rclpy.node import Node
     from rclpy.action import ActionClient
     from rclpy.qos import qos_profile_sensor_data
-    from geometry_msgs.msg import Twist, PoseStamped
+    from geometry_msgs.msg import Twist, PoseStamped, PoseWithCovarianceStamped
     from sensor_msgs.msg import Imu, LaserScan
     from nav_msgs.msg import Odometry, OccupancyGrid
     from nav2_msgs.action import NavigateToPose
@@ -192,6 +192,11 @@ class AgroBotROSBridge:
         if self.available:
             self._node.publish_odom_webcam(vx, vyaw, var_vx, var_vyaw)
 
+    def publish_initial_pose(self, x: float, y: float, theta_deg: float):
+        """Publica /initialpose para corregir la pose del robot en SLAM."""
+        if self.available:
+            self._node.publish_initial_pose(x, y, theta_deg)
+
     def pose_en_mapa(self) -> dict | None:
         """Pose del robot en el marco `map`, o None si SLAM no publica TF."""
         if not self.available:
@@ -241,6 +246,10 @@ if ROS_AVAILABLE:
             self.imu_pub = self.create_publisher(Imu, "/imu/data_raw", 10)
             self.wheel_odom_pub = self.create_publisher(Odometry, "/wheel_odom", 10)
             self.odom_webcam_pub = self.create_publisher(Odometry, "/odom_webcam", 10)
+
+            # ---- publicador /initialpose para corregir la pose en SLAM ----
+            self.initial_pose_pub = self.create_publisher(
+                PoseWithCovarianceStamped, "/initialpose", 10)
 
             # ---- cliente de acción Nav2 para "ir a este punto del mapa" ----
             self._nav_client = ActionClient(self, NavigateToPose, "navigate_to_pose")
@@ -474,6 +483,20 @@ if ROS_AVAILABLE:
                 "y": t.transform.translation.y,
                 "theta_deg": math.degrees(yaw) % 360,
             }
+
+        def publish_initial_pose(self, x: float, y: float, theta_deg: float):
+            msg = PoseWithCovarianceStamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = "map"
+            msg.pose.pose.position.x = float(x)
+            msg.pose.pose.position.y = float(y)
+            theta = math.radians(theta_deg)
+            msg.pose.pose.orientation.z = math.sin(theta / 2)
+            msg.pose.pose.orientation.w = math.cos(theta / 2)
+            msg.pose.covariance[0] = 0.25
+            msg.pose.covariance[7] = 0.25
+            msg.pose.covariance[35] = 0.068
+            self.initial_pose_pub.publish(msg)
 
         def cancel_nav_goal(self):
             if self._goal_handle is not None:

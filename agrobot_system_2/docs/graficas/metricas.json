@@ -1,0 +1,70 @@
+{
+  "sesiones": [
+    {
+      "nombre": "20260919_143452",
+      "poses": 31,
+      "duracion_s": 15.1,
+      "distancia_m": 0.007,
+      "deriva_m": 0.0,
+      "deriva_pct": null,
+      "lidar_frontal_cm": 161.9,
+      "lidar_izq_cm": 94.0,
+      "lidar_der_cm": 34.0
+    },
+    {
+      "nombre": "20260919_143649",
+      "poses": 21,
+      "duracion_s": 10.0,
+      "distancia_m": 0.006,
+      "deriva_m": 0.001,
+      "deriva_pct": null,
+      "lidar_frontal_cm": 161.8,
+      "lidar_izq_cm": 94.0,
+      "lidar_der_cm": 34.0
+    },
+    {
+      "nombre": "20260919_143822",
+      "poses": 20,
+      "duracion_s": 9.7,
+      "distancia_m": 0.007,
+      "deriva_m": 0.002,
+      "deriva_pct": null,
+      "lidar_frontal_cm": 95.7,
+      "lidar_izq_cm": 94.0,
+      "lidar_der_cm": 34.0
+    },
+    {
+      "nombre": "20260919_145112",
+      "poses": 495,
+      "duracion_s": 248.0,
+      "distancia_m": 24.976,
+      "deriva_m": 3.42,
+      "deriva_pct": 13.7,
+      "lidar_frontal_cm": 176.9,
+      "lidar_izq_cm": 91.5,
+      "lidar_der_cm": 47.7
+    },
+    {
+      "nombre": "20260919_145553",
+      "poses": 457,
+      "duracion_s": 228.9,
+      "distancia_m": 17.985,
+      "deriva_m": 5.381,
+      "deriva_pct": 29.9,
+      "lidar_frontal_cm": 106.2,
+      "lidar_izq_cm": 40.3,
+      "lidar_der_cm": 44.0
+    }
+  ],
+  "bug_imu": {
+    "nombre": "19700101_001231",
+    "poses": 2536,
+    "duracion_s": 1271.5,
+    "distancia_m": 1445.679,
+    "deriva_m": 1213.048,
+    "deriva_pct": 83.9,
+    "lidar_frontal_cm": 114.4,
+    "lidar_izq_cm": 50.1,
+    "lidar_der_cm": 59.9
+  }
+}

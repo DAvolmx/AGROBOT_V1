@@ -95,7 +95,8 @@ DEFAULTS = {
         "escaneo_enciende_foco": True,
         # --- Seguir senderos (sendero.py) ---
         # Con esto activo, en vez de vagar el robot intenta ir centrado por el
-        # camino: entre hileras con el LIDAR y/o por el color del suelo.
+        # camino: entre hileras con el LIDAR y/o por la cámara (bordes de paja
+        # y plantas proyectados al suelo).
         "sendero_activo": False,
         "sendero_tolerancia_cm": 10,     # desvío que se tolera sin corregir
         "sendero_pared_max_cm": 150,     # más allá, ese lado no cuenta como hilera
@@ -106,6 +107,9 @@ DEFAULTS = {
         "sendero_verde_h_min": 30,
         "sendero_verde_h_max": 90,
         "sendero_verde_s_min": 60,
+        # La paja seca (mulch) de los costados también marca el borde del
+        # sendero. Apagar si el camino mismo está cubierto de paja.
+        "sendero_paja": True,
     },
     "odometria_webcam": {
         # Odometría visual con la webcam (odometria_webcam.py). `habilitada`

@@ -685,6 +685,8 @@ robot. Lo que bloquea va a un hilo (`camera.py`) o a un executor
 - `POST /api/training/generate_route {furrows, scan_points, spacing_m}` — genera waypoints boustrophedon y los carga en la patrulla (2026-09-19)
 - `GET /api/training/data` — retorna surcos, puntos de escaneo y correcciones guardados (2026-09-19)
 - `POST /api/training/log_correction {type, vx, omega}` — registra correcciones de conducción para aprendizaje (2026-09-19)
+- `GET/POST /api/drive/mode {modo: interior|exterior}` — modo del manejo por pulsos; se difunde por WS como `drive_mode` (2026-09-19)
+- `GET /api/sendero/vista.jpg` — imagen de depuración del detector de senderos (cámara + vista cenital) (2026-09-19)
 - `GET /video` (MJPEG con overlay YOLO)
 - `WS /ws` — push: `env_telemetry, actuator_status, detection, capture,
   system_stats, health, pose, pose_source, lidar_scan, map, toast,
@@ -3767,3 +3769,72 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
 
   Archivos tocados: `ros_bridge.py`, `jetson_server.py`,
   `dashboard/training.html` (nuevo).
+
+- **2026-09-19 (tarde)** — **Manejo, LIDAR, freno, detección de senderos por
+  cámara, trazado en el mapa principal e informe Word.** Commits `1f2119a`,
+  `374cabc`, `a3ab408` y el de esta entrada.
+
+  **Modos de manejo** (`pulse_drive.py`, `MODOS`): Interior = 60 % de
+  velocidad, pulsos cortos, giro en su eje; Exterior = 100 %, maniobra de giro
+  con arcos de 0,3 s al 25 % (antes 0,6 s al 50 %: pisaba las plantas).
+  Endpoint `/api/drive/mode`; botones en ambos dashboards, sincronizados por WS.
+
+  **LIDAR — tres fallos que bloqueaban adelante/atrás (el freno corta v sin
+  scan fresco, nunca el giro):**
+  1. El CP2102N se cae del USB (4 veces en 15 min) y vuelve como otro
+     ttyUSBn → los launch usan `/dev/serial/by-id/...CP2102N...`.
+  2. Tras el corte `sllidar_node` queda VIVO pero colgado y el respawn no
+     actúa → `_vigia_lidar()` en el backend lo mata tras 4 s sin scan con el
+     USB presente (el respawn lo relanza). Edad del scan con reloj monotónico.
+  3. Con el C1 montado según la flecha de la carcasa, el 0° de sllidar_ros2
+     apunta HACIA ATRÁS (medido: persona a 90 cm detrás salía en 0°) → yaw π
+     en el TF base_link→laser de ambos launch y `LIDAR_YAW_DEG = 180` en
+     `ros_bridge.py` (freno y radar). Mantener los dos iguales.
+
+  **Freno por LIDAR** (`slam.py`): se ignoran los retornos dentro de la huella
+  del robot (+2 cm; reflejos del chasis a 5–15 cm daban "0 cm libres"), y
+  adelante/atrás solo cuentan puntos en el camino que barre la carrocería
+  (+5 cm por lado): con cono de 45° una pared paralela al costado bloqueaba.
+
+  **Dashboards:** el de entrenamiento mandaba `parar` al soltar el botón
+  (cortaba el pulso y la patrulla) → un toque = un pulso. Los botones de modo
+  del principal no respondían (onclick fuera del IIFE). La flecha del robot
+  en ambos mapas salía girada 90° (el triángulo apunta a +Y) → `90° − rumbo`.
+
+  **Detección de senderos** (`sendero.py`, reescrito). Fotos de la huerta de
+  pruebas: sendero en bucle de tierra oscura bordeado de PAJA seca, plantas
+  chicas y escasas; el LIDAR (~30 cm) pasa por encima. Antes se seguía el
+  centroide de lo "no verde" y con plantas chicas no medía nada. Ahora:
+  bordes = vegetación (Excess Green + Otsu AND HSV) OR paja (más clara que el
+  suelo del propio fotograma, H 8–35, S ≥ 35); proyección a vista cenital en
+  metros con la geometría de `odometria_webcam`; búsqueda del rumbo ±40° que
+  alinea los bordes; el sendero es el hueco libre (perfil normalizado por
+  cobertura) que contiene la posición anterior; error medido 0,6 m adelante,
+  en metros y con el mismo signo que el del LIDAR. Se abstiene con la cámara
+  escaneando o girada. Config nueva `autonomia.sendero_paja` (toggle en
+  Parámetros). Prueba de regresión `tools/probar_sendero.py` (escenas
+  sintéticas por trazado de rayos): 36/36, error lateral medio 1,3 cm.
+
+  **Mapa del dashboard principal:** 65 vh (mín. 480 px), zoom (rueda, +/−) y
+  arrastre, mapa pintado una vez en un lienzo interno, y herramientas de
+  surco / punto de escaneo 🌱 / deshacer / guardar / generar ruta sobre el
+  mismo almacén que el de entrenamiento (`/api/training/*`).
+
+  **Documentación:** `docs/Informe_AgroBot_2026-09-19.docx` generado por
+  `docs/generar_informe.py` (gráficas de `tools/graficas_navegacion.py` en
+  `docs/graficas/`, detector en `docs/sendero/`, fotos de la huerta en
+  `docs/fotos_huerta/` — vacía: las fotos llegaron por chat; copiarlas y
+  regenerar).
+
+  **⚠️ Hallazgo sin aplicar todavía:** el servo de la cámara INCLINA (tilt),
+  no gira a los lados (98°→80° desplazó la imagen 68 px en vertical, 0 en
+  horizontal). A 98° la cámara va a ~15,5° bajo el horizonte y media imagen
+  es pared/cielo; bajar el ángulo apunta más al suelo. Pendiente: que la
+  geometría use el ángulo real del servo y que el servo busque la
+  inclinación con la que mejor se ve el sendero.
+
+  Archivos: `pulse_drive.py`, `jetson_server.py`, `ros_bridge.py`, `slam.py`,
+  `sendero.py`, `config_store.py`, `agrobot_config.json`,
+  `agrobot_mapping.launch.py`, `agrobot_navigation.launch.py`,
+  `dashboard/index.html`, `dashboard/training.html`,
+  `tools/graficas_navegacion.py`, `tools/probar_sendero.py`, `docs/*`.

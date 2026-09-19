@@ -475,6 +475,17 @@ input[type="text"], select { font-family: inherit; }
 /* ---------- LIDAR / mapa ---------- */
 .lidar-wrap { position: relative; background: var(--panel-2); border-radius: 12px; border: 1px solid var(--line); overflow: hidden; min-height: 360px; }
 .lidar-wrap canvas { width: 100%; height: 100%; display: block; }
+#map-wrap { min-height: 480px; height: 65vh; margin: 0 16px; }
+#map-tools, #map-trazado { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 16px 10px; }
+#map-trazado { padding: 10px 16px 0; gap: 10px; }
+.map-tool { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 11px;
+            font-size: 14px; color: var(--ink); cursor: pointer; min-height: 36px; }
+.map-tool:hover { border-color: var(--accent); }
+.map-tool.activo { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.map-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
+.map-hint { position: absolute; top: 10px; left: 10px; right: 10px; font-size: 13px; color: var(--ink-soft);
+            background: rgba(255, 255, 255, 0.86); padding: 5px 10px; border-radius: 7px;
+            border: 1px solid var(--line); pointer-events: none; width: fit-content; }
 .lidar-caption { position: absolute; bottom: 10px; left: 10px; font-size: 13.5px; color: var(--ink-soft); background: rgba(255, 255, 255, 0.86); padding: 5px 10px; border-radius: 7px; border: 1px solid var(--line); }
 
 /* ---------- gestor de modelos ---------- */
@@ -915,9 +926,30 @@ input[type="text"], select { font-family: inherit; }
         </div>
         <div id="ros-reason" class="hint" style="display:none; margin:0 16px 12px; padding:9px 11px;
              border:1px solid var(--warn); border-radius:8px; color:var(--warn-ink); line-height:1.45;"></div>
-        <div class="lidar-wrap" id="map-wrap" style="min-height:340px;">
-          <canvas id="map-canvas"></canvas>
+        <div id="map-tools">
+          <button class="map-tool" data-herr="ver">✋ Mover</button>
+          <button class="map-tool" data-herr="surco">〰 Surco</button>
+          <button class="map-tool" data-herr="punto">🌱 Punto de escaneo</button>
+          <span class="map-sep"></span>
+          <button class="map-tool" id="map-terminar">✔ Terminar surco</button>
+          <button class="map-tool" id="map-deshacer">↶ Deshacer</button>
+          <button class="map-tool" id="map-borrar">🗑 Borrar todo</button>
+          <span class="map-sep"></span>
+          <button class="map-tool" id="map-zoom-menos" title="Alejar">−</button>
+          <button class="map-tool" id="map-zoom-mas" title="Acercar">+</button>
+          <button class="map-tool" id="map-centrar" title="Centrar en el robot">◎ Robot</button>
+        </div>
+        <div class="lidar-wrap" id="map-wrap">
+          <canvas id="map-canvas" style="touch-action:none;"></canvas>
+          <div class="map-hint" id="map-hint"></div>
           <div class="lidar-caption" id="map-caption">sin mapa todavía</div>
+        </div>
+        <div id="map-trazado">
+          <span class="hint mono" id="map-trazado-resumen" style="margin:0;">—</span>
+          <label class="hint" style="margin:0; display:flex; align-items:center; gap:6px;">Punto cada
+            <input type="number" id="map-espaciado" value="0.5" min="0.1" max="5" step="0.1" style="width:64px;"> m</label>
+          <button class="btn" id="map-guardar">💾 Guardar trazado</button>
+          <button class="btn primary" id="map-ruta">➜ Generar ruta de patrulla</button>
         </div>
         <div style="padding:12px 16px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
           <span class="hint" style="margin:0;">Pose: <b class="mono" id="pose-source-val">—</b></span>
@@ -1259,8 +1291,10 @@ input[type="text"], select { font-family: inherit; }
 
             <h3>Seguir senderos</h3>
             <p class="hint" style="margin-bottom:12px;">Mide el desvío del centro del camino de dos formas y las combina:
-              por <b>LIDAR</b> (distancia a la hilera de cada lado, funciona de noche pero necesita algo a ambos lados) y por
-              <b>cámara</b> (la tierra no es verde; sirve sin paredes pero depende de la luz). Corrige con pulsos de giro.</p>
+              por <b>LIDAR</b> (distancia a la hilera de cada lado; con plantas bajas no las ve) y por
+              <b>cámara</b> (paja y plantas de los costados proyectadas al suelo: da el centro, el ancho y el rumbo
+              del sendero en cm). Corrige con pulsos de giro.
+              <a href="/api/sendero/vista.jpg" target="_blank">Ver lo que detecta la cámara ahora</a>.</p>
             <div class="param-group">
               <div class="slider-row" style="margin-bottom:14px;">
                 <div class="label-row"><span>Desvío que se tolera sin corregir</span><span class="v mono" id="p-sd-tol-val">10 cm</span></div>
@@ -1277,6 +1311,10 @@ input[type="text"], select { font-family: inherit; }
               <div class="toggle-row" style="margin-bottom:14px;">
                 <span style="font-size:15px;">Usar la cámara</span>
                 <label class="switch"><input type="checkbox" id="p-sd-vision" checked><div class="track"></div></label>
+              </div>
+              <div class="toggle-row" style="margin-bottom:14px;">
+                <span style="font-size:15px;">La paja seca marca el borde</span>
+                <label class="switch"><input type="checkbox" id="p-sd-paja" checked><div class="track"></div></label>
               </div>
               <div class="slider-row" style="margin-bottom:14px;">
                 <div class="label-row"><span>Verde: matiz mínimo</span><span class="v mono" id="p-sd-hmin-val">30</span></div>
@@ -1645,11 +1683,50 @@ input[type="text"], select { font-family: inherit; }
   // patrulla al refrescar su estado).
   let waypointsMapa = [], waypointIndice = -1;
 
+  // El mapa se pinta UNA vez por mensaje en un lienzo interno (1 px por
+  // celda) y cada redibujo solo lo escala: antes se hacía un fillRect por
+  // celda en cada pose (8 Hz), y con el mapa grande y con zoom no alcanzaba.
+  const mapaLienzo = document.createElement("canvas");
+  let vista = { zoom: 1, dx: 0, dy: 0 };
+  let surcosMapa = [], surcoActual = null, puntosEscaneo = [], herramientaMapa = "ver";
+
   function setMap(m) {
     lastMap = m;
     $("map-caption").textContent = `${m.width}×${m.height} celdas · resolución ${m.resolution.toFixed(2)} m/celda`;
+    mapaLienzo.width = m.width; mapaLienzo.height = m.height;
+    const c = mapaLienzo.getContext("2d");
+    const img = c.createImageData(m.width, m.height);
+    const libre = [255, 255, 255], ocupado = [47, 64, 56];
+    for (let row = 0; row < m.height; row++) {
+      for (let col = 0; col < m.width; col++) {
+        const v = m.data[row * m.width + col];
+        const k = ((m.height - 1 - row) * m.width + col) * 4;
+        if (v < 0) { img.data[k + 3] = 0; continue; }
+        const rgb = v > 50 ? ocupado : libre;
+        img.data[k] = rgb[0]; img.data[k + 1] = rgb[1]; img.data[k + 2] = rgb[2]; img.data[k + 3] = 255;
+      }
+    }
+    c.putImageData(img, 0, 0);
     drawMap();
   }
+
+  // Transformación mundo (m) <-> píxel del canvas, con zoom y desplazamiento.
+  function escalaMapa() {
+    const w = mapCanvas.width, h = mapCanvas.height, { width: gw, height: gh } = lastMap;
+    const s = Math.min(w / gw, h / gh) * vista.zoom;
+    return { s, ox: (w - gw * s) / 2 + vista.dx, oy: (h - gh * s) / 2 + vista.dy, gh };
+  }
+  function mundoAPixel(wx, wy) {
+    const { s, ox, oy, gh } = escalaMapa();
+    return [ox + ((wx - lastMap.origin_x) / lastMap.resolution) * s,
+            oy + (gh - (wy - lastMap.origin_y) / lastMap.resolution) * s];
+  }
+  function pixelAMundo(px, py) {
+    const { s, ox, oy, gh } = escalaMapa();
+    return [lastMap.origin_x + ((px - ox) / s) * lastMap.resolution,
+            lastMap.origin_y + (gh - (py - oy) / s) * lastMap.resolution];
+  }
+
   function drawMap() {
     if (!mapCanvas) return;
     const ctx = mapCanvas.getContext("2d");
@@ -1657,23 +1734,34 @@ input[type="text"], select { font-family: inherit; }
     ctx.clearRect(0, 0, w, h);
     if (!lastMap) return;
 
-    const { width: gw, height: gh, data } = lastMap;
-    const scale = Math.min(w / gw, h / gh);
-    const ox = (w - gw * scale) / 2, oy = (h - gh * scale) / 2;
-    for (let row = 0; row < gh; row++) {
-      for (let col = 0; col < gw; col++) {
-        const v = data[row * gw + col];
-        if (v < 0) continue;
-        ctx.fillStyle = v > 50 ? COLOR.ocupado : COLOR.libre;
-        ctx.fillRect(ox + col * scale, oy + (gh - 1 - row) * scale, scale + 0.5, scale + 0.5);
+    const { s, ox, oy } = escalaMapa();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(mapaLienzo, ox, oy, lastMap.width * s, lastMap.height * s);
+    const aPixel = mundoAPixel;
+
+    // Surcos trazados (naranja) y el que se está trazando (verde).
+    const trazar = (pts, color, ancho, guiones) => {
+      if (pts.length < 1) return;
+      ctx.strokeStyle = color; ctx.lineWidth = ancho; ctx.setLineDash(guiones);
+      ctx.beginPath();
+      pts.forEach((p, i) => { const [x, y] = aPixel(p.x, p.y); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.stroke(); ctx.setLineDash([]);
+      pts.forEach((p) => { const [x, y] = aPixel(p.x, p.y);
+        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); });
+    };
+    surcosMapa.forEach((f, i) => {
+      trazar(f.points, "#e08a1e", 3, [8, 4]);
+      if (f.points.length) {
+        const [x, y] = aPixel(f.points[0].x, f.points[0].y);
+        ctx.fillStyle = "#b86a00"; ctx.font = "bold 12px sans-serif"; ctx.fillText(`S${i + 1}`, x + 5, y - 5);
       }
-    }
+    });
+    if (surcoActual) trazar(surcoActual, "#1a9850", 3, []);
+    ctx.font = "18px serif"; ctx.textAlign = "center";
+    puntosEscaneo.forEach((p) => { const [x, y] = aPixel(p.x, p.y); ctx.fillText("🌱", x, y + 6); });
+    ctx.textAlign = "left";
 
     // Puntos del recorrido sobre el mapa. El índice actual va resaltado.
-    const aPixel = (wx, wy) => [
-      ox + ((wx - lastMap.origin_x) / lastMap.resolution) * scale,
-      h - (oy + ((wy - lastMap.origin_y) / lastMap.resolution) * scale),
-    ];
     if (waypointsMapa.length) {
       ctx.strokeStyle = "rgba(26,152,80,0.55)";
       ctx.lineWidth = 1.5;
@@ -1694,18 +1782,146 @@ input[type="text"], select { font-family: inherit; }
       });
     }
 
-    const px = ox + ((lastPose.x - lastMap.origin_x) / lastMap.resolution) * scale;
-    const py = h - (oy + ((lastPose.y - lastMap.origin_y) / lastMap.resolution) * scale);
-    const th = (-lastPose.theta_deg) * Math.PI / 180;
+    // El triángulo se dibuja apuntando hacia arriba (+Y del mapa, 90°):
+    // hay que girarlo (90° - rumbo) para que 0° apunte a +X.
+    const [px, py] = aPixel(lastPose.x, lastPose.y);
+    const th = (90 - lastPose.theta_deg) * Math.PI / 180;
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(th);
     ctx.fillStyle = COLOR.acento;
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-6, 6); ctx.lineTo(6, 6); ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(-6, 7); ctx.lineTo(6, 7); ctx.closePath();
     ctx.fill(); ctx.stroke();
     ctx.restore();
+  }
+
+  // ---------------------------------------------------------------
+  // Trazado sobre el mapa: surcos y puntos de escaneo. Mismo almacén que el
+  // dashboard de entrenamiento (/api/training/*): lo trazado en uno se ve
+  // en el otro.
+  // ---------------------------------------------------------------
+  const pistaHerramienta = {
+    ver: "Arrastrá para mover el mapa · rueda o +/− para acercar",
+    surco: "Clic para añadir puntos al surco · doble clic o «Terminar» para cerrarlo",
+    punto: "Clic donde está la planta a escanear 🌱",
+  };
+  function elegirHerramienta(h) {
+    if (herramientaMapa === "surco" && h !== "surco") terminarSurco();
+    herramientaMapa = h;
+    document.querySelectorAll("#map-tools [data-herr]").forEach((b) =>
+      b.classList.toggle("activo", b.dataset.herr === h));
+    $("map-hint").textContent = pistaHerramienta[h];
+    mapCanvas.style.cursor = h === "ver" ? "grab" : "crosshair";
+  }
+  function terminarSurco() {
+    if (surcoActual && surcoActual.length >= 2) surcosMapa.push({ points: surcoActual });
+    surcoActual = null;
+    actualizarResumenTrazado();
+    drawMap();
+  }
+  function actualizarResumenTrazado() {
+    $("map-trazado-resumen").textContent =
+      `${surcosMapa.length} surco(s) · ${puntosEscaneo.length} punto(s) de escaneo`;
+  }
+  async function cargarTrazado() {
+    try {
+      const d = await (await fetch("/api/training/data")).json();
+      surcosMapa = d.furrows || []; puntosEscaneo = d.scan_points || [];
+      actualizarResumenTrazado(); drawMap();
+    } catch (_) {}
+  }
+  async function postJSON(url, body) {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+                                 body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`);
+    return d;
+  }
+  async function guardarTrazado() {
+    terminarSurco();
+    try {
+      await postJSON("/api/training/save_furrows", { furrows: surcosMapa });
+      await postJSON("/api/training/save_scan_points", { scan_points: puntosEscaneo });
+      toast("success", "Trazado guardado", `${surcosMapa.length} surco(s), ${puntosEscaneo.length} punto(s)`);
+    } catch (e) { toast("error", "No se guardó", e.message); }
+  }
+  async function generarRutaTrazado() {
+    terminarSurco();
+    if (!surcosMapa.length && !puntosEscaneo.length) {
+      toast("warning", "Nada que recorrer", "Trazá al menos un surco o un punto de escaneo."); return;
+    }
+    try {
+      const d = await postJSON("/api/training/generate_route", {
+        furrows: surcosMapa, scan_points: puntosEscaneo,
+        spacing_m: parseFloat($("map-espaciado").value) || 0.5 });
+      toast("success", "Ruta generada", `${d.count} punto(s) cargados en la patrulla`);
+      refrescarPatrulla();
+    } catch (e) { toast("error", "No se generó la ruta", e.message); }
+  }
+
+  if (mapCanvas) {
+    let arrastre = null;
+    const posEvento = (e) => { const r = mapCanvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    mapCanvas.addEventListener("pointerdown", (e) => {
+      if (herramientaMapa !== "ver" || !lastMap) return;
+      arrastre = { x: e.clientX, y: e.clientY, dx: vista.dx, dy: vista.dy };
+      mapCanvas.setPointerCapture(e.pointerId); mapCanvas.style.cursor = "grabbing";
+    });
+    mapCanvas.addEventListener("pointermove", (e) => {
+      if (!arrastre) return;
+      vista.dx = arrastre.dx + e.clientX - arrastre.x; vista.dy = arrastre.dy + e.clientY - arrastre.y;
+      drawMap();
+    });
+    const soltar = () => { arrastre = null; if (herramientaMapa === "ver") mapCanvas.style.cursor = "grab"; };
+    mapCanvas.addEventListener("pointerup", soltar);
+    mapCanvas.addEventListener("pointercancel", soltar);
+    mapCanvas.addEventListener("click", (e) => {
+      if (!lastMap || herramientaMapa === "ver") return;
+      const [x, y] = pixelAMundo(...posEvento(e));
+      if (herramientaMapa === "surco") (surcoActual = surcoActual || []).push({ x, y });
+      else if (herramientaMapa === "punto") puntosEscaneo.push({ x, y });
+      actualizarResumenTrazado(); drawMap();
+    });
+    mapCanvas.addEventListener("dblclick", (e) => { if (herramientaMapa === "surco") { e.preventDefault(); terminarSurco(); } });
+    // Zoom hacia el cursor: el punto bajo el ratón se queda quieto.
+    const zoomEn = (factor, px, py) => {
+      const z = Math.min(12, Math.max(1, vista.zoom * factor)), f = z / vista.zoom;
+      const cx = mapCanvas.width / 2, cy = mapCanvas.height / 2;
+      vista.dx = (vista.dx + cx - px) * f - cx + px; vista.dy = (vista.dy + cy - py) * f - cy + py;
+      vista.zoom = z;
+      if (z === 1) vista.dx = vista.dy = 0;
+      drawMap();
+    };
+    mapCanvas.addEventListener("wheel", (e) => {
+      e.preventDefault(); zoomEn(e.deltaY < 0 ? 1.2 : 1 / 1.2, ...posEvento(e));
+    }, { passive: false });
+    document.querySelectorAll("#map-tools [data-herr]").forEach((b) =>
+      b.addEventListener("click", () => elegirHerramienta(b.dataset.herr)));
+    $("map-zoom-mas").addEventListener("click", () => zoomEn(1.3, mapCanvas.width / 2, mapCanvas.height / 2));
+    $("map-zoom-menos").addEventListener("click", () => zoomEn(1 / 1.3, mapCanvas.width / 2, mapCanvas.height / 2));
+    $("map-centrar").addEventListener("click", () => {
+      if (!lastMap) return;
+      const [px, py] = mundoAPixel(lastPose.x, lastPose.y);
+      vista.dx += mapCanvas.width / 2 - px; vista.dy += mapCanvas.height / 2 - py; drawMap();
+    });
+    $("map-terminar").addEventListener("click", terminarSurco);
+    $("map-deshacer").addEventListener("click", () => {
+      if (surcoActual && surcoActual.length) surcoActual.pop();
+      else if (herramientaMapa === "punto" && puntosEscaneo.length) puntosEscaneo.pop();
+      else if (surcosMapa.length) surcosMapa.pop();
+      else puntosEscaneo.pop();
+      actualizarResumenTrazado(); drawMap();
+    });
+    $("map-borrar").addEventListener("click", () => {
+      if (!confirm("¿Borrar todos los surcos y puntos de escaneo trazados? (se guarda al pulsar Guardar)")) return;
+      surcosMapa = []; puntosEscaneo = []; surcoActual = null; actualizarResumenTrazado(); drawMap();
+    });
+    $("map-guardar").addEventListener("click", guardarTrazado);
+    $("map-ruta").addEventListener("click", generarRutaTrazado);
+    elegirHerramienta("ver");
+    cargarTrazado();
   }
   window.addEventListener("resize", resizeMap);
 
@@ -1955,7 +2171,9 @@ input[type="text"], select { font-family: inherit; }
     if (d.sendero) {
       const s = d.sendero;
       $("sendero-estado").textContent =
-        `${s.estado} · LIDAR ${s.error_lidar_cm ?? "—"} cm · cámara ${s.error_vision ?? "—"} · ${s.vision}`;
+        `${s.estado} · LIDAR ${s.error_lidar_cm ?? "—"} cm · cámara ${s.error_vision_cm ?? "—"} cm` +
+        (s.sendero_rumbo_deg != null ? ` (rumbo ${s.sendero_rumbo_deg}°, ancho ${s.sendero_ancho_cm ?? "—"} cm)` : "") +
+        ` · ${s.vision}`;
     }
     $("expl-escaneos").textContent = d.escaneos;
     $("btn-expl-on").disabled = !!d.activo;
@@ -2077,6 +2295,7 @@ input[type="text"], select { font-family: inherit; }
   function aplicarConfigAutonomia(a) {
     if ($("sendero-activo") !== document.activeElement) $("sendero-activo").checked = !!a.sendero_activo;
     if ($("p-sd-vision") !== document.activeElement) $("p-sd-vision").checked = !!a.sendero_vision;
+    if ($("p-sd-paja") !== document.activeElement) $("p-sd-paja").checked = a.sendero_paja !== false;
     const pares = [["p-dist-puntos", a.distancia_puntos_cm], ["p-avance", a.avance_libre_cm],
                    ["p-lado", a.lado_libre_cm], ["p-retro", a.retroceso_libre_cm],
                    ["p-escala", Math.round(a.escala_velocidad * 100)],
@@ -2108,6 +2327,7 @@ input[type="text"], select { font-family: inherit; }
     sendero_pared_max_cm: parseFloat($("p-sd-pared").value),
     sendero_vision_peso: parseFloat($("p-sd-peso").value) / 100,
     sendero_vision: $("p-sd-vision").checked,
+    sendero_paja: $("p-sd-paja").checked,
     sendero_verde_h_min: parseFloat($("p-sd-hmin").value),
     sendero_verde_h_max: parseFloat($("p-sd-hmax").value),
     sendero_verde_s_min: parseFloat($("p-sd-smin").value),

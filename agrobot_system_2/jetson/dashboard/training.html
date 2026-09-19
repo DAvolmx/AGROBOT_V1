@@ -271,6 +271,18 @@ header .pill.ok .dot { background: var(--accent); }
     </div>
   </div>
 
+  <!-- Sendero -->
+  <div class="side-section">
+    <h3>Vista del sendero</h3>
+    <label style="font-size:11px; color:var(--ink-soft); display:flex; gap:6px; align-items:center; margin-bottom:6px;">
+      <input type="checkbox" id="sendero-vista-on"> Ver en vivo (1 por segundo)
+    </label>
+    <img id="sendero-vista" alt="" style="width:100%; border-radius:6px; display:none; background:#000;">
+    <div style="font-size:10px; color:var(--ink-soft); margin-top:4px;">
+      Amarillo: paja · verde: plantas · naranja: bordes · magenta: centro del sendero · blanco: eje del robot
+    </div>
+  </div>
+
   <!-- Surcos -->
   <div class="side-section">
     <h3>Surcos / Filas</h3>
@@ -532,7 +544,8 @@ function drawMap() {
   // Robot pose
   if (lastPose) {
     const [px, py] = worldToPixel(lastPose.x, lastPose.y);
-    const th = (-lastPose.theta_deg) * Math.PI / 180;
+    // El triángulo apunta hacia arriba (+Y): se gira (90° - rumbo) para que 0° apunte a +X.
+    const th = (90 - lastPose.theta_deg) * Math.PI / 180;
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(th);
@@ -852,6 +865,21 @@ async function loadTrainingData() {
   updateScanList();
   drawMap();
 }
+
+// --- Vista del sendero: pide la siguiente imagen solo cuando llegó la anterior ---
+let senderoTimer = null;
+function pedirVistaSendero() {
+  const img = $("sendero-vista");
+  img.onload = img.onerror = () => {
+    if ($("sendero-vista-on").checked) senderoTimer = setTimeout(pedirVistaSendero, 1000);
+  };
+  img.src = `/api/sendero/vista.jpg?t=${Date.now()}`;
+}
+$("sendero-vista-on").addEventListener("change", e => {
+  clearTimeout(senderoTimer);
+  $("sendero-vista").style.display = e.target.checked ? "block" : "none";
+  if (e.target.checked) pedirVistaSendero();
+});
 
 // ---------------------------------------------------------------
 // Toast

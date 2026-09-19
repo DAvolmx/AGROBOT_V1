@@ -903,6 +903,31 @@ async def drive_handler(request: web.Request):
     return web.json_response({"ok": True, "accion": accion})
 
 
+async def sendero_vista_handler(request: web.Request):
+    """GET /api/sendero/vista.jpg — lo que ve el detector de hileras ahora:
+    cámara con las plantas marcadas + vista cenital con hileras y sendero.
+    Para ajustar en campo el rango de verde y la geometría de la cámara."""
+    if cv2 is None or camera is None or seguidor_sendero is None:
+        return web.json_response({"error": "cámara no disponible"}, status=503)
+    dato = camera.ultimo_frame()
+    if dato is None:
+        return web.json_response({"error": "sin fotograma de la cámara"}, status=503)
+
+    def _render():
+        import sendero as sd
+        res = seguidor_sendero.vision.detectar(cv2, dato[0], state.config["autonomia"],
+                                               state.config["odometria_webcam"])
+        ok, jpg = cv2.imencode(".jpg", sd.dibujar(cv2, dato[0], res),
+                               [cv2.IMWRITE_JPEG_QUALITY, 80])
+        return jpg.tobytes() if ok else None
+
+    datos = await asyncio.to_thread(_render)
+    if datos is None:
+        return web.json_response({"error": "no se pudo codificar la imagen"}, status=500)
+    return web.Response(body=datos, content_type="image/jpeg",
+                        headers={"Cache-Control": "no-store"})
+
+
 async def drive_mode_handler(request: web.Request):
     """GET: modo actual. POST {"modo": "interior"|"exterior"}: cambia el modo."""
     if request.method == "GET":
@@ -1909,7 +1934,9 @@ async def start_background(app: web.Application):
         get_config=lambda: state.config["autonomia"],
         # Enlace tardío: la cámara se crea DESPUÉS que esto. Resolverla aquí
         # dejaba el seguidor sin cámara para siempre.
-        obtener_frame=lambda: camera.ultimo_frame() if camera is not None else None)
+        obtener_frame=lambda: camera.ultimo_frame() if camera is not None else None,
+        camara_al_frente=_servo_al_frente,
+        get_geometria=lambda: state.config["odometria_webcam"])
     explorador = ExploradorReactivo(
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
         get_pose=ros_bridge.pose_en_mapa,
@@ -2241,6 +2268,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/drive", drive_handler)
     app.router.add_get("/api/drive/mode", drive_mode_handler)
     app.router.add_post("/api/drive/mode", drive_mode_handler)
+    app.router.add_get("/api/sendero/vista.jpg", sendero_vista_handler)
     app.router.add_post("/api/nav/reset_map", nav_reset_map_handler)
     app.router.add_get("/api/mapas", mapas_listar_handler)
     app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)

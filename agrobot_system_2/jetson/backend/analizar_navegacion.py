@@ -197,7 +197,7 @@ class AnalizadorNavegacion:
 
         # Análisis de patrulla
         pat_stats = self.analizar_patrulla()
-        if pat_stats['waypoints_timeout'] > pat_stats['waypoints_alcanzados']:
+        if pat_stats.get('waypoints_timeout', 0) > pat_stats.get('waypoints_alcanzados', 0):
             mejoras.append({
                 'severidad': 'ALTA',
                 'area': 'PATRULLA',

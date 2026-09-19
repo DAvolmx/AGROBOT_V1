@@ -2008,6 +2008,7 @@ async def nav_cal_stop_handler(request: web.Request):
     if _nav_cal_task:
         _nav_cal_task.cancel()
         _nav_cal_task = None
+    await asyncio.sleep(0.3)
     stats = analizar_sesion(session_id)
     try:
         from analizar_navegacion import AnalizadorNavegacion
@@ -2015,7 +2016,8 @@ async def nav_cal_stop_handler(request: web.Request):
         mejoras = analizador.sugerir_mejoras()
         lidar_a = analizador.analizar_distancias_lidar()
         vel_a = analizador.analizar_velocidades()
-    except Exception:
+    except Exception as exc:
+        print(f"[nav_cal] error en análisis: {exc}")
         mejoras, lidar_a, vel_a = [], {}, {}
     result = {**stats, "lidar_analysis": lidar_a,
               "velocity_analysis": vel_a, "mejoras": mejoras}

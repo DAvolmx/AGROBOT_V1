@@ -1,33 +1,76 @@
-# Modo MAPEO — se usa la primera vez que el robot recorre un terreno nuevo.
-# El operador mueve el robot (manual, desde el dashboard) mientras esto
-# construye el mapa de ocupación en vivo. Cuando termina, se guarda con
-# POST /api/nav/save_map (jetson_server.py llama a nav2_map_server/map_saver_cli).
+# Modo MAPEO — SLAM optimizado para AgroBot (RPLIDAR C1 + skid-steer).
+#
+# Tuning 2026-09-19: grafo más denso, cierre de bucles activo, correlación
+# ampliada para compensar la odometría ruidosa de rf2o sin encoders.
+# El scan llega prefiltrado (/scan_slam: rango 0.15–8 m + mediana espacial)
+# para que el casamiento de scans opere sobre datos limpios.
 slam_toolbox:
   ros__parameters:
     solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
     odom_frame: odom
     map_frame: map
     base_frame: base_link
-    scan_topic: /scan
+    scan_topic: /scan_slam
     mode: mapping
-    resolution: 0.05
-    max_laser_range: 12.0
-    minimum_time_interval: 0.3
-    transform_publish_period: 0.05
-    map_update_interval: 2.0
-    scan_buffer_size: 10
 
-    # Umbrales de movimiento minimo para añadir un nodo al grafo de poses.
-    #
-    # Estaban SIN poner, y aqui importa mas de lo que parece. La pose viene de
-    # un EKF que integra el giroscopio y, a falta de una medida real de
-    # traslacion, DERIVA aunque el robot este quieto. Cada trozo de deriva que
-    # supera el umbral crea un nodo nuevo y el grafo no para de crecer: el
-    # 2026-09-06, con el robot inmovil sobre la mesa, slam_toolbox llego a
-    # 1768 MB y subiendo, camino de su tope.
-    #
-    # 0.3 m y 0.3 rad son conservadores para un robot de este tamaño: bastante
-    # mayores que la deriva por ruido, y bastante menores que la separacion
-    # entre surcos.
-    minimum_travel_distance: 0.3
-    minimum_travel_heading: 0.3
+    resolution: 0.05
+    # 8 m en vez de 12: el RPLIDAR C1 es fiable hasta ~8 m en interiores;
+    # más allá domina el multipath (rebotes de muros lejanos) que crea
+    # fantasmas en el mapa.
+    max_laser_range: 8.0
+    minimum_time_interval: 0.2
+    transform_publish_period: 0.02
+    map_update_interval: 1.0
+    tf_buffer_duration: 30.0
+    transform_timeout: 0.2
+
+    scan_buffer_size: 15
+    scan_buffer_maximum_scan_distance: 8.0
+
+    # Umbrales de movimiento para añadir nodos al grafo.
+    # Antes 0.3/0.3 — demasiado conservador para habitaciones pequeñas
+    # donde el robot recorre pocos metros. Con el EKF estabilizado
+    # (process_noise_covariance explícita, aceleración deshabilitada)
+    # ya no hay riesgo de crear nodos espurios con el robot quieto.
+    minimum_travel_distance: 0.12
+    minimum_travel_heading: 0.15
+
+    # ---- Casamiento de scans ----
+    use_scan_matching: true
+    use_scan_barycenter: true
+    # Búsqueda de correlación: ventana de 0.6 m (default 0.5) para tolerar
+    # el error de predicción de rf2o sobre un skid-steer sin encoders.
+    correlation_search_space_dimension: 0.6
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.06
+
+    # Casamiento fino: respuesta mínima baja para aceptar casamiento
+    # en zonas con pocos features (habitaciones vacías, pasillos largos).
+    link_match_minimum_response_fine: 0.08
+    link_scan_maximum_distance: 2.0
+
+    # Penalizaciones de varianza
+    distance_variance_penalty: 0.3
+    angle_variance_penalty: 1.0
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+
+    # ---- Cierre de bucles ----
+    # Crucial para corregir la deriva acumulada: cuando el robot vuelve a
+    # pasar por un sitio ya mapeado, el solver reajusta todo el grafo.
+    do_loop_closing: true
+    loop_match_minimum_chain_size: 3
+    loop_match_maximum_variance_coarse: 3.0
+    loop_search_maximum_distance: 4.0
+    loop_search_space_dimension: 8.0
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03

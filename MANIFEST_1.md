@@ -15,7 +15,7 @@
 > Cualquier LLM o persona que retome este proyecto debe poder reconstruir
 > el estado completo del sistema leyendo solo este archivo.
 
-Última actualización: 2026-09-17
+Última actualización: 2026-09-19
 
 ---
 
@@ -3692,3 +3692,38 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
 - El canal del AP se sincroniza ahora por temporizador cada minuto
   (`agrobot-sync-ap-channel.timer`): el router cambia de canal solo y volvía a
   dejarlo desparejado (11 vs 1), que es enlace intermitente y latencia.
+
+**Añadido el 2026-09-19:**
+- **Mejora integral del sistema de navegación** — todo el pipeline LIDAR→EKF→
+  SLAM→Nav2 reajustado:
+  - **slam_toolbox** (mapeo Y localización): grafo más denso
+    (`minimum_travel_distance` 0.3→0.12, heading 0.3→0.15), cierre de bucles
+    activo (`do_loop_closing: true`, chain_size 3, search 4 m), solver Ceres
+    configurado, búsqueda de correlación ampliada (0.6 m), `max_laser_range`
+    12→8 m (el C1 no es fiable más allá en interiores). Lee `/scan_slam`
+    filtrado en vez de `/scan` crudo.
+  - **Filtro de scans para SLAM** (nuevo nodo `filtro_scan_slam` en el
+    launch): rango 0.15–8 m + mediana espacial (window 3), publica
+    `/scan_slam`. Suaviza muros y elimina picos de ruido antes del
+    casamiento.
+  - **EKF** (`ekf.yaml`): `process_noise_covariance` explícita (15×15).
+    Desconfía más de vx (rf2o ruidoso: 0.10) que de vyaw (giroscopio: 0.05).
+    Antes usaba los defaults (identity × 0.05), que confiaban igual en todo.
+  - **Nav2**: RotationShimController envuelve a DWB — el robot gira primero
+    hasta mirar la ruta y luego avanza (un diferencial que arranca mirando al
+    revés perdía tiempo curvando). Escalas explícitas en los críticos de DWB.
+    Local costmap ampliado a 5×5 m, raytrace_max_range 3→4 m. Progress
+    checker más permisivo (0.08 m, 15 s) para el arranque lento del
+    skid-steer. Planner tolerance 0.3→0.25 m.
+  - **Patrulla** (`patrol.py`): warm-up de 3 s al iniciar para que el SLAM se
+    estabilice antes de moverse.
+- **Panel de calibración de navegación en el dashboard** (añadido antes del
+  tuning): calibrar en la habitación, recoger waypoints, validar, patrullar
+  sin perder el mapa. Backend: 3 endpoints `/api/nav_cal/*`.
+- **Sistema de retroalimentación de datos** (`navigation_logger.py`,
+  `analizar_navegacion.py`): logging async CSV+JSONL de poses/eventos/LIDAR,
+  análisis post-sesión con sugerencias de parámetros.
+- Archivos tocados: `slam_toolbox_mapping.yaml`, `slam_toolbox_localization.yaml`,
+  `ekf.yaml`, `nav2_params.yaml`, `agrobot_mapping.launch.py`, `patrol.py`,
+  `jetson_server.py`, `navigation_logger.py`, `analizar_navegacion.py`,
+  `dashboard/index.html`.

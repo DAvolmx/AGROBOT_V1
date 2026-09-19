@@ -258,6 +258,11 @@ class PatrolController:
     # ---------------------------------------------------------------
     async def _bucle(self):
         try:
+            self.estado = "estabilizando SLAM"
+            self._emitir({"evento": "warmup_inicio"})
+            await asyncio.sleep(3.0)
+            self._emitir({"evento": "warmup_fin"})
+
             while self.activo:
                 wp = self.waypoints[self.indice % len(self.waypoints)]
                 resultado = await self._ir_a(wp)

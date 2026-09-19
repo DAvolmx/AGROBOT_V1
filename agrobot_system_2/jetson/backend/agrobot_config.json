@@ -29,7 +29,7 @@
   },
   "autonomia": {
     "escala_velocidad": 0.5,
-    "distancia_puntos_cm": 60,
+    "distancia_puntos_cm": 20,
     "avance_libre_cm": 100,
     "lado_libre_cm": 60,
     "retroceso_libre_cm": 30,
@@ -64,8 +64,8 @@
   "safety": {
     "heartbeat_stale_warn_s": 5,
     "heartbeat_stale_err_s": 20,
-    "max_linear_accel_mps2": 0.9,
-    "max_angular_accel_rps2": 2.1
+    "max_linear_accel_mps2": 0.1,
+    "max_angular_accel_rps2": 0.2
   },
   "navigation": {
     "mode": "localization",

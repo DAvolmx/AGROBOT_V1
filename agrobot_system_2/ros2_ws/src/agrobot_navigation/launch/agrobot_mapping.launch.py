@@ -170,6 +170,30 @@ def generate_launch_description():
         remappings=[("scan", "/scan"), ("scan_filtered", "/scan_odom")],
     )
 
+    # Filtro de scans para SLAM — mediana espacial para suavizar paredes y
+    # eliminar picos aislados de ruido antes del casamiento de scans. Limita
+    # también el rango a 8 m (el C1 es fiable hasta ahí; más allá domina el
+    # multipath en interiores). slam_toolbox lee /scan_slam.
+    filtro_scan_slam = Node(
+        package="laser_filters",
+        executable="scan_to_scan_filter_chain",
+        name="filtro_scan_slam",
+        output="log",
+        parameters=[{
+            "filter1.name": "rango_slam",
+            "filter1.type": "laser_filters/LaserScanRangeFilter",
+            "filter1.params.use_message_range_limits": False,
+            "filter1.params.lower_threshold": 0.15,
+            "filter1.params.upper_threshold": 8.0,
+            "filter1.params.lower_replacement_value": float("-inf"),
+            "filter1.params.upper_replacement_value": float("inf"),
+            "filter2.name": "mediana_espacial",
+            "filter2.type": "laser_filters/LaserScanMedianSpatialFilter",
+            "filter2.params.window_size": 3,
+        }],
+        remappings=[("scan", "/scan"), ("scan_filtered", "/scan_slam")],
+    )
+
     slam_node = Node(
         package="slam_toolbox",
         executable="async_slam_toolbox_node",
@@ -274,8 +298,9 @@ def generate_launch_description():
         *_tf_estaticos(),
         odom_falso,
         lidar_launch,
-        filtro_scan,     # /scan -> /scan_odom, recortado a 6 m
-        rf2o_node,       # /scan_odom -> /odom_rf2o
+        filtro_scan,       # /scan -> /scan_odom, recortado a 6 m
+        filtro_scan_slam,  # /scan -> /scan_slam, filtrado para SLAM
+        rf2o_node,         # /scan_odom -> /odom_rf2o
         ekf_node,
         slam_node,
         slam_lifecycle,

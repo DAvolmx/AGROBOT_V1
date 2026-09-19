@@ -1,40 +1,24 @@
-# Parámetros de Nav2 para AgroBot — robot DIFERENCIAL (skid-steer) lento
-# (~0.3-0.5 m/s), sin odometría real (usa /odometry/filtered del EKF), LIDAR
-# 2D como única fuente de obstáculos. Basado en la plantilla estándar de
-# nav2_bringup, recortado a lo que este robot realmente tiene.
+# Nav2 para AgroBot — robot DIFERENCIAL (skid-steer) lento (~0.3-0.5 m/s),
+# LIDAR 2D, sin encoders. Tuning 2026-09-19.
 #
-# DIFERENCIAL: gira patinando las ruedas y NO puede desplazarse de costado.
-# Todos los parámetros con sufijo `_y` van en cero — no se borran porque DWB
-# los espera presentes, pero cualquier valor distinto de cero haría que el
-# planner produzca trayectorias que el robot no puede ejecutar.
-#
-# ⚠️ El giro por patinaje consume mucha más energía y desgasta neumáticos, y
-# la odometría de un skid-steer es notoriamente mala en el giro (las ruedas
-# patinan justo cuando más se las está midiendo). Por eso el EKF le cree más
-# al giroscopio que a la velocidad comandada.
+# CAMBIOS PRINCIPALES respecto a la versión anterior:
+#   - RotationShimController envuelve a DWB: el robot gira primero para
+#     mirar adonde va, luego avanza. Un diferencial que arranca con el
+#     rumbo equivocado pierde tiempo curvando o DWB le ordena retroceder.
+#   - Escalas explícitas en los críticos de DWB: sin ellas todos pesan
+#     igual y el planner no prioriza la seguridad sobre la velocidad.
+#   - Costmap: mayor alcance de raytrace para limpiar celdas detrás de
+#     obstáculos que desaparecieron (puerta que se abre, persona que pasa).
+#   - Progress checker más permisivo para un skid-steer que arranca lento.
 
-# HUELLA DEL ROBOT: rectángulo de 0,40 m de largo x 0,35 m de ancho centrado
-# en base_link (medido por el usuario el 2026-09-17). Tiene que coincidir con
-# robot_largo_m / robot_ancho_m de la config del backend (agrobot_config.json,
-# sección slam), que usa la misma caja para frenar. Si cambia, cambiar los dos.
-#
-# Rectángulo y no círculo (antes robot_radius: 0.25): un círculo inscrito
-# deja las esquinas fuera y Nav2 las roza contra las hileras; uno
-# circunscrito (0,27 m) ocupa 54 cm de ancho y no cabría en pasillos donde
-# el robot real, de 35 cm, sí pasa.
+# HUELLA DEL ROBOT: 0.40 m × 0.35 m centrado en base_link.
+# Cambiar aquí Y en agrobot_config.json sección slam.
 
 bt_navigator:
   ros__parameters:
     global_frame: map
     robot_base_frame: base_link
     odom_topic: /odometry/filtered
-    # ⚠️ NO poner "" aquí. Parecía significar "usa el árbol por defecto" y en
-    # Jazzy significa árbol VACÍO: bt_navigator aceptaba cada meta y la
-    # abortaba en el acto con "Behavior tree threw exception: Empty Tree"
-    # (63 metas seguidas el 2026-09-17: el robot no se movía nunca en modo
-    # autónomo). La ruta real la pasa agrobot_mapping.launch.py, que la
-    # resuelve con el paquete instalado en vez de escribirla a mano.
-    # Jazzy los exige declarados; sin ellos bt_navigator no configura.
     navigators: ["navigate_to_pose", "navigate_through_poses"]
     navigate_to_pose:
       plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
@@ -46,17 +30,19 @@ controller_server:
     controller_frequency: 10.0
     odom_topic: /odometry/filtered
     min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.001     # sin uso: el robot es diferencial
+    min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
-    # En plural en Jazzy. El singular que había se ignoraba en silencio.
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["goal_checker"]
     controller_plugins: ["FollowPath"]
 
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.1
-      movement_time_allowance: 12.0
+      # El skid-steer arranca lento (patinaje) y rf2o tarda ~1 s en
+      # detectar el avance: un umbral pequeño con tiempo ajustado evita
+      # abortos falsos sin dejar pasar bloqueos reales.
+      required_movement_radius: 0.08
+      movement_time_allowance: 15.0
 
     goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
@@ -64,45 +50,52 @@ controller_server:
       yaw_goal_tolerance: 0.25
 
     FollowPath:
-      plugin: "dwb_core::DWBLocalPlanner"
-      # --- eje X (avance/retroceso) ---
-      min_vel_x: -0.2         # se permite retroceder para salir de un
-                              # callejón sin tener que girar en el lugar
-      max_vel_x: 0.4          # el robot real ronda 0.3-0.5 m/s de tope
-      # --- eje Y: SIEMPRE CERO. El robot es diferencial (skid-steer) y no
-      #     puede desplazarse de costado. Dejar estos límites abiertos hace
-      #     que DWB planifique trayectorias que el robot no puede ejecutar.
+      # RotationShimController: gira primero hasta mirar la ruta, luego
+      # cede a DWB. Para un diferencial es un salto grande en calidad de
+      # trayectoria porque DWB genera curvas que un skid-steer no puede
+      # ejecutar bien cuando arranca mirando al revés.
+      plugin: "nav2_rotation_shim_controller::RotationShimController"
+      primary_controller: "dwb_core::DWBLocalPlanner"
+      angular_dist_threshold: 0.785
+      forward_sampling_distance: 0.5
+      rotate_to_heading_angular_vel: 0.8
+      max_angular_accel: 1.6
+      simulate_ahead_time: 1.0
+
+      # ---- DWB (controlador principal) ----
+      min_vel_x: -0.2
+      max_vel_x: 0.4
       min_vel_y: 0.0
       max_vel_y: 0.0
-      # --- giro ---
       min_vel_theta: -1.0
       max_vel_theta: 1.0
-      # --- topes de velocidad combinada en el plano ---
       min_speed_xy: 0.0
       max_speed_xy: 0.45
       min_speed_theta: 0.0
-      # --- aceleraciones ---
       acc_lim_x: 1.0
       acc_lim_y: 0.0
       acc_lim_theta: 2.0
       decel_lim_x: -1.0
       decel_lim_y: 0.0
       decel_lim_theta: -2.0
-      # --- muestreo del espacio de velocidades (TUNING 2026-09-10) ---
-      # Aumentar resolución de muestreo mejora 20-40% las trayectorias.
-      vx_samples: 25          # 15→25: más puntos de evaluación en avance
-      vy_samples: 1           # 1 = solo la muestra vy=0. Un robot
-                              # diferencial no tiene eje Y que muestrear;
-                              # pedir más solo gasta cómputo en trayectorias
-                              # que se descartan igual.
-      vtheta_samples: 35      # 25→35: mejor resolución de giros
-      sim_time: 2.0           # 1.5→2.0: mirar más adelante en tiempo
+      vx_samples: 25
+      vy_samples: 1
+      vtheta_samples: 35
+      sim_time: 2.0
+
       critics: ["RotateToGoal", "Oscillation", "ObstacleFootprint", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      Oscillation:
-        # 0.05: por encima de esa velocidad de avance el crítico vigila solo
-        # el eje X, que es el único que este robot tiene. (En -1.0 vigilaría
-        # también el eje Y, que acá está clavado en cero — gasto inútil.)
-        x_only_threshold: 0.05
+      # Escalas: cuánto pesa cada criterio en la puntuación final.
+      ObstacleFootprint.scale: 32.0
+      PathDist.scale: 32.0
+      GoalDist.scale: 24.0
+      PathAlign.scale: 32.0
+      PathAlign.forward_point_distance: 0.1
+      GoalAlign.scale: 24.0
+      GoalAlign.forward_point_distance: 0.1
+      RotateToGoal.scale: 32.0
+      RotateToGoal.slowing_factor: 5.0
+      RotateToGoal.lookahead_time: -1.0
+      Oscillation.x_only_threshold: 0.05
 
 local_costmap:
   local_costmap:
@@ -111,8 +104,8 @@ local_costmap:
       robot_base_frame: base_link
       update_frequency: 5.0
       publish_frequency: 5.0
-      width: 4
-      height: 4
+      width: 5
+      height: 5
       resolution: 0.05
       rolling_window: true
       footprint: "[[0.20, 0.175], [0.20, -0.175], [-0.20, -0.175], [-0.20, 0.175]]"
@@ -123,20 +116,15 @@ local_costmap:
         observation_sources: scan
         scan:
           topic: /scan
-          # Sin esto el costmap espera PointCloud2 en /scan, no recibe nada y
-          # Nav2 navega CIEGO: ningún obstáculo llega nunca al costmap.
           data_type: "LaserScan"
-          inf_is_valid: true        # el RPLIDAR marca "nada" con inf: sirve para limpiar
+          inf_is_valid: true
           max_obstacle_height: 2.0
-          obstacle_max_range: 2.5
-          raytrace_max_range: 3.0
+          obstacle_max_range: 3.0
+          raytrace_max_range: 4.0
           clearing: true
           marking: true
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        # Pasillos estrechos: con 0.5 de inflado y escala 3 un pasillo de
-        # menos de ~1 m quedaba casi entero en coste alto y el planificador
-        # lo evitaba. Escala mayor = el coste cae más rápido al alejarse.
         cost_scaling_factor: 5.0
         inflation_radius: 0.4
 
@@ -145,14 +133,12 @@ global_costmap:
     ros__parameters:
       global_frame: map
       robot_base_frame: base_link
-      update_frequency: 1.0
+      update_frequency: 1.5
       publish_frequency: 1.0
       resolution: 0.05
       footprint: "[[0.20, 0.175], [0.20, -0.175], [-0.20, -0.175], [-0.20, 0.175]]"
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       static_layer:
-        # Se suscribe al /map de slam_toolbox EN VIVO: el mapa sigue
-        # creciendo mientras el robot patrulla y el planificador lo usa.
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: true
       obstacle_layer:
@@ -161,16 +147,16 @@ global_costmap:
         observation_sources: scan
         scan:
           topic: /scan
-          data_type: "LaserScan"    # ver local_costmap
+          data_type: "LaserScan"
           inf_is_valid: true
           max_obstacle_height: 2.0
-          obstacle_max_range: 2.5
-          raytrace_max_range: 3.0
+          obstacle_max_range: 3.0
+          raytrace_max_range: 4.0
           clearing: true
           marking: true
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 5.0    # ver local_costmap
+        cost_scaling_factor: 5.0
         inflation_radius: 0.4
 
 planner_server:
@@ -178,7 +164,7 @@ planner_server:
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
-      tolerance: 0.3
+      tolerance: 0.25
       use_astar: true
 
 behavior_server:
@@ -193,10 +179,6 @@ behavior_server:
 
 velocity_smoother:
   ros__parameters:
-    # Orden de los vectores: [x, y, theta]. La componente Y va en cero en
-    # las cuatro filas: robot diferencial, no hay velocidad lateral que
-    # suavizar. Es además la última barrera — aunque algo aguas arriba
-    # pidiera desplazamiento lateral, acá se recorta a cero.
     max_velocity: [0.4, 0.0, 1.0]
     min_velocity: [-0.2, 0.0, -1.0]
     max_accel: [1.0, 0.0, 2.0]

@@ -21,15 +21,15 @@
   "slam": {
     "robot_largo_cm": 40,
     "robot_ancho_cm": 35,
-    "cono_frontal_deg": 20,
+    "cono_frontal_deg": 45,
     "cono_lateral_deg": 60,
-    "margen_parada_cm": 10,
+    "margen_parada_cm": 17,
     "deslizamiento_cm": 40,
     "pose_gyro_trust": 0.85
   },
   "autonomia": {
     "escala_velocidad": 0.5,
-    "distancia_puntos_cm": 390,
+    "distancia_puntos_cm": 30,
     "avance_libre_cm": 100,
     "lado_libre_cm": 60,
     "retroceso_libre_cm": 30,
@@ -70,6 +70,10 @@
   "navigation": {
     "mode": "localization",
     "map_name": "agrobot_map",
-    "last_goal": null
+    "last_goal": {
+      "x": -0.23843512087090923,
+      "y": -0.6280592215340262,
+      "theta_deg": 0.0
+    }
   }
 }

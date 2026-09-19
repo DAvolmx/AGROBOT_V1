@@ -137,7 +137,7 @@ header .pill.ok .dot { background: var(--accent); }
   font-family: inherit;
 }
 .drive-btn:hover { border-color: var(--accent); }
-.drive-btn:active { background: var(--accent-soft); }
+.drive-btn:active, .drive-btn.pulsado { background: var(--accent-soft); }
 .mode-btn { background: var(--card-hover); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-soft); padding: 4px 14px; font-size: 12px; cursor: pointer; font-family: inherit; flex:1; }
 .mode-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
 .mode-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
@@ -245,18 +245,18 @@ header .pill.ok .dot { background: var(--accent); }
   <div class="side-section">
     <h3>Manejo manual</h3>
     <div style="display:flex; gap:4px; margin-bottom:8px;">
-      <button class="mode-btn" id="tmode-interior" onclick="setDriveMode('interior')">Interior</button>
-      <button class="mode-btn active" id="tmode-exterior" onclick="setDriveMode('exterior')">Exterior</button>
+      <button class="mode-btn" id="tmode-interior" data-modo="interior">Interior</button>
+      <button class="mode-btn active" id="tmode-exterior" data-modo="exterior">Exterior</button>
     </div>
     <div class="drive-grid">
       <div></div>
-      <button class="drive-btn" onpointerdown="driveStart('adelante')" onpointerup="driveStop()" onpointerleave="driveStop()">▲</button>
+      <button class="drive-btn" data-accion="adelante">▲</button>
       <div></div>
-      <button class="drive-btn" onpointerdown="driveStart('izquierda')" onpointerup="driveStop()" onpointerleave="driveStop()">◀</button>
-      <button class="drive-btn stop" onpointerdown="driveStop()">■</button>
-      <button class="drive-btn" onpointerdown="driveStart('derecha')" onpointerup="driveStop()" onpointerleave="driveStop()">▶</button>
+      <button class="drive-btn" data-accion="izquierda">◀</button>
+      <button class="drive-btn stop" data-accion="parar">■</button>
+      <button class="drive-btn" data-accion="derecha">▶</button>
       <div></div>
-      <button class="drive-btn" onpointerdown="driveStart('atras')" onpointerup="driveStop()" onpointerleave="driveStop()">▼</button>
+      <button class="drive-btn" data-accion="atras">▼</button>
       <div></div>
     </div>
     <div class="config-row" style="margin-top:8px">
@@ -343,7 +343,6 @@ let furrows = [];
 let currentFurrow = null;
 let scanPoints = [];
 let generatedWaypoints = [];
-let isDriving = false;
 
 const canvas = $("map-canvas");
 const ctx = canvas.getContext("2d");
@@ -376,6 +375,7 @@ function connectWS() {
       case "pose": updatePose(msg.data); break;
       case "map": setMap(msg.data); break;
       case "toast": showToast(msg.data.message, msg.data.kind); break;
+      case "drive_mode": mostrarDriveMode(msg.data.modo); break;
     }
   };
 }
@@ -623,17 +623,13 @@ document.addEventListener("keydown", e => {
       if (currentFurrow) { currentFurrow = null; drawMap(); }
       setTool("select");
       break;
-    case "w": case "ArrowUp": driveStart("adelante"); break;
-    case "s": case "ArrowDown": driveStart("atras"); break;
-    case "a": case "ArrowLeft": driveStart("izquierda"); break;
-    case "d": case "ArrowRight": driveStart("derecha"); break;
-    case " ": driveStop(); e.preventDefault(); break;
+    case " ": conducir("parar"); e.preventDefault(); break;
   }
-});
-document.addEventListener("keyup", e => {
-  if (["w","a","s","d","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
-    driveStop();
-  }
+  const teclaAccion = { w: "adelante", ArrowUp: "adelante", s: "atras", ArrowDown: "atras",
+                        a: "izquierda", ArrowLeft: "izquierda", d: "derecha", ArrowRight: "derecha" };
+  // Mantener apretada una tecla repite el evento: cada repetición encadena
+  // un pulso en la Jetson (con tope), así que no se filtra.
+  if (teclaAccion[e.key]) { e.preventDefault(); conducir(teclaAccion[e.key]); }
 });
 
 // ---------------------------------------------------------------
@@ -666,39 +662,45 @@ async function apiGet(url) {
 let driveMode = "exterior";
 let maniobra = true;
 
-function setDriveMode(modo) {
+function mostrarDriveMode(modo) {
   driveMode = modo;
-  document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
-  const el = $("tmode-" + modo);
-  if (el) el.classList.add("active");
-  if (modo === "interior") {
-    maniobra = false;
-    $("maniobra-toggle").checked = false;
-    $("mode-hint").textContent = "giro en su eje";
-  } else {
-    maniobra = true;
-    $("maniobra-toggle").checked = true;
-    $("mode-hint").textContent = "arco corto";
-  }
+  document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.modo === modo));
+  maniobra = modo === "exterior";
+  $("maniobra-toggle").checked = maniobra;
+  $("mode-hint").textContent = maniobra ? "arco corto" : "giro en su eje";
+}
+function setDriveMode(modo) {
+  mostrarDriveMode(modo);
   apiPost("/api/drive/mode", { modo });
 }
+document.querySelectorAll(".mode-btn").forEach(b =>
+  b.addEventListener("click", () => setDriveMode(b.dataset.modo)));
 $("maniobra-toggle").addEventListener("change", e => {
   maniobra = e.target.checked;
   $("mode-hint").textContent = maniobra ? "arco corto" : "giro en su eje";
 });
 
-function driveStart(accion) {
-  if (isDriving) return;
-  isDriving = true;
+// Un toque = un pulso que cronometra la Jetson, igual que el dashboard
+// principal. NO se manda "parar" al soltar: cortaba el pulso a los pocos ms
+// y además detenía la patrulla.
+async function conducir(accion, btn) {
+  if (btn) { btn.classList.add("pulsado"); setTimeout(() => btn.classList.remove("pulsado"), 180); }
   const escala = parseFloat($("drive-scale").value);
-  apiPost("/api/drive", { accion, escala, maniobra });
-  apiPost("/api/training/log_correction", { type: "drive", vx: accion === "adelante" ? escala : (accion === "atras" ? -escala : 0), omega: accion === "izquierda" ? escala : (accion === "derecha" ? -escala : 0) });
+  const res = await apiPost("/api/drive", accion === "parar" ? { accion } : { accion, escala, maniobra });
+  if (res.error) { showToast("No se movió: " + res.error, "error"); return; }
+  if (accion !== "parar") {
+    apiPost("/api/training/log_correction", {
+      type: "drive",
+      vx: accion === "adelante" ? escala : (accion === "atras" ? -escala : 0),
+      omega: accion === "izquierda" ? escala : (accion === "derecha" ? -escala : 0),
+    });
+  }
 }
-function driveStop() {
-  if (!isDriving) return;
-  isDriving = false;
-  apiPost("/api/drive", { accion: "parar" });
-}
+document.querySelectorAll(".drive-btn").forEach(btn => {
+  btn.addEventListener("pointerdown", e => { e.preventDefault(); conducir(btn.dataset.accion, btn); }, { passive: false });
+  btn.addEventListener("contextmenu", e => e.preventDefault());
+});
+fetch(API + "/api/drive/mode").then(r => r.json()).then(d => { if (d.modo) mostrarDriveMode(d.modo); }).catch(() => {});
 $("drive-scale").addEventListener("input", e => {
   $("drive-scale-val").textContent = parseFloat(e.target.value).toFixed(2);
 });

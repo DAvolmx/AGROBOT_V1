@@ -708,8 +708,8 @@ input[type="text"], select { font-family: inherit; }
                   seguir · <strong>espacio</strong> o ■ para parar · flechas del teclado.</p>
                 <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                   <span style="font-size:13px; color:var(--ink-soft); margin-right:4px;">Modo:</span>
-                  <button class="mode-btn active" id="mode-interior" onclick="setDriveMode('interior')">Interior</button>
-                  <button class="mode-btn" id="mode-exterior" onclick="setDriveMode('exterior')">Exterior</button>
+                  <button class="mode-btn" id="mode-interior" data-modo="interior">Interior</button>
+                  <button class="mode-btn active" id="mode-exterior" data-modo="exterior">Exterior</button>
                 </div>
                 <div class="toggle-row" style="margin-top:8px;">
                   <span style="font-size:14px;">Maniobra de giro</span>
@@ -1510,6 +1510,7 @@ input[type="text"], select { font-family: inherit; }
       case "exploracion_event": break;   // ya se ve en el estado
       case "lidar_scan": lastScan = msg.data; dibujarRadarSiVisible(); break;
       case "map": setMap(msg.data); break;
+      case "drive_mode": mostrarDriveMode(msg.data.modo); break;
       case "lidar_distancias": pintarDistancias(msg.data); break;
       // Llega hasta 4 veces por segundo mientras frena: se marca en el
       // panel de distancias en vez de apilar un toast por mensaje.
@@ -2435,28 +2436,35 @@ input[type="text"], select { font-family: inherit; }
       try { localStorage.setItem("agrobot-maniobra", maniobra ? "1" : "0"); } catch (_) {}
     });
   }
-  function setDriveMode(modo) {
+  // Solo pinta la UI; lo llama también el WebSocket cuando el modo se
+  // cambia desde el dashboard de entrenamiento.
+  function mostrarDriveMode(modo) {
     driveMode = modo;
     try { localStorage.setItem("agrobot-drive-mode", modo); } catch (_) {}
-    document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
-    const el = $("mode-" + modo);
-    if (el) el.classList.add("active");
-    if (modo === "interior") {
-      maniobra = false;
-      if ($("maniobra-toggle")) $("maniobra-toggle").checked = false;
+    document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.modo === modo));
+    maniobra = modo === "exterior";
+    if ($("maniobra-toggle")) $("maniobra-toggle").checked = maniobra;
+  }
+  async function setDriveMode(modo) {
+    mostrarDriveMode(modo);
+    try {
+      const res = await fetch("/api/drive/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modo }),
+      });
+      if (!res.ok) toast("warning", "Modo no aplicado", `HTTP ${res.status}`);
+    } catch (_) {
+      toast("error", "Sin conexión", "No se pudo cambiar el modo de manejo.");
     }
-    fetch("/api/drive/mode", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modo }),
-    });
   }
-  // Aplicar modo guardado al cargar
-  if (driveMode !== "exterior") {
-    const el = $("mode-" + driveMode);
-    if (el) { document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active")); el.classList.add("active"); }
-  }
-  fetch("/api/drive/mode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modo: driveMode }) });
+  document.querySelectorAll(".mode-btn").forEach(b =>
+    b.addEventListener("click", () => setDriveMode(b.dataset.modo)));
+  // Al cargar manda el modo el BACKEND (una recarga no debe pisar lo que
+  // eligió el otro dashboard).
+  fetch("/api/drive/mode").then(r => r.json()).then(d => {
+    if (d.modo) { mostrarDriveMode(d.modo); }
+  }).catch(() => {});
 
   async function conducir(accion, btn) {
     if (btn) {

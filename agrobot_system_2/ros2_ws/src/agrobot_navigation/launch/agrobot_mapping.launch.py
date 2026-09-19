@@ -39,6 +39,11 @@ from launch_ros.actions import Node
 LIDAR_XYZ = ("0.0", "0.0", "0.18")   # LIDAR 18 cm por encima del centro de base_link
 LIDAR_RPY = ("0.0", "0.0", "0.0")    # yaw pitch roll — 0 = mirando al frente del robot
 IMU_XYZ = ("0.0", "0.0", "0.05")
+
+# CP2102N del RPLIDAR C1 (10c4:ea60). Si se cambia el LIDAR, sacar el nuevo
+# nombre de `ls /dev/serial/by-id/`.
+LIDAR_PUERTO = ("/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_"
+                "Controller_5e723775cd73ef11b311cf8c8fcc3fa0-if00-port0")
 IMU_RPY = ("0.0", "0.0", "0.0")
 
 
@@ -76,15 +81,17 @@ def generate_launch_description():
     # del RPLIDAR) en ~1 de cada 4 arranques (4 de 15 en logs/ros.log al
     # 2026-09-16), y como el resto del launch sigue vivo systemd no lo
     # relanza: el robot quedaba sin /scan y sin mapa hasta reiniciar a mano.
-    # Parámetros idénticos a los de sllidar_c1_launch.py. El RPLIDAR C1
-    # conecta por USB; ajustar el puerto si udev le asigna otro nombre.
+    # Parámetros idénticos a los de sllidar_c1_launch.py.
+    # Puerto por número de serie y NO /dev/ttyUSB0: el 2026-09-19 el LIDAR
+    # se reenumeró como ttyUSB1 tras un corte USB, el driver no lo encontró,
+    # y sin scans el freno por LIDAR bloqueó adelante/atrás (solo giraba).
     lidar_launch = Node(
         package="sllidar_ros2",
         executable="sllidar_node",
         name="sllidar_node",
         parameters=[{
             "channel_type": "serial",
-            "serial_port": "/dev/ttyUSB0",
+            "serial_port": LIDAR_PUERTO,
             "serial_baudrate": 460800,
             "frame_id": "laser",
             "inverted": False,

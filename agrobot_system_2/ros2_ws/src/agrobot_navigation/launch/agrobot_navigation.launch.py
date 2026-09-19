@@ -83,7 +83,7 @@ def generate_launch_description():
         name="sllidar_node",
         parameters=[{
             "channel_type": "serial",
-            "serial_port": "/dev/ttyUSB0",
+            "serial_port": "/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_5e723775cd73ef11b311cf8c8fcc3fa0-if00-port0",
             "serial_baudrate": 460800,
             "frame_id": "laser",
             "inverted": False,

@@ -431,6 +431,9 @@ header.topbar h2 { font-size: 18px; margin: 0; color: var(--ink); letter-spacing
 .c-stop { grid-column: 2; grid-row: 2; color: var(--crit-ink); } .c-right { grid-column: 3; grid-row: 2; }
 .c-back { grid-column: 2; grid-row: 3; }
 .hint { font-size: 13.5px; color: var(--ink-soft); margin-top: 8px; line-height: 1.55; }
+.mode-btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-soft); padding: 4px 12px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.mode-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.mode-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 
 .slider-row { display: flex; flex-direction: column; gap: 6px; }
 .slider-row .label-row { display: flex; justify-content: space-between; font-size: 13.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -587,6 +590,7 @@ input[type="text"], select { font-family: inherit; }
     <button class="nav-btn" data-tab="tab-hw"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.7a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.4 2.7a7.6 7.6 0 0 0-2.6 1.5l-2.4-.7-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.7a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.4-2.7a7.6 7.6 0 0 0 2.6-1.5l2.4.7 2-3.4-2-1.6Z"/></svg></span>Config. Hardware</button>
     <button class="nav-btn" data-tab="tab-params"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h9M17 6h3M4 12h3M9 12h11M4 18h13M19 18h1"/><circle cx="14.5" cy="6" r="2"/><circle cx="6.5" cy="12" r="2"/><circle cx="16.5" cy="18" r="2"/></svg></span>Parámetros</button>
     <button class="nav-btn" data-tab="tab-sistema"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg></span>Sistema</button>
+    <a class="nav-btn" href="/training.html" target="_blank" style="text-decoration:none; color:inherit; margin-top:8px; border-top:1px solid var(--line); padding-top:14px;"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>Entrenamiento</a>
   </div>
   <button class="nav-colapsar" id="btn-colapsar" title="Colapsar barra lateral">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m15 6-6 6 6 6"/></svg>
@@ -702,12 +706,16 @@ input[type="text"], select { font-family: inherit; }
                 </div>
                 <p class="hint">un toque = un pulso (1 s adelante/atrás) · tocá varias veces para
                   seguir · <strong>espacio</strong> o ■ para parar · flechas del teclado.</p>
-                <div class="toggle-row" style="margin-top:10px;">
-                  <span style="font-size:15px;">Giro con maniobra <span style="color:var(--ink-soft); font-size:13px;">(tierra blanda)</span></span>
+                <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                  <span style="font-size:13px; color:var(--ink-soft); margin-right:4px;">Modo:</span>
+                  <button class="mode-btn active" id="mode-interior" onclick="setDriveMode('interior')">Interior</button>
+                  <button class="mode-btn" id="mode-exterior" onclick="setDriveMode('exterior')">Exterior</button>
+                </div>
+                <div class="toggle-row" style="margin-top:8px;">
+                  <span style="font-size:14px;">Maniobra de giro</span>
                   <label class="switch"><input type="checkbox" id="maniobra-toggle" checked><div class="track"></div></label>
                 </div>
-                <p class="hint" style="margin-top:4px;">Encendido: cada giro alterna un arco adelante y otro atrás
-                  girando hacia el mismo lado, para no enterrar las ruedas. Apagado: gira sobre sí mismo.</p>
+                <p class="hint" style="margin-top:4px;">Interior: suave, pulsos cortos, giro en su eje. Exterior: robusto, maniobra rápida con arcos cortos.</p>
                 <div class="slider-row" style="margin-top:12px;">
                   <div class="label-row">
                     <span>ACELERADOR</span>
@@ -2417,7 +2425,9 @@ input[type="text"], select { font-family: inherit; }
   // Va por HTTP y no por el WebSocket: si este estaba caído (pantalla
   // bloqueada, reconexión) el mensaje se tiraba sin avisar a nadie.
   let maniobra = true;
+  let driveMode = "exterior";
   try { maniobra = localStorage.getItem("agrobot-maniobra") !== "0"; } catch (_) {}
+  try { driveMode = localStorage.getItem("agrobot-drive-mode") || "exterior"; } catch (_) {}
   if ($("maniobra-toggle")) {
     $("maniobra-toggle").checked = maniobra;
     $("maniobra-toggle").addEventListener("change", (e) => {
@@ -2425,6 +2435,28 @@ input[type="text"], select { font-family: inherit; }
       try { localStorage.setItem("agrobot-maniobra", maniobra ? "1" : "0"); } catch (_) {}
     });
   }
+  function setDriveMode(modo) {
+    driveMode = modo;
+    try { localStorage.setItem("agrobot-drive-mode", modo); } catch (_) {}
+    document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+    const el = $("mode-" + modo);
+    if (el) el.classList.add("active");
+    if (modo === "interior") {
+      maniobra = false;
+      if ($("maniobra-toggle")) $("maniobra-toggle").checked = false;
+    }
+    fetch("/api/drive/mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modo }),
+    });
+  }
+  // Aplicar modo guardado al cargar
+  if (driveMode !== "exterior") {
+    const el = $("mode-" + driveMode);
+    if (el) { document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active")); el.classList.add("active"); }
+  }
+  fetch("/api/drive/mode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modo: driveMode }) });
 
   async function conducir(accion, btn) {
     if (btn) {

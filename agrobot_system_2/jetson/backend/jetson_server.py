@@ -43,7 +43,7 @@ from ros_bridge import AgroBotROSBridge, ROS_UNAVAILABLE_REASON
 from camera import CameraWorker
 from obstacle_avoidance import ControladorEvasion, LecturasSensoresLIDAR
 from patrol import PatrolController
-from pulse_drive import ConductorPulsos, ACCIONES
+from pulse_drive import ConductorPulsos, ACCIONES, MODOS
 from mapas import GestorMapas, ErrorMapa
 from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
 from explorador import ExploradorReactivo
@@ -856,6 +856,25 @@ async def drive_handler(request: web.Request):
                       omega_max=ctrl["max_omega_rps"] * escala,
                       maniobra=bool(body.get("maniobra", True)))
     return web.json_response({"ok": True, "accion": accion})
+
+
+async def drive_mode_handler(request: web.Request):
+    """GET: modo actual. POST {"modo": "interior"|"exterior"}: cambia el modo."""
+    if request.method == "GET":
+        return web.json_response({"modo": conductor.modo if conductor else "exterior",
+                                  "modos": list(MODOS.keys())})
+    body = await request.json()
+    modo = body.get("modo", "exterior")
+    if modo not in MODOS:
+        return web.json_response({"error": f"modo desconocido: {modo!r}"}, status=400)
+    if conductor:
+        conductor.modo = modo
+    await state.broadcast({"type": "drive_mode", "data": {"modo": modo}})
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Modo de manejo",
+        "message": f"Cambiado a modo {modo}",
+    }})
+    return web.json_response({"ok": True, "modo": modo})
 
 
 def _foco(encendido: bool):
@@ -2174,6 +2193,8 @@ def create_app() -> web.Application:
     app.router.add_get("/video", video_handler)
     app.router.add_post("/api/video/record", video_record_handler)
     app.router.add_post("/api/drive", drive_handler)
+    app.router.add_get("/api/drive/mode", drive_mode_handler)
+    app.router.add_post("/api/drive/mode", drive_mode_handler)
     app.router.add_post("/api/nav/reset_map", nav_reset_map_handler)
     app.router.add_get("/api/mapas", mapas_listar_handler)
     app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)

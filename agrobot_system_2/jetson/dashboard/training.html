@@ -138,6 +138,9 @@ header .pill.ok .dot { background: var(--accent); }
 }
 .drive-btn:hover { border-color: var(--accent); }
 .drive-btn:active { background: var(--accent-soft); }
+.mode-btn { background: var(--card-hover); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-soft); padding: 4px 14px; font-size: 12px; cursor: pointer; font-family: inherit; flex:1; }
+.mode-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.mode-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .drive-btn.stop { background: rgba(231,76,60,0.2); border-color: var(--crit); color: var(--crit); }
 .drive-btn.stop:active { background: rgba(231,76,60,0.4); }
 
@@ -241,6 +244,10 @@ header .pill.ok .dot { background: var(--accent); }
   <!-- Drive -->
   <div class="side-section">
     <h3>Manejo manual</h3>
+    <div style="display:flex; gap:4px; margin-bottom:8px;">
+      <button class="mode-btn" id="tmode-interior" onclick="setDriveMode('interior')">Interior</button>
+      <button class="mode-btn active" id="tmode-exterior" onclick="setDriveMode('exterior')">Exterior</button>
+    </div>
     <div class="drive-grid">
       <div></div>
       <button class="drive-btn" onpointerdown="driveStart('adelante')" onpointerup="driveStop()" onpointerleave="driveStop()">▲</button>
@@ -256,6 +263,11 @@ header .pill.ok .dot { background: var(--accent); }
       <label>Velocidad</label>
       <input type="range" id="drive-scale" min="0.1" max="1" step="0.05" value="0.4">
       <span id="drive-scale-val" class="mono" style="font-size:11px;min-width:30px">0.4</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; margin-top:4px;">
+      <label style="font-size:11px; color:var(--ink-soft);">Maniobra</label>
+      <input type="checkbox" id="maniobra-toggle" checked>
+      <span id="mode-hint" style="font-size:10px; color:var(--ink-soft);">arco corto</span>
     </div>
   </div>
 
@@ -651,12 +663,35 @@ async function apiGet(url) {
 }
 
 // --- Drive ---
-let driveInterval = null;
+let driveMode = "exterior";
+let maniobra = true;
+
+function setDriveMode(modo) {
+  driveMode = modo;
+  document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+  const el = $("tmode-" + modo);
+  if (el) el.classList.add("active");
+  if (modo === "interior") {
+    maniobra = false;
+    $("maniobra-toggle").checked = false;
+    $("mode-hint").textContent = "giro en su eje";
+  } else {
+    maniobra = true;
+    $("maniobra-toggle").checked = true;
+    $("mode-hint").textContent = "arco corto";
+  }
+  apiPost("/api/drive/mode", { modo });
+}
+$("maniobra-toggle").addEventListener("change", e => {
+  maniobra = e.target.checked;
+  $("mode-hint").textContent = maniobra ? "arco corto" : "giro en su eje";
+});
+
 function driveStart(accion) {
   if (isDriving) return;
   isDriving = true;
   const escala = parseFloat($("drive-scale").value);
-  apiPost("/api/drive", { accion, escala, maniobra: true });
+  apiPost("/api/drive", { accion, escala, maniobra });
   apiPost("/api/training/log_correction", { type: "drive", vx: accion === "adelante" ? escala : (accion === "atras" ? -escala : 0), omega: accion === "izquierda" ? escala : (accion === "derecha" ? -escala : 0) });
 }
 function driveStop() {

@@ -30,17 +30,28 @@ import time
 from collections import deque
 
 TICK_S = 0.05             # 20 Hz, el mismo ritmo al que late el enlace UART
-
-PULSO_RECTO_S = 1.0       # adelante / atrás
-PULSO_GIRO_S = 0.5        # giro directo: 1 s girando son demasiados grados
 MAX_ENCOLADO_S = 3.0      # tope de pulsos encadenados
 
-# Maniobra de giro para tierra blanda: arco adelante + arco atrás.
-MANIOBRA_V = 0.5          # fracción de la velocidad lineal máxima
-MANIOBRA_OMEGA = 1.0      # fracción de la angular máxima
-MANIOBRA_MEDIO_S = 0.6    # duración de cada arco
-
 ACCIONES = ("adelante", "atras", "izquierda", "derecha")
+
+MODOS = {
+    "interior": {
+        "pulso_recto_s": 0.8,
+        "pulso_giro_s": 0.4,
+        "maniobra_v": 0.0,
+        "maniobra_omega": 1.0,
+        "maniobra_medio_s": 0.4,
+        "vel_factor": 0.6,
+    },
+    "exterior": {
+        "pulso_recto_s": 1.0,
+        "pulso_giro_s": 0.35,
+        "maniobra_v": 0.25,
+        "maniobra_omega": 1.0,
+        "maniobra_medio_s": 0.3,
+        "vel_factor": 1.0,
+    },
+}
 
 
 class ConductorPulsos:
@@ -52,6 +63,7 @@ class ConductorPulsos:
         self._cola: deque[tuple[float, float, float]] = deque()
         self._accion_actual: str | None = None
         self._tarea: asyncio.Task | None = None
+        self.modo = "exterior"
 
     @property
     def activo(self) -> bool:
@@ -60,16 +72,18 @@ class ConductorPulsos:
     def segmentos(self, accion: str, v_max: float, omega_max: float,
                   maniobra: bool) -> list[tuple[float, float, float]]:
         """(v, omega, duración) de UNA pulsación. omega > 0 = izquierda."""
+        m = MODOS.get(self.modo, MODOS["exterior"])
+        vf = m["vel_factor"]
         if accion == "adelante":
-            return [(v_max, 0.0, PULSO_RECTO_S)]
+            return [(v_max * vf, 0.0, m["pulso_recto_s"])]
         if accion == "atras":
-            return [(-v_max, 0.0, PULSO_RECTO_S)]
+            return [(-v_max * vf, 0.0, m["pulso_recto_s"])]
         sentido = 1.0 if accion == "izquierda" else -1.0
         if not maniobra:
-            return [(0.0, sentido * omega_max, PULSO_GIRO_S)]
-        w = sentido * MANIOBRA_OMEGA * omega_max
-        v = MANIOBRA_V * v_max
-        return [(v, w, MANIOBRA_MEDIO_S), (-v, w, MANIOBRA_MEDIO_S)]
+            return [(0.0, sentido * omega_max, m["pulso_giro_s"])]
+        w = sentido * m["maniobra_omega"] * omega_max
+        v = m["maniobra_v"] * v_max * vf
+        return [(v, w, m["maniobra_medio_s"]), (-v, w, m["maniobra_medio_s"])]
 
     def ordenar(self, accion: str, v_max: float, omega_max: float,
                 maniobra: bool = True):

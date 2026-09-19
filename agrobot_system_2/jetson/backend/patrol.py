@@ -190,10 +190,14 @@ class PatrolController:
         self.activo = True
         self.vueltas = 0
         self.escaneos = 0
-        # Se arranca con el reloj a cero para que el primer barrido salga al
-        # empezar, no a los dos minutos: el operador necesita ver que el
-        # escaneo funciona sin esperar de pie en el cultivo.
         self.ultimo_escaneo = 0.0
+
+        # Reinicia el SLAM con la pose actual para fijar la orientación del mapa.
+        # Esto evita que AMCL se desincroniace durante navegación autónoma.
+        pose_inicial = self._get_pose()
+        if pose_inicial:
+            asyncio.create_task(self._reinit_pose_slam(pose_inicial))
+
         self._tarea = asyncio.create_task(self._bucle())
         return True, f"patrulla iniciada sobre {len(self.waypoints)} waypoints"
 
@@ -346,6 +350,15 @@ class PatrolController:
         return math.hypot(pose.get("x", 0.0) - wp["x"], pose.get("y", 0.0) - wp["y"])
 
     # ---------------------------------------------------------------
+    async def _reinit_pose_slam(self, pose: dict):
+        """Reinicia la pose en AMCL (navegación pública en el mapa).
+        Previene desincroniación del SLAM durante navegación autónoma."""
+        try:
+            await asyncio.sleep(0.2)  # pequeña pausa para que SLAM se estabilice
+            self._send_nav_goal(pose["x"], pose["y"], pose.get("theta_deg", 0.0))
+        except Exception as exc:
+            self._emitir({"evento": "error_reinit_slam", "detalle": str(exc)})
+
     def _emitir(self, data: dict):
         try:
             self._on_event(data)

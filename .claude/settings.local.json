@@ -140,7 +140,8 @@
       "Bash(xargs -I{} echo \"  marcadores nuevos encontrados: {} de 4\")",
       "Bash(curl -s -m 5 http://127.0.0.1:8080/api/health)",
       "Bash(python3 -m json.tool)",
-      "Bash(grep -v \"^\\\\s*$\")"
+      "Bash(grep -v \"^\\\\s*$\")",
+      "Bash(git add *)"
     ]
   }
 }

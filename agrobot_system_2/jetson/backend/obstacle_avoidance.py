@@ -331,18 +331,43 @@ class ControladorEvasion:
             self.estado = EstadoEvasion.ALERTA_PROXIMIDAD
 
     def _entrar_evasion_lateral(self, deteccion: DeteccionObstaculoCamara) -> None:
-        """Inicia maniobra de evasión lateral."""
+        """Inicia maniobra de evasión lateral ROBÓTICA.
+
+        Lógica: mide LIDAR izq/der, gira hacia donde hay más espacio.
+        """
         self._tiempo_inicio_evasion = time.time()
 
-        if deteccion.esta_a_la_izquierda:
-            self._callback_debug(f"[EVASION] → EVASIÓN LATERAL DERECHA (obstáculo a la izq)")
-            self.estado = EstadoEvasion.EVASION_LATERAL
-        elif deteccion.esta_a_la_derecha:
-            self._callback_debug(f"[EVASION] → EVASIÓN LATERAL IZQUIERDA (obstáculo a la der)")
+        lidar = self._ultima_lectura_lidar
+        if not lidar:
+            # Sin LIDAR, usa visión
+            if deteccion.esta_a_la_izquierda:
+                self._callback_debug(f"[EVASION] → EVASIÓN DERECHA (obstáculo a izq, sin LIDAR)")
+                self.estado = EstadoEvasion.EVASION_LATERAL
+            elif deteccion.esta_a_la_derecha:
+                self._callback_debug(f"[EVASION] → EVASIÓN IZQUIERDA (obstáculo a der, sin LIDAR)")
+                self.estado = EstadoEvasion.EVASION_LATERAL
+            else:
+                self._callback_debug(f"[EVASION] → RETROCESO (centrado, sin LIDAR)")
+                self.estado = EstadoEvasion.EVASION_RETROCESO
+            return
+
+        # Con LIDAR: mide ambos lados y elige el que tenga más espacio
+        espacio_izq = min(lidar.frontal_izquierda, lidar.lateral_izquierdo)
+        espacio_der = min(lidar.lateral_derecho, lidar.frontal_izquierda)
+
+        # Si el frontal está muy bloqueado, retrocede
+        if lidar.frontal < 30.0:
+            self._callback_debug(f"[EVASION] → RETROCESO (frontal {lidar.frontal:.0f}cm, muy bloqueado)")
+            self.estado = EstadoEvasion.EVASION_RETROCESO
+            return
+
+        # Elige el lado con más espacio
+        if espacio_izq > espacio_der:
+            self._callback_debug(f"[EVASION] → GIRO IZQUIERDA (esp_izq={espacio_izq:.0f}cm vs der={espacio_der:.0f}cm)")
             self.estado = EstadoEvasion.EVASION_LATERAL
         else:
-            self._callback_debug(f"[EVASION] → EVASIÓN RETROCESO (obstáculo centrado)")
-            self.estado = EstadoEvasion.EVASION_RETROCESO
+            self._callback_debug(f"[EVASION] → GIRO DERECHA (esp_der={espacio_der:.0f}cm vs izq={espacio_izq:.0f}cm)")
+            self.estado = EstadoEvasion.EVASION_LATERAL
 
     def _recuperar_navegacion_normal(self) -> None:
         """Vuelve a navegación normal cuando el camino se despeja."""

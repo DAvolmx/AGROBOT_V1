@@ -762,6 +762,7 @@ input[type="text"], select { font-family: inherit; }
       <div class="modo-sel">
         <button class="modo-btn active" id="modo-manual">Manual · grabar recorrido</button>
         <button class="modo-btn" id="modo-auto">Autónomo · patrullar</button>
+        <button class="modo-btn" id="modo-cal">Calibración · validar</button>
       </div>
 
       <div class="card" id="panel-manual" style="margin-bottom:16px;">
@@ -845,6 +846,60 @@ input[type="text"], select { font-family: inherit; }
         </div>
         <div class="dist-estado">esperando al LIDAR…</div>
       </div>
+
+      <div class="card" id="panel-cal" style="margin-bottom:16px; display:none;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0;">Calibración de navegación</h3>
+          <span class="pill" id="cal-pill"><span class="dot"></span><span id="cal-estado">inactiva</span></span>
+        </div>
+        <p class="hint" style="margin:10px 0 14px; line-height:1.55;">
+          Conducí el robot por la habitación mientras se graban poses, LIDAR y velocidades.
+          Al terminar se analizan los datos y se valida que la navegación esté bien calibrada.
+          Después podés iniciar la patrulla sin perder el mapa.
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+          <button class="btn primary" id="btn-cal-start">▶ Iniciar calibración</button>
+          <button class="btn peligro" id="btn-cal-stop" disabled>■ Detener y analizar</button>
+        </div>
+
+        <div id="cal-live" style="display:none;">
+          <div style="border-top:1px solid var(--line); padding-top:14px; margin-bottom:14px;">
+            <b style="font-size:15px;">Datos en tiempo real</b>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px; margin-bottom:12px;">
+            <span>Poses: <b class="mono" id="cal-poses">0</b></span>
+            <span>Distancia: <b class="mono" id="cal-dist">0.000 m</b></span>
+            <span>Waypoints: <b class="mono" id="cal-wps">0</b></span>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px; margin-bottom:12px;">
+            <span>Posición: <b class="mono" id="cal-pos">x=0 y=0 θ=0°</b></span>
+          </div>
+          <div class="dist-lidar" style="margin-top:8px;">
+            <div class="dist-celda" data-lado="adelante"><div class="k">Adelante</div><div class="v mono" id="cal-lidar-f">—</div></div>
+            <div class="dist-celda" data-lado="izquierda"><div class="k">Izquierda</div><div class="v mono" id="cal-lidar-i">—</div></div>
+            <div class="dist-robot"><svg viewBox="0 0 46 58" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="38" height="44" rx="6"/><path d="M23 2 15 12h16Z" fill="currentColor" stroke="none"/></svg></div>
+            <div class="dist-celda" data-lado="derecha"><div class="k">Derecha</div><div class="v mono" id="cal-lidar-d">—</div></div>
+          </div>
+        </div>
+
+        <div id="cal-result" style="display:none;">
+          <div style="border-top:1px solid var(--line); padding-top:14px; margin-bottom:10px;">
+            <b style="font-size:15px;">Resultado del análisis</b>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px; margin-bottom:8px;">
+            <span>Poses: <b class="mono" id="cal-r-poses">0</b></span>
+            <span>Distancia: <b class="mono" id="cal-r-dist">0 m</b></span>
+            <span>Tiempo: <b class="mono" id="cal-r-tiempo">0 s</b></span>
+            <span>Vel. media: <b class="mono" id="cal-r-vel">0 m/s</b></span>
+          </div>
+          <div id="cal-mejoras" style="margin-top:10px;"></div>
+          <div style="margin-top:14px; display:flex; flex-wrap:wrap; gap:8px;">
+            <button class="btn primary" id="btn-cal-patrol">✓ Validar e iniciar patrulla</button>
+            <button class="btn" id="btn-cal-again">Repetir calibración</button>
+          </div>
+        </div>
+      </div>
+
       <div class="card" style="padding:0;">
         <div style="padding:16px 16px 0; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
           <h3 style="margin-bottom:8px;">Mapa (slam_toolbox)</h3>
@@ -1654,15 +1709,18 @@ input[type="text"], select { font-family: inherit; }
   // ---------------------------------------------------------------
   // Modo manual / autónomo. Son los dos únicos modos: en manual se graba
   // el recorrido conduciendo, en autónomo el robot lo repite solo.
-  function ponerModo(auto) {
-    $("modo-manual").classList.toggle("active", !auto);
-    $("modo-auto").classList.toggle("active", auto);
-    $("panel-manual").style.display = auto ? "none" : "";
-    $("panel-auto").style.display = auto ? "" : "none";
+  function ponerModo(modo) {
+    $("modo-manual").classList.toggle("active", modo === "manual");
+    $("modo-auto").classList.toggle("active", modo === "auto");
+    $("modo-cal").classList.toggle("active", modo === "cal");
+    $("panel-manual").style.display = modo === "manual" ? "" : "none";
+    $("panel-auto").style.display = modo === "auto" ? "" : "none";
+    $("panel-cal").style.display = modo === "cal" ? "" : "none";
   }
   if ($("modo-manual")) {
-    $("modo-manual").addEventListener("click", () => ponerModo(false));
-    $("modo-auto").addEventListener("click", () => ponerModo(true));
+    $("modo-manual").addEventListener("click", () => ponerModo("manual"));
+    $("modo-auto").addEventListener("click", () => ponerModo("auto"));
+    $("modo-cal").addEventListener("click", () => ponerModo("cal"));
   }
 
   function pintarPatrulla(p) {
@@ -1902,6 +1960,108 @@ input[type="text"], select { font-family: inherit; }
     if (!res.ok) toast("warning", "No se pudo explorar", d.error || d.message || `HTTP ${res.status}`);
   });
   $("btn-expl-off").addEventListener("click", () => fetch("/api/exploracion/stop", { method: "POST" }));
+
+  // ---------------------------------------------------------------
+  // Calibración de navegación
+  // ---------------------------------------------------------------
+  let _calInterval = null;
+
+  function pintarCal(d) {
+    if (!d || !$("cal-estado")) return;
+    const activo = !!d.activo;
+    $("cal-estado").textContent = activo ? "grabando" : "inactiva";
+    $("cal-pill").className = "pill" + (activo ? " ok" : "");
+    $("btn-cal-start").disabled = activo;
+    $("btn-cal-stop").disabled = !activo;
+    $("cal-live").style.display = activo ? "" : "none";
+    if (activo) {
+      $("cal-poses").textContent = d.poses ?? 0;
+      $("cal-dist").textContent = (d.distancia_m ?? 0).toFixed(3) + " m";
+      $("cal-wps").textContent = d.waypoints ?? 0;
+      $("cal-pos").textContent = `x=${(d.pose_x ?? 0).toFixed(2)} y=${(d.pose_y ?? 0).toFixed(2)} θ=${(d.pose_theta ?? 0).toFixed(0)}°`;
+      $("cal-lidar-f").textContent = d.frontal_cm != null ? d.frontal_cm + " cm" : "—";
+      $("cal-lidar-i").textContent = d.izq_cm != null ? d.izq_cm + " cm" : "—";
+      $("cal-lidar-d").textContent = d.der_cm != null ? d.der_cm + " cm" : "—";
+    }
+  }
+
+  function pintarResultadoCal(d) {
+    $("cal-result").style.display = "";
+    $("cal-r-poses").textContent = d.poses_count ?? 0;
+    $("cal-r-dist").textContent = (d.distancia_recorrida_m ?? 0).toFixed(2) + " m";
+    $("cal-r-tiempo").textContent = (d.tiempo_total_s ?? 0).toFixed(0) + " s";
+    $("cal-r-vel").textContent = (d.velocidad_promedio_ms ?? 0).toFixed(3) + " m/s";
+    const mejoras = d.mejoras || [];
+    const wrap = $("cal-mejoras");
+    if (!mejoras.length) {
+      wrap.innerHTML = '<div style="color:var(--accent); font-weight:600;">✓ Navegación calibrada correctamente — no hay mejoras críticas.</div>';
+    } else {
+      wrap.innerHTML = mejoras.map(m =>
+        `<div style="margin-bottom:8px; padding:8px 10px; border-radius:8px; border:1px solid ${m.severidad === 'ALTA' ? 'var(--crit)' : 'var(--warn)'};">
+          <div style="font-weight:600; color:${m.severidad === 'ALTA' ? 'var(--crit)' : 'var(--warn)'};">[${m.severidad}] ${m.area}</div>
+          <div style="font-size:13px; margin-top:4px;">${m.problema}</div>
+          <div style="font-size:13px; color:var(--ink-soft); margin-top:2px;">→ ${m.recomendacion}</div>
+        </div>`
+      ).join("");
+    }
+  }
+
+  function refrescarCal() {
+    fetch("/api/nav_cal/status").then(r => r.ok ? r.json() : null).then(d => { if (d) pintarCal(d); }).catch(() => {});
+  }
+
+  $("btn-cal-start").addEventListener("click", async () => {
+    $("cal-result").style.display = "none";
+    const res = await fetch("/api/nav_cal/start", { method: "POST" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast("warning", "No se pudo iniciar", d.error || "error desconocido");
+      return;
+    }
+    if (!_calInterval) _calInterval = setInterval(refrescarCal, 1000);
+    refrescarCal();
+  });
+
+  $("btn-cal-stop").addEventListener("click", async () => {
+    $("btn-cal-stop").disabled = true;
+    $("btn-cal-stop").textContent = "Analizando…";
+    try {
+      const res = await fetch("/api/nav_cal/stop", { method: "POST" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast("warning", "Error", d.error || "error desconocido");
+        return;
+      }
+      const d = await res.json();
+      pintarCal({ activo: false });
+      pintarResultadoCal(d);
+      if (_calInterval) { clearInterval(_calInterval); _calInterval = null; }
+    } finally {
+      $("btn-cal-stop").textContent = "■ Detener y analizar";
+    }
+  });
+
+  $("btn-cal-patrol").addEventListener("click", async () => {
+    const n = parseInt($("patrol-n").textContent, 10) || 0;
+    if (!n) {
+      toast("warning", "Sin recorrido", "Grabá puntos primero en el modo Manual antes de patrullar.");
+      return;
+    }
+    const res = await fetch("/api/mission/start", { method: "POST" });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) {
+      toast("success", "Patrulla iniciada", d.message || "navegando");
+      ponerModo("auto");
+    } else {
+      toast("warning", "No se pudo arrancar", d.message || "error");
+    }
+    refrescarPatrulla();
+  });
+
+  $("btn-cal-again").addEventListener("click", () => {
+    $("cal-result").style.display = "none";
+    $("btn-cal-start").click();
+  });
 
   // `change` y no `input`: guardar en cada píxel del arrastre sería un POST
   // por movimiento del dedo.

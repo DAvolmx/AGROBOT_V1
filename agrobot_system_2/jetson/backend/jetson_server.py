@@ -48,6 +48,7 @@ from mapas import GestorMapas, ErrorMapa
 from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
 from explorador import ExploradorReactivo
 from sendero import SeguidorSendero
+from navigation_logger import NavigationLogger, analizar_sesion
 
 # =============================================
 # ===== CONFIG =====
@@ -776,6 +777,9 @@ async def video_handler(request: web.Request):
 patrol: PatrolController | None = None
 conductor: ConductorPulsos | None = None
 explorador: ExploradorReactivo | None = None
+nav_logger: NavigationLogger | None = None
+_nav_cal_task: asyncio.Task | None = None
+_nav_cal_stats: dict = {}
 seguidor_sendero: SeguidorSendero | None = None
 
 WAYPOINTS_PATH = _AQUI / "patrol_waypoints.json"
@@ -1935,6 +1939,102 @@ def load_yolo_model(app: web.Application):
         print("[YOLO] ultralytics no instalado, video sin detección")
 
 
+# =============================================
+# ===== CALIBRACIÓN DE NAVEGACIÓN =====
+# =============================================
+
+async def _nav_cal_loop():
+    global _nav_cal_stats
+    prev_pose = None
+    dist_total = 0.0
+    poses_count = 0
+    try:
+        while nav_logger and nav_logger._activo:
+            await asyncio.sleep(0.5)
+            pose = current_pose()
+            if not pose:
+                continue
+            cfg = state.config["slam"]
+            d = lidar_reactive.distancias(cfg)
+            frontal_cm = round(d["adelante"] * 100) if d.get("adelante") is not None else None
+            izq_cm = round(d["izquierda"] * 100) if d.get("izquierda") is not None else None
+            der_cm = round(d["derecha"] * 100) if d.get("derecha") is not None else None
+            nav_logger.log_pose(
+                pose["x"], pose["y"], pose.get("theta_deg", 0),
+                lidar_frontal=frontal_cm, lidar_izq=izq_cm, lidar_der=der_cm,
+            )
+            poses_count += 1
+            if prev_pose:
+                dist_total += math.hypot(pose["x"] - prev_pose["x"],
+                                         pose["y"] - prev_pose["y"])
+            prev_pose = pose
+            _nav_cal_stats = {
+                "activo": True,
+                "session_id": nav_logger.session_id,
+                "poses": poses_count,
+                "distancia_m": round(dist_total, 3),
+                "frontal_cm": frontal_cm, "izq_cm": izq_cm, "der_cm": der_cm,
+                "pose_x": round(pose["x"], 3),
+                "pose_y": round(pose["y"], 3),
+                "pose_theta": round(pose.get("theta_deg", 0), 1),
+                "waypoints": len(patrol.waypoints) if patrol else 0,
+            }
+    except asyncio.CancelledError:
+        raise
+
+
+async def nav_cal_start_handler(request: web.Request):
+    global nav_logger, _nav_cal_task, _nav_cal_stats
+    if nav_logger and nav_logger._activo:
+        return web.json_response({"error": "calibración ya en curso"}, status=409)
+    nav_logger = NavigationLogger()
+    await nav_logger.iniciar()
+    _nav_cal_stats = {"activo": True, "session_id": nav_logger.session_id,
+                      "poses": 0, "distancia_m": 0}
+    _nav_cal_task = asyncio.create_task(_nav_cal_loop())
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Calibración",
+        "message": f"Sesión {nav_logger.session_id} iniciada — conducí el robot por la habitación.",
+    }})
+    return web.json_response({"ok": True, "session_id": nav_logger.session_id})
+
+
+async def nav_cal_stop_handler(request: web.Request):
+    global nav_logger, _nav_cal_task, _nav_cal_stats
+    if not nav_logger or not nav_logger._activo:
+        return web.json_response({"error": "no hay calibración en curso"}, status=409)
+    session_id = nav_logger.session_id
+    nav_logger.detener()
+    if _nav_cal_task:
+        _nav_cal_task.cancel()
+        _nav_cal_task = None
+    stats = analizar_sesion(session_id)
+    try:
+        from analizar_navegacion import AnalizadorNavegacion
+        analizador = AnalizadorNavegacion(session_id)
+        mejoras = analizador.sugerir_mejoras()
+        lidar_a = analizador.analizar_distancias_lidar()
+        vel_a = analizador.analizar_velocidades()
+    except Exception:
+        mejoras, lidar_a, vel_a = [], {}, {}
+    result = {**stats, "lidar_analysis": lidar_a,
+              "velocity_analysis": vel_a, "mejoras": mejoras}
+    _nav_cal_stats = {"activo": False, **result}
+    nav_logger = None
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Calibración terminada",
+        "message": f"Sesión {session_id}: {stats['poses_count']} poses, "
+                   f"{stats['distancia_recorrida_m']:.2f} m recorridos.",
+    }})
+    return web.json_response(result)
+
+
+async def nav_cal_status_handler(request: web.Request):
+    if not _nav_cal_stats:
+        return web.json_response({"activo": False})
+    return web.json_response(_nav_cal_stats)
+
+
 def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/ws", ws_handler)
@@ -1974,6 +2074,9 @@ def create_app() -> web.Application:
     app.router.add_post("/api/nav/save_map", nav_save_map_handler)
     app.router.add_get("/api/nav/mode", nav_mode_handler)
     app.router.add_post("/api/nav/mode", nav_mode_handler)
+    app.router.add_post("/api/nav_cal/start", nav_cal_start_handler)
+    app.router.add_post("/api/nav_cal/stop", nav_cal_stop_handler)
+    app.router.add_get("/api/nav_cal/status", nav_cal_status_handler)
     app.router.add_static("/captures", CAPTURES_DIR, show_index=False)
 
     # La raíz sirve el dashboard directamente. Antes `add_static("/")` con

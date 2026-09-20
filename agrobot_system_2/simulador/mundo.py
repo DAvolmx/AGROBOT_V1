@@ -16,6 +16,7 @@ el campo, y el LIDAR sirve para no chocar.
 Ejes del mundo en metros: x a la derecha, y hacia arriba, ángulos en radianes
 con 0 = +x (igual que el mapa del SLAM).
 """
+import json
 import math
 
 import numpy as np
@@ -26,6 +27,7 @@ COLOR_TIERRA_SECA = (110, 132, 150)     # el terreno del 2026-09-19, seco y clar
 COLOR_PAJA = (105, 165, 195)
 COLOR_PAJA_CLARA = (140, 190, 215)
 COLOR_PLANTA = (50, 150, 70)
+COLOR_PLANTA_ALTA = (38, 105, 52)      # mata crecida: verde más oscuro y cerrado
 COLOR_PLANTA_SECA = (60, 130, 120)
 COLOR_PIEDRA = (120, 125, 130)
 COLOR_HIERBA = (55, 120, 75)
@@ -33,7 +35,7 @@ COLOR_PARED = (120, 120, 125)
 COLOR_CIELO = (205, 195, 185)
 
 # Clases del suelo (las devuelve `clases_suelo`).
-TIERRA, PAJA, PLANTA, PIEDRA, HIERBA, BORDE_TIERRA = 0, 1, 2, 3, 4, 5
+TIERRA, PAJA, PLANTA, PIEDRA, HIERBA, BORDE_TIERRA, PLANTA_ALTA = 0, 1, 2, 3, 4, 5, 6
 COLOR_BORDE_TIERRA = (52, 62, 78)      # caballón de tierra removida, ni paja ni verde
 COLOR_MACETA = (70, 95, 140)
 COLOR_RAMA = (60, 125, 85)
@@ -99,7 +101,9 @@ class Mundo:
         self.sendero = np.array(sendero, dtype=np.float32).reshape(-1, 2)   # polilínea del centro
         self.ancho_sendero = ancho_sendero
         self.ancho_paja = ancho_paja
-        self.plantas = np.array(plantas, dtype=np.float32).reshape(-1, 4)   # x,y,radio,plaga(0/1)
+        # x, y, radio, plaga(0/1), altura(m). Las de 4 columnas (mapas
+        # antiguos) se completan con una altura baja: eran plantas chicas.
+        self.plantas = self._normalizar_plantas(plantas)
         # Puntos de escaneo: plantas marcadas para pararse a mirarlas de cerca,
         # igual que los 🌱 del dashboard del robot real.
         self.escaneos = np.array(escaneos, dtype=np.float32).reshape(-1, 2)
@@ -114,6 +118,28 @@ class Mundo:
         # surcos lo que lo delimita es vegetación verde y alta.
         #   "paja" | "vegetacion" | "mixto"
         self.borde = borde
+
+    @staticmethod
+    def _normalizar_plantas(plantas):
+        arr = np.array(plantas, dtype=np.float32)
+        if arr.size == 0:
+            return np.zeros((0, 5), np.float32)
+        arr = arr.reshape(-1, arr.shape[-1])
+        if arr.shape[1] == 4:
+            alturas = np.clip(arr[:, 2] * 1.6, 0.06, 0.25)[:, None]
+            arr = np.hstack([arr, alturas.astype(np.float32)])
+        return arr[:, :5].astype(np.float32)
+
+    @property
+    def plantas_altas(self):
+        """Las que llegan al LIDAR: el robot las ve y frena por ellas.
+
+        Es la diferencia que trae problemas en el campo: una mata crecida
+        aparece en el scan como si fuera un muro, y una plantita de 10 cm no
+        existe para el LIDAR aunque el robot la aplaste."""
+        if not len(self.plantas):
+            return self.plantas
+        return self.plantas[self.plantas[:, 4] >= ALTURA_LIDAR_M]
 
     def poner_objetos(self, objetos):
         """`objetos` = [{"tipo": "maceta", "x":.., "y":.., "radio":opcional}, ...]"""
@@ -161,6 +187,13 @@ class Mundo:
         # Objetos redondos que llegan a la altura del LIDAR. Aquí es donde una
         # rama sin nada sólido detrás produce un eco igual que una pared.
         obj = self.objetos_visibles_lidar
+        altas = self.plantas_altas
+        if len(altas):
+            obj = (np.vstack([obj, np.column_stack(
+                [altas[:, 0], altas[:, 1], altas[:, 2], altas[:, 4],
+                 np.zeros(len(altas), np.float32)])]) if len(obj)
+                else np.column_stack([altas[:, 0], altas[:, 1], altas[:, 2], altas[:, 4],
+                                      np.zeros(len(altas), np.float32)]))
         if len(obj):
             cx, cy, r = obj[:, 0] - x, obj[:, 1] - y, obj[:, 2]
             proy = dx[:, None] * cx[None, :] + dy[:, None] * cy[None, :]
@@ -246,8 +279,11 @@ class Mundo:
         fuera = d >= media + self.ancho_paja
         clase = np.where(fuera & (fibra > 0.55), PAJA, clase)
         clase = np.where(fuera & (mata > 0.62), HIERBA, clase)
-        for cx, cy, r, _ in self.plantas:
-            clase = np.where((px - cx) ** 2 + (py - cy) ** 2 < r * r, PLANTA, clase)
+        for cx, cy, r, _, altura in self.plantas:
+            dentro = (px - cx) ** 2 + (py - cy) ** 2 < r * r
+            # Las altas tapan más suelo visto desde arriba (la copa) y se
+            # pintan más oscuras; las bajas, como manchas claras.
+            clase = np.where(dentro, PLANTA_ALTA if altura >= ALTURA_LIDAR_M else PLANTA, clase)
         return clase
 
     def pintar_objetos(self, img, px, py):
@@ -271,6 +307,7 @@ class Mundo:
         img[:] = tierra
         img[clase == PAJA] = paja
         img[clase == PLANTA] = COLOR_PLANTA
+        img[clase == PLANTA_ALTA] = COLOR_PLANTA_ALTA
         img[clase == PIEDRA] = COLOR_PIEDRA
         img[clase == HIERBA] = COLOR_HIERBA
         img[clase == BORDE_TIERRA] = COLOR_BORDE_TIERRA
@@ -423,6 +460,79 @@ def desde_ocupacion(pgm: "Path", yaml_texto: str, nombre="mapa_real", sendero=()
     margen = 0.6
     limites = (min(xs) - margen, min(ys) - margen, max(xs) + margen, max(ys) + margen)
     return Mundo(nombre, paredes, sendero, 0.65, 0.35, plantas, limites)
+
+
+def endurecer(datos: dict, nivel=1.0, semilla=None) -> dict:
+    """Versión más difícil de un mapa dibujado, sin tocar el original.
+
+    Qué se endurece, y por qué cada cosa:
+      · El sendero se ESTRECHA: menos margen para el mismo chasis, que es lo
+        que obliga a afinar el seguimiento en vez de ir a ojo.
+      · Más PUNTOS DE ESCANEO, repartidos por el recorrido: el robot tiene
+        que llegar a ellos, no solo pasear.
+      · Algunas plantas del borde crecen por encima de los 30 cm del LIDAR:
+        aparecen en el scan como obstáculos aunque no lo sean.
+      · Ramas, macetas y piedras junto al camino, y algún estrechamiento con
+        dos paredes cortas enfrentadas (un paso angosto de verdad).
+    """
+    rng = np.random.default_rng(semilla)
+    d = json.loads(json.dumps(datos))          # copia, el original no se toca
+    d["nombre"] = f"{datos.get('nombre', 'mapa')}_dificil"
+    ruta = np.array(d.get("sendero", []), np.float64).reshape(-1, 2)
+
+    d["ancho_sendero"] = max(0.42, float(d.get("ancho_sendero", 0.65)) * (1 - 0.30 * nivel))
+    d["ancho_paja"] = max(0.15, float(d.get("ancho_paja", 0.35)) * (1 - 0.15 * nivel))
+    d["borde"] = str(rng.choice(["paja", "mixto", "vegetacion"]))
+
+    if len(ruta) >= 2:
+        # Puntos de escaneo repartidos a lo largo del recorrido, a un lado.
+        escaneos = list(d.get("escaneos", []))
+        cuantos = int(6 + 10 * nivel)
+        for k in range(cuantos):
+            i = int(k * (len(ruta) - 1) / max(cuantos - 1, 1))
+            j = min(i + 1, len(ruta) - 1)
+            dx, dy = ruta[j] - ruta[i]
+            largo = math.hypot(dx, dy) or 1.0
+            lado = 1 if k % 2 == 0 else -1
+            off = d["ancho_sendero"] / 2 + float(rng.uniform(0.10, 0.28))
+            escaneos.append([float(ruta[i][0] - lado * dy / largo * off),
+                             float(ruta[i][1] + lado * dx / largo * off)])
+        d["escaneos"] = escaneos
+
+        # Matas altas: las plantas del borde que crecieron.
+        plantas = [list(p) + [0.12] if len(p) == 4 else list(p)
+                   for p in d.get("plantas", [])]
+        for p in plantas:
+            if rng.random() < 0.18 * nivel:
+                p[2] = float(p[2]) * float(rng.uniform(1.6, 2.6))
+                p[4] = float(rng.uniform(0.34, 0.65))       # por encima del LIDAR
+        d["plantas"] = plantas
+
+        # Estorbos junto al camino y pasos estrechos.
+        objetos = list(d.get("objetos", []))
+        for _ in range(int(3 + 5 * nivel)):
+            i = int(rng.integers(0, len(ruta)))
+            ang = float(rng.uniform(0, 2 * math.pi))
+            r = d["ancho_sendero"] / 2 + float(rng.uniform(0.12, 0.5))
+            objetos.append({"tipo": str(rng.choice(["rama", "arbusto", "maceta", "piedra"])),
+                            "x": float(ruta[i][0] + r * math.cos(ang)),
+                            "y": float(ruta[i][1] + r * math.sin(ang))})
+        d["objetos"] = objetos
+
+        paredes = list(d.get("paredes", []))
+        for _ in range(int(1 + 2 * nivel)):
+            i = int(rng.integers(1, max(len(ruta) - 1, 2)))
+            dx, dy = ruta[min(i + 1, len(ruta) - 1)] - ruta[i - 1]
+            largo = math.hypot(dx, dy) or 1.0
+            nx, ny = -dy / largo, dx / largo
+            hueco = d["ancho_sendero"] / 2 + 0.06     # deja justo el ancho del robot
+            for lado in (1, -1):
+                cx = ruta[i][0] + lado * nx * hueco
+                cy = ruta[i][1] + lado * ny * hueco
+                paredes.append([float(cx - dx / largo * 0.25), float(cy - dy / largo * 0.25),
+                                float(cx + dx / largo * 0.25), float(cy + dy / largo * 0.25)])
+        d["paredes"] = paredes
+    return d
 
 
 def aleatorio(semilla=None):

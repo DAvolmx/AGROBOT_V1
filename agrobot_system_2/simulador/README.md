@@ -134,6 +134,37 @@ Pestaña **SLAM y ruta**:
 - **Filtro de conducción ideal**: deja conducir a la autonomía pero corrige
   el pulso cuando se aleja de la ruta más de media anchura de sendero.
 
+## Buscar la mejor configuración (Montecarlo)
+
+```bash
+python3 simulador/montecarlo.py --variantes 60 --mundo exterior_2_sim_dificil --rondas 3
+python3 simulador/montecarlo.py --variantes 60 --mundo exterior_2_sim_dificil --aplicar
+```
+
+Sortea variantes de los parámetros que hoy se ajustan a mano en el dashboard
+(conos del freno, margen de parada, deslizamiento, velocidad, tolerancia del
+sendero, peso de la cámara e inclinación del servo) y las compara con las
+MISMAS semillas y escenarios. Usa eliminación por rondas —todas corren un
+episodio, siguen las mejores con más episodios— y reparte el trabajo entre
+los núcleos, dejando dos libres para el backend del robot.
+
+La configuración ACTUAL del robot entra como una candidata más y nunca se
+elimina: así se sabe si la ganadora mejora de verdad o solo gana entre
+variantes malas. Con `--aplicar` se escribe en `agrobot_config.json` dejando
+copia de seguridad y mostrando qué cambió.
+
+Puntúa pisar plantas y chocar muy caro (12 y 25 puntos), el desvío de la ruta
+en proporción, y premia avanzar.
+
+## Qué llega al robot real
+
+| Qué | Dónde | Cómo lo usa el robot |
+|---|---|---|
+| Maniobras enseñadas | `~/.agrobot/aprendizaje/maniobras.json` | Las carga al arrancar y las repite en la misma situación |
+| Política entrenada | `~/.agrobot/aprendizaje/politica.pt` | Con `autonomia.politica_activa` en la config |
+| Configuración ajustada | `agrobot_config.json` | `montecarlo.py --aplicar` (con copia de seguridad) |
+| Inclinación del servo | el número que imprime Montecarlo | Se fija en el dashboard o en el arranque de la patrulla |
+
 ## Métricas
 
 - `recorrido_m`, `colisiones` (episodios de choque) y `contacto_s` (tiempo rozando)

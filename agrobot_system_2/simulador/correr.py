@@ -43,6 +43,12 @@ DT = 0.02                     # paso de física (s de simulación)
 # Tras una corrección del operador, la autonomía espera en silencio: si no,
 # le quitaría el mando a mitad de la maniobra que le están enseñando.
 SILENCIO_TRAS_CORRECCION_S = 2.5
+# Escaneo: hasta dónde se reconoce una planta y con cuántos píxeles mínimos.
+DISTANCIA_ESCANEO_MAX_M = 2.5
+PIXELES_MINIMOS_PLANTA = 18
+ANCHO_CAMARA = 320
+# A qué distancia de un punto marcado el robot se para a escanearlo.
+RADIO_PUNTO_ESCANEO_M = 0.55
 LIDAR_PERIODO_S = 0.1         # 10 Hz, como el RPLIDAR C1
 # Inclinación de partida. 72° de servo ≈ 36° bajo el horizonte: medido como
 # el mejor compromiso en el simulador (100 % en sendero frente al 39 % a 62°).
@@ -115,6 +121,11 @@ class Episodio:
         self.filas = []
         self.escaneos = 0
         self.plagas_vistas = set()
+        self.escaneadas = set()            # plantas efectivamente miradas de cerca
+        self.puntos_escaneados = set()     # puntos marcados ya cubiertos
+        self.t_escaneando = 0.0
+        self.foco = False
+        self._escaneo_en_curso = None
         self.t_en_sendero = 0.0
         self.t_total = 0.0
         self.visitas = {}
@@ -285,14 +296,83 @@ class Episodio:
         return self.robot.frame(self.geometria()), self.reloj.t, self._seq
 
     async def _escanear(self, motivo):
-        """Barrido de cámara: el robot se para y mira las plantas cercanas."""
+        """Barrido de escaneo, como el del robot: parar, foco y barrer el servo.
+
+        El robot no "ve" una planta por estar cerca: la ve si cae dentro del
+        campo de la cámara CON la inclinación que tiene el servo en ese
+        instante, y si está lo bastante cerca para distinguirla. Por eso el
+        barrido recorre de `escaneo_angulo_min` a `escaneo_angulo_max`: una
+        sola inclinación deja fuera lo que tiene justo delante o lo que está
+        a dos metros."""
+        cfg = self.cfg["autonomia"]
         self.robot.ordenar(0.0, 0.0)
-        await asyncio.sleep(self.cfg["autonomia"]["escaneo_duracion_s"])
+        self.foco = True
+        a0, a1 = int(cfg["escaneo_angulo_min"]), int(cfg["escaneo_angulo_max"])
+        dur = max(0.5, float(cfg["escaneo_duracion_s"]))
+        pasos = max(3, int(dur / 0.6))
+        servo_previo = self.robot.servo_objetivo
+        vistas, plagas = set(), set()
+        t_ini = self.reloj.t
+        for k in range(pasos + 1):
+            if self.parar_pedido:
+                break
+            self.robot.mover_servo(a0 + (a1 - a0) * k / pasos)
+            await asyncio.sleep(dur / (pasos + 1))
+            v, p = self._plantas_a_la_vista()
+            vistas |= v
+            plagas |= p
+        self.robot.mover_servo(servo_previo)
+        self.foco = False
         self.escaneos += 1
-        for i, (px, py, _, plaga) in enumerate(self.mundo.plantas):
-            if math.dist((px, py), (self.robot.x, self.robot.y)) < 1.2 and plaga:
-                self.plagas_vistas.add(i)
-        self.eventos.append({"t": round(self.reloj.t, 1), "evento": "escaneo", "motivo": motivo})
+        self.escaneadas |= vistas
+        self.plagas_vistas |= plagas
+        self.t_escaneando += self.reloj.t - t_ini
+        self.eventos.append({"t": round(self.reloj.t, 1), "evento": "escaneo", "motivo": motivo,
+                             "plantas_vistas": len(vistas), "plagas": len(plagas),
+                             "segundos": round(self.reloj.t - t_ini, 1)})
+
+    def _plantas_a_la_vista(self):
+        """Qué plantas entran en el campo de la cámara con la inclinación actual.
+
+        Se comprueba de verdad la geometría: la franja de suelo que abarca la
+        cámara depende de su altura, su inclinación y su campo; y una planta
+        muy lejos ocupa tan pocos píxeles que no se reconoce."""
+        geo = self.geometria()
+        phi = math.radians(geo["camara_inclinacion_deg"])
+        medio_v = math.radians(geo["camara_hfov_deg"] * 0.75) / 2      # vertical ≈ 3/4 del horizontal
+        medio_h = math.radians(geo["camara_hfov_deg"]) / 2
+        h = geo["camara_altura_m"]
+        # Distancias al suelo que cubre el borde inferior y el superior.
+        cerca = h / math.tan(min(math.pi / 2 - 1e-3, phi + medio_v))
+        lejos = (h / math.tan(max(1e-3, phi - medio_v))) if phi > medio_v else DISTANCIA_ESCANEO_MAX_M
+        cerca, lejos = max(0.05, cerca), min(DISTANCIA_ESCANEO_MAX_M, lejos)
+        vistas, plagas = set(), set()
+        for i, (px, py, radio, plaga, altura) in enumerate(self.mundo.plantas):
+            dx, dy = px - self.robot.x, py - self.robot.y
+            # A ejes del robot (la cámara va montada mirando al frente).
+            adelante = dx * math.cos(self.robot.theta) + dy * math.sin(self.robot.theta)
+            lado = -dx * math.sin(self.robot.theta) + dy * math.cos(self.robot.theta)
+            adelante -= geo["camara_adelante_m"]
+            if not (cerca <= adelante <= lejos):
+                continue
+            if abs(math.atan2(lado, max(adelante, 1e-3))) > medio_h:
+                continue
+            # Tamaño aparente: por debajo de unos pocos píxeles no se
+            # reconoce nada, ni con el mejor modelo.
+            dist = math.hypot(adelante, lado)
+            px_planta = 2 * radio / dist * (ANCHO_CAMARA / 2) / math.tan(medio_h)
+            if px_planta < PIXELES_MINIMOS_PLANTA:
+                continue
+            vistas.add(i)
+            if plaga:
+                plagas.add(i)
+        return vistas, plagas
+
+    async def _escanear_punto(self, indice, pos):
+        """Escaneo de un punto marcado en el mapa (los 🌱 del dashboard)."""
+        self.explorador.ceder_mando(self.cfg["autonomia"]["escaneo_duracion_s"] + 2)
+        await self._escanear(f"punto de escaneo {indice}")
+        self.puntos_escaneados.add(indice)
 
     # ----------------------------------------------------------------- física
     async def _fisica(self):
@@ -350,6 +430,16 @@ class Episodio:
                   and self.cfg["autonomia"].get("sendero_activo")):
                 self._sendero_visto_en = self.reloj.t
                 self._buscando_servo = asyncio.create_task(self._buscar_inclinacion())
+
+            # ¿Hay un punto de escaneo al lado y sin cubrir? Pararse y mirarlo.
+            if (len(self.mundo.escaneos) and self.piloto is None
+                    and (self._escaneo_en_curso is None or self._escaneo_en_curso.done())):
+                for i, (ex, ey) in enumerate(self.mundo.escaneos):
+                    if i in self.puntos_escaneados:
+                        continue
+                    if math.dist((ex, ey), (self.robot.x, self.robot.y)) < RADIO_PUNTO_ESCANEO_M:
+                        self._escaneo_en_curso = asyncio.create_task(self._escanear_punto(i, (ex, ey)))
+                        break
 
             if self.reloj.t - self._ultima_traza >= 0.25:
                 self._ultima_traza = self.reloj.t
@@ -703,6 +793,9 @@ class Episodio:
             "aprendidas": self.explorador.aprendidas,
             "aprendizaje": self.aprendizaje.resumen(),
             "escaneos": self.escaneos,
+            "puntos_escaneo_cubiertos": f"{len(self.puntos_escaneados)}/{len(self.mundo.escaneos)}",
+            "plantas_escaneadas": len(self.escaneadas),
+            "segundos_escaneando": round(self.t_escaneando, 1),
             "plagas_detectadas": f"{len(self.plagas_vistas)}/{plagas}",
             "bucles_detectados": self.bucles,
             "celdas_visitadas": len(self.visitas),

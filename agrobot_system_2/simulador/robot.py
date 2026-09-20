@@ -151,7 +151,10 @@ class RobotSim:
         m = self.mundo
         candidatas = []
         if len(m.plantas):
-            candidatas.append((m.plantas[:, 0], m.plantas[:, 1], "c"))
+            # Solo se pisan las bajas: una mata alta el robot la ve y frena.
+            bajas = m.plantas[m.plantas[:, 4] < 0.30] if m.plantas.shape[1] > 4 else m.plantas
+            if len(bajas):
+                candidatas.append((bajas[:, 0], bajas[:, 1], "c"))
         bajas = m.objetos[m.objetos[:, 3] < 0.30] if len(m.objetos) else None
         if bajas is not None and len(bajas):
             candidatas.append((bajas[:, 0], bajas[:, 1], "o"))

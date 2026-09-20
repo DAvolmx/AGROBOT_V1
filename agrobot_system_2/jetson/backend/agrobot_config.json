@@ -21,7 +21,7 @@
   "slam": {
     "robot_largo_cm": 40,
     "robot_ancho_cm": 35,
-    "cono_frontal_deg": 45,
+    "cono_frontal_deg": 20,
     "cono_lateral_deg": 60,
     "margen_parada_cm": 17,
     "deslizamiento_cm": 40,
@@ -29,7 +29,7 @@
   },
   "autonomia": {
     "escala_velocidad": 0.5,
-    "distancia_puntos_cm": 50,
+    "distancia_puntos_cm": 20,
     "avance_libre_cm": 100,
     "lado_libre_cm": 60,
     "retroceso_libre_cm": 30,
@@ -45,7 +45,8 @@
     "sendero_vision_peso": 0.5,
     "sendero_verde_h_min": 30,
     "sendero_verde_h_max": 90,
-    "sendero_verde_s_min": 60
+    "sendero_verde_s_min": 60,
+    "sendero_paja": true
   },
   "odometria_webcam": {
     "habilitada": true,

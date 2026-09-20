@@ -54,6 +54,17 @@
       "lidar_frontal_cm": 106.2,
       "lidar_izq_cm": 40.3,
       "lidar_der_cm": 44.0
+    },
+    {
+      "nombre": "20260919_221251",
+      "poses": 307,
+      "duracion_s": 153.6,
+      "distancia_m": 15.047,
+      "deriva_m": 7.623,
+      "deriva_pct": 50.7,
+      "lidar_frontal_cm": 83.5,
+      "lidar_izq_cm": 34.1,
+      "lidar_der_cm": 97.8
     }
   ],
   "bug_imu": {

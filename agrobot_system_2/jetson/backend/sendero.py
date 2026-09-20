@@ -56,12 +56,19 @@ FILA_SUELO = 0.50
 EXG_MIN = 0.06
 BRILLO_MIN = 60           # suma R+G+B; en sombras muy oscuras el color es ruido
 
-# Paja: al menos esto más brillante que la mediana del suelo, y amarillenta
-# (H de OpenCV 0..180). La saturación mínima deja fuera cielo, plástico y
-# papel blancos.
+# Paja: dos criterios, porque depende de cómo esté el suelo.
+#  · Suelo HÚMEDO/oscuro (fotos del usuario): la paja es mucho más CLARA.
+#  · Suelo SECO (terreno medido el 2026-09-19): paja y tierra tienen el mismo
+#    brillo (V 152 vs 155) pero la paja es el doble de SATURADA (S 36 vs 18) y
+#    amarillenta, y la tierra es gris.
+# La referencia del suelo es la zona central baja de la imagen, donde suele
+# estar el camino. H de OpenCV 0..180.
 PAJA_BRILLO_REL = 1.25
-PAJA_H = (8, 35)
-PAJA_S_MIN = 35
+PAJA_H = (5, 35)
+PAJA_S_MIN = 35              # criterio de brillo: deja fuera cielo y plástico blancos
+PAJA_S_SOBRE_SUELO = 10      # criterio de color: saturación por encima del suelo
+PAJA_S_ABS = 22
+PAJA_V_REL_MIN = 0.55        # sombras muy oscuras: el color no es fiable
 
 # Búsqueda del rumbo del sendero respecto del robot.
 ANGULOS_DEG = list(range(-40, 41, 2))
@@ -113,18 +120,27 @@ def mascara_vegetacion(cv2, img, cfg):
 
 
 def mascara_paja(cv2, img):
-    """uint8 0/255 con la paja/mulch seco: más clara que el suelo, amarillenta."""
+    """uint8 0/255 con la paja/mulch seco (ver PAJA_*)."""
     import numpy as np
 
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-    suelo_v = np.ascontiguousarray(v[int(img.shape[0] * FILA_SUELO):])
+    alto, ancho = img.shape[:2]
+    suelo_v = np.ascontiguousarray(v[int(alto * FILA_SUELO):])
+    ref = (slice(int(alto * 0.6), alto), slice(int(ancho * 0.3), int(ancho * 0.7)))
+    s_suelo, v_suelo = float(np.median(s[ref])), float(np.median(v[ref]))
+    calida = (h >= PAJA_H[0]) & (h <= PAJA_H[1])
+
     otsu, _ = cv2.threshold(suelo_v, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    umbral = max(float(otsu), float(np.median(suelo_v)) * PAJA_BRILLO_REL)
-    paja = (v > umbral) & (h >= PAJA_H[0]) & (h <= PAJA_H[1]) & (s >= PAJA_S_MIN)
+    umbral_v = max(float(otsu), float(np.median(suelo_v)) * PAJA_BRILLO_REL)
+    por_brillo = (v > umbral_v) & calida & (s >= PAJA_S_MIN)
+    por_color = (calida & (s > max(PAJA_S_ABS, s_suelo + PAJA_S_SOBRE_SUELO))
+                 & (v > v_suelo * PAJA_V_REL_MIN))
+
+    m = ((por_brillo | por_color) * 255).astype(np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     # La paja es fibrosa: se cierra en manchas para que cuente como franja.
-    m = (paja * 255).astype(np.uint8)
-    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
     return cv2.medianBlur(m, 5)
 
 

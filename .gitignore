@@ -38,3 +38,6 @@ __pycache__/
 # Credenciales (token de Telegram, etc.)
 .env
 *.env.local
+
+# Resultados de episodios del simulador (se regeneran)
+agrobot_system_2/simulador/resultados/

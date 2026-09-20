@@ -3838,3 +3838,64 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   `agrobot_mapping.launch.py`, `agrobot_navigation.launch.py`,
   `dashboard/index.html`, `dashboard/training.html`,
   `tools/graficas_navegacion.py`, `tools/probar_sendero.py`, `docs/*`.
+
+- **2026-09-20** — **Simulador propio (`agrobot_system_2/simulador/`) y paja
+  detectada también por color.**
+
+  **Simulador.** Corre el CÓDIGO REAL contra un mundo virtual: importa
+  `slam.LidarReactive`, `sendero.SeguidorSendero`, `explorador.ExploradorReactivo`
+  y `pulse_drive.ConductorPulsos`, así que lo que se ajusta ahí es lo que
+  corre en el campo. Sin ROS, sin GPU y sin pantalla: pensado para WSL en la
+  PC del usuario, aunque corre igual en la Jetson.
+  - `mundo.py`: paredes (las ve el LIDAR) vs sendero, paja y plantas (BAJOS:
+    solo la cámara, porque el LIDAR va a ~30 cm y pasa por encima). LIDAR por
+    trazado de rayos a 10 Hz y cámara sintética con la misma geometría que
+    usa `sendero.py`. 5 escenarios: `bucle` (la huerta real), `hileras`,
+    `pasillo`, `callejon`, `trampa_bucle`.
+  - `robot.py`: skid-steer con los vicios medidos — piso de motores
+    (PWM 200..255) aplicado DESPUÉS de la rampa del backend (al revés el
+    robot no se movería con `max_linear_accel` = 0,1), patinaje al girar y
+    deslizamiento al soltar. Choques contados por EPISODIO, más `contacto_s`.
+  - `correr.py`: reloj VIRTUAL (sustituye `time.monotonic`, `time.time` y
+    `asyncio.sleep`) — un episodio de 2 min tarda ~20 s reales (3×–17×).
+    Escribe CSV con el mismo formato que `~/.agrobot/navigation_logs` más el
+    desvío del sendero, eventos JSON, resumen de métricas, PNG de trayectoria
+    y vídeo opcional.
+
+  **Primera tanda (120 s por escenario), y qué destapó:**
+
+  | Escenario | Recorrido | Choques | Contacto | En sendero | Giros |
+  |---|---|---|---|---|---|
+  | bucle | 16,7 m | 0 | 0 s | 100 % | 0 |
+  | hileras | 17,5 m | 20 | 7,4 s | 47,8 % | 154 |
+  | pasillo | 4,6 m | 0 | 0 s | 100 % | 71 |
+  | callejon | 6,7 m | 101 | 42,8 s | 28,7 % | 43 |
+  | trampa_bucle | 7,2 m | 0 | 0 s | 23,7 % | 229 |
+
+  En el callejón el robot pasa 43 s rozando la pared: gira sobre su eje
+  pegado a ella y el freno del LIDAR NO recorta el giro (es así a propósito,
+  para no quitarle la maniobra de zafar). En `trampa_bucle` gasta 229 giros
+  sin salir. Esos dos son los objetivos de entrenamiento pendientes.
+
+  **Detector de senderos con suelo SECO.** Medido en el terreno el 2026-09-19
+  con la cámara del robot: paja V 152 / S 36 y tierra V 155 / S 18 — mismo
+  brillo, el doble de saturación. El criterio de "más clara que el suelo" (que
+  vale con tierra húmeda) no marcaba nada. `mascara_paja` suma ahora un
+  criterio de COLOR (saturación sobre la del suelo de la zona central baja +
+  tono cálido). La prueba de regresión sigue en 36/36 (1,1 cm de error).
+
+  **Barrido de inclinación en el terreno** (`servo 110°→40°`): con la cámara
+  casi horizontal (98°) media imagen es pared o cielo y entra la franja
+  transversal de la curva; lo que mejor ve el sendero es ~58–66° de servo
+  (unos 42–47° hacia abajo), donde la cámara abarca de 0,5 a 1,5 m. Escala
+  medida: 1° de servo ≈ 0,8° de inclinación. El simulador usa servo 62°.
+
+  **⚠️ Pendientes detectados en los datos del robot (2026-09-19, 22:12):**
+  `navigation_logger` graba `vx_desired` y `vx_real` SIEMPRE en cero, así que
+  no se puede comparar lo comandado con lo real. Y en esa sesión hay 22
+  saltos de pose de >25 cm en 0,5 s que suman 6,8 de los 15 m "recorridos":
+  la deriva del 50,7 % que sale en la tabla está inflada por esos saltos.
+
+  Archivos: `simulador/{mundo,robot,correr}.py`, `simulador/README.md`,
+  `sendero.py`, `.gitignore`.
+

@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgroBot — Simulador</title>
+<style>
+:root {
+  --bg:#161a24; --panel:#1f2431; --panel2:#272d3d; --ink:#e3e7f0; --soft:#8d97ad;
+  --acento:#00bd4f; --acento-ink:#6ef5a0; --acento-soft:rgba(0,189,79,.15);
+  --warn:#f5a623; --crit:#e74c3c; --linea:#333b50;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--linea);flex-wrap:wrap}
+header h1{font-size:15px;color:var(--acento);font-weight:700}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid var(--linea);color:var(--soft)}
+.pill .dot{width:6px;height:6px;border-radius:50%;background:var(--crit)}
+.pill.ok .dot{background:var(--acento)}
+select,input[type=number]{background:var(--bg);border:1px solid var(--linea);color:var(--ink);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit}
+button{background:var(--panel2);border:1px solid var(--linea);color:var(--ink);border-radius:7px;padding:5px 12px;font-size:12.5px;cursor:pointer;font-family:inherit;min-height:32px}
+button:hover{border-color:var(--acento);color:var(--acento-ink)}
+button.activo{background:var(--acento-soft);border-color:var(--acento);color:var(--acento-ink);font-weight:600}
+button.peligro{border-color:var(--crit);color:var(--crit)}
+#tabs{display:flex;gap:4px;padding:6px 14px 0;background:var(--panel);border-bottom:1px solid var(--linea)}
+#tabs button{border-radius:8px 8px 0 0;border-bottom:none}
+main{flex:1;overflow:hidden;display:flex}
+.tab{display:none;flex:1;overflow:auto;padding:14px;gap:14px}
+.tab.activa{display:flex}
+.col{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--linea);border-radius:12px;padding:12px}
+.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--soft);margin-bottom:8px}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.kv b{color:var(--acento-ink);font-weight:600}
+.rejilla{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+canvas{display:block;background:#10131d;border-radius:8px;width:100%}
+img.vista{width:100%;border-radius:8px;background:#000;display:block}
+.cruceta{display:grid;grid-template-columns:repeat(3,54px);gap:5px;justify-content:center}
+.cruceta button{font-size:17px;padding:10px 0}
+.stop{border-color:var(--crit);color:var(--crit)}
+.hint{font-size:11.5px;color:var(--soft);line-height:1.5}
+#eventos{font-size:11.5px;max-height:190px;overflow:auto}
+#eventos div{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.barra{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AgroBot · Simulador</h1>
+  <span id="ws-pill" class="pill"><span class="dot"></span><span id="ws-txt">conectando…</span></span>
+  <span class="pill mono" id="pill-t">t 0 s</span>
+  <div class="barra" style="margin-left:auto">
+    <span class="hint">Escenario</span>
+    <select id="sel-escenario"></select>
+    <button id="btn-reset">↻ Reiniciar</button>
+    <span class="hint">Modo</span>
+    <button id="btn-auto" class="activo">🤖 Autónomo</button>
+    <button id="btn-manual">🕹 Manual</button>
+    <span class="hint">Velocidad</span>
+    <input type="number" id="factor" value="1" min="0.1" max="5" step="0.1" style="width:64px">
+  </div>
+</header>
+
+<div id="tabs">
+  <button data-tab="estado" class="activo">Estado</button>
+  <button data-tab="sensores">Sensores</button>
+  <button data-tab="mapa">Mapa 2D</button>
+  <button data-tab="tres-d">Vista 3D</button>
+  <button data-tab="aprender">Aprendizaje</button>
+  <button data-tab="slam">SLAM y ruta</button>
+  <button data-tab="editor">Editor de mapas</button>
+</div>
+
+<main>
+  <!-- ESTADO -->
+  <section class="tab activa" id="tab-estado">
+    <div class="col" style="flex:1">
+      <div class="card">
+        <h3>Robot</h3>
+        <div class="kv"><span>Pose</span><b class="mono" id="e-pose">—</b></div>
+        <div class="kv"><span>Velocidad real</span><b class="mono" id="e-vel">—</b></div>
+        <div class="kv"><span>Velocidad pedida</span><b class="mono" id="e-vel-pedida">—</b></div>
+        <div class="kv"><span>Estado</span><b id="e-estado">—</b></div>
+      </div>
+      <div class="card">
+        <h3>Métricas del episodio</h3>
+        <div class="rejilla" id="e-metricas"></div>
+      </div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card">
+        <h3>Sendero (cámara)</h3>
+        <div class="kv"><span>Centro del sendero</span><b class="mono" id="s-lateral">—</b></div>
+        <div class="kv"><span>Rumbo de las hileras</span><b class="mono" id="s-rumbo">—</b></div>
+        <div class="kv"><span>Ancho medido</span><b class="mono" id="s-ancho">—</b></div>
+        <div class="kv"><span>Detector</span><b id="s-vision" style="font-size:11.5px">—</b></div>
+      </div>
+      <div class="card">
+        <h3>Eventos</h3>
+        <div id="eventos" class="mono"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SENSORES -->
+  <section class="tab" id="tab-sensores">
+    <div class="col" style="flex:1">
+      <div class="card"><h3>Cámara del robot</h3><img class="vista" id="img-camara" alt=""></div>
+      <div class="card"><h3>Detector de senderos</h3><img class="vista" id="img-sendero" alt="">
+        <p class="hint" style="margin-top:6px">Amarillo: paja · verde: plantas · naranja: bordes · magenta: centro del sendero</p>
+      </div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card"><h3>LIDAR (360°)</h3><canvas id="radar" height="340"></canvas>
+        <p class="hint" style="margin-top:6px">El LIDAR solo ve lo ALTO (paredes). El sendero, la paja y las plantas chicas quedan por debajo: solo existen para la cámara.</p>
+      </div>
+      <div class="card"><h3>Distancias libres</h3><div class="rejilla" id="e-lidar"></div></div>
+    </div>
+  </section>
+
+  <!-- MAPA 2D -->
+  <section class="tab" id="tab-mapa">
+    <div class="col" style="flex:1">
+      <div class="card" style="flex:1"><h3>Mapa del escenario</h3>
+        <canvas id="mapa2d" height="560"></canvas>
+        <p class="hint" style="margin-top:6px">Gris: paredes (las ve el LIDAR) · marrón: sendero · beige: paja · verde: plantas · magenta: recorrido</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3D -->
+  <section class="tab" id="tab-tres-d">
+    <div class="col" style="flex:1">
+      <div class="card" style="flex:1">
+        <div class="barra" style="margin-bottom:8px">
+          <h3 style="margin:0">Vista 3D</h3>
+          <span class="hint">arrastrá para girar · rueda para acercar</span>
+          <label class="hint" style="margin-left:auto"><input type="checkbox" id="seguir" checked> seguir al robot</label>
+        </div>
+        <img class="vista" id="img-3d" alt="">
+      </div>
+    </div>
+  </section>
+
+  <!-- APRENDIZAJE -->
+  <section class="tab" id="tab-aprender">
+    <div class="col" style="flex:1">
+      <div class="card">
+        <h3>Corregir y enseñar</h3>
+        <p class="hint">Podés corregir <b>sin salir de automático</b>: en cuanto tocás un control, la autonomía
+          cede el mando unos segundos y mira. Los pulsos seguidos se guardan como UNA maniobra, atada a la
+          situación en la que estaba (hueco libre alrededor, dónde cae el sendero y qué intentaba hacer).
+          La próxima vez que se vea así, lo repite.</p>
+        <div class="cruceta" style="margin-top:12px">
+          <div></div><button data-accion="adelante">▲</button><div></div>
+          <button data-accion="izquierda">◀</button>
+          <button data-accion="parar" class="stop">■</button>
+          <button data-accion="derecha">▶</button>
+          <div></div><button data-accion="atras">▼</button><div></div>
+        </div>
+        <p class="hint" style="text-align:center;margin-top:8px">También con W A S D o las flechas · espacio para parar</p>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:10px">
+          <input type="checkbox" id="maniobra" checked> Giro con maniobra (tierra blanda)
+        </label>
+      </div>
+      <div class="card">
+        <h3>Lo aprendido</h3>
+        <div class="kv"><span>Intervenciones tuyas</span><b class="mono" id="a-interv">0</b></div>
+        <div class="kv"><span>Situaciones distintas</span><b class="mono" id="a-situaciones">0</b></div>
+        <div class="kv"><span>Maniobras guardadas</span><b class="mono" id="a-maniobras">0</b></div>
+        <div class="kv"><span>Veces que las usó solo</span><b class="mono" id="a-usadas">0</b></div>
+        <div class="kv"><span>Muestras (CSV)</span><b class="mono" id="a-muestras">0</b></div>
+        <div class="barra" style="margin-top:10px">
+          <label class="hint" style="display:flex;gap:6px;align-items:center">
+            <input type="checkbox" id="usar-aprendido" checked> Aplicar lo aprendido
+          </label>
+          <button id="btn-csv">⬇ muestras.csv</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Maniobras enseñadas</h3>
+        <div id="a-lista" style="font-size:12px;max-height:260px;overflow:auto"></div>
+        <p class="hint" style="margin-top:6px">La firma resume la situación: F/I/D/A = hueco libre delante,
+          izquierda, derecha y atrás (0 = pegado, L = libre); S = dónde cae el sendero. Se guardan en
+          <span class="mono" id="a-ruta">~/.agrobot/aprendizaje/maniobras.json</span>, que también lee el robot real.</p>
+      </div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card"><h3>Cámara</h3><img class="vista" id="img-camara2" alt=""></div>
+    </div>
+  </section>
+  <!-- SLAM Y RUTA -->
+  <section class="tab" id="tab-slam">
+    <div class="col" style="flex:2">
+      <div class="card" style="flex:1">
+        <h3>Mapa que está construyendo el SLAM</h3>
+        <img class="vista" id="img-slam" alt="">
+        <p class="hint" style="margin-top:6px">Verde: dónde está de verdad · azul: dónde cree estar ·
+          naranja: la ruta ideal. Si las paredes salen dobles o borrosas, es que la pose derivó
+          mientras mapeaba: el mismo problema que en el robot real.</p>
+      </div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card">
+        <h3>Localización</h3>
+        <div class="kv"><span>Error de posición</span><b class="mono" id="sl-error">—</b></div>
+        <div class="kv"><span>Error de rumbo</span><b class="mono" id="sl-rumbo">—</b></div>
+        <div class="kv"><span>Saltos del SLAM</span><b class="mono" id="sl-saltos">—</b></div>
+        <div class="kv"><span>Aciertos del mapa</span><b class="mono" id="sl-mapa">—</b></div>
+        <div class="kv"><span>Desvío de la ruta ideal</span><b class="mono" id="sl-desvio">—</b></div>
+        <div class="barra" style="margin-top:10px">
+          <label class="hint" style="display:flex;gap:6px;align-items:center">
+            <input type="checkbox" id="sl-usar" checked> El robot navega con la pose del SLAM
+          </label>
+          <button id="sl-corregir">📍 Corregir pose</button>
+        </div>
+        <div class="barra" style="margin-top:8px">
+          <span class="hint">Ruido del SLAM</span>
+          <input type="number" id="sl-ruido" value="1" min="0" max="3" step="0.1" style="width:64px">
+          <span class="hint">0 = perfecto · 1 = como el robot real</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Recorrido ideal</h3>
+        <p class="hint">Traza una línea por el centro del sendero y la recorre. Es la referencia de
+          "así había que hacerlo": guarda los datos y luego se compara con el modo autónomo.</p>
+        <div class="barra" style="margin-top:10px">
+          <button id="btn-ideal" class="activo">▶ Iniciar recorrido ideal</button>
+          <button id="btn-ideal-parar">■ Terminar</button>
+        </div>
+        <div class="barra" style="margin-top:8px">
+          <button id="btn-comparar">↻ Volver al inicio y comparar en automático</button>
+          <button id="btn-cerrar-comp">✔ Cerrar comparación</button>
+        </div>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:10px">
+          <input type="checkbox" id="chk-filtro"> Filtro de conducción ideal
+          <span>(corrige al robot para que no se salga de la ruta)</span>
+        </label>
+        <div class="kv"><span>Correcciones del filtro</span><b class="mono" id="sl-filtro-n">0</b></div>
+      </div>
+      <div class="card">
+        <h3>Comparación</h3>
+        <div id="comparacion"><p class="hint">Todavía no hay comparación.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EDITOR -->
+  <section class="tab" id="tab-editor">
+    <div class="col" style="flex:2">
+      <div class="card" style="flex:1">
+        <div class="barra" style="margin-bottom:8px">
+          <button class="herr activo" data-herr="sendero">〰 Sendero</button>
+          <button class="herr" data-herr="pared">▬ Pared</button>
+          <button class="herr" data-herr="planta">🌿 Planta</button>
+          <button class="herr" data-herr="escaneo">🌱 Punto de escaneo</button>
+          <button class="herr" data-herr="borrar">✖ Borrar cerca</button>
+          <button id="ed-deshacer">↶ Deshacer</button>
+          <span class="hint" id="ed-pista">Clic para ir añadiendo puntos al sendero</span>
+        </div>
+        <canvas id="editor" height="520"></canvas>
+        <p class="hint" style="margin-top:6px">Cada cuadro es 1 m. El sendero es lo que el robot debe recorrer;
+          las paredes son lo ALTO que ve el LIDAR; las plantas solo las ve la cámara.</p>
+      </div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card">
+        <h3>Partir de un mapa</h3>
+        <div class="barra">
+          <select id="ed-mapa-real"></select>
+          <button id="ed-cargar-real">Cargar mapa real del robot</button>
+        </div>
+        <p class="hint" style="margin-top:6px">Trae las paredes del SLAM (los mapas guardados del robot) para
+          dibujarle encima el sendero que vas a recorrer.</p>
+        <div class="barra" style="margin-top:10px">
+          <select id="ed-guardado"></select>
+          <button id="ed-cargar">Cargar dibujado</button>
+        </div>
+        <div class="barra" style="margin-top:10px">
+          <button id="ed-vacio">Empezar en blanco</button>
+          <button id="ed-actual">Copiar el escenario actual</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Medidas</h3>
+        <div class="kv"><span>Ancho del sendero</span><input type="number" id="ed-ancho" value="0.65" step="0.05" min="0.2" max="2" style="width:80px"></div>
+        <div class="kv"><span>Ancho de la paja</span><input type="number" id="ed-paja" value="0.35" step="0.05" min="0" max="2" style="width:80px"></div>
+        <div class="kv"><span>Suelo seco (0 húmedo, 1 seco)</span><input type="number" id="ed-seco" value="0.35" step="0.05" min="0" max="1" style="width:80px"></div>
+        <div class="kv"><span>Puntos de escaneo</span><b class="mono" id="ed-n-escaneos">0</b></div>
+        <div class="kv"><span>Puntos del sendero</span><b class="mono" id="ed-n-sendero">0</b></div>
+        <div class="kv"><span>Paredes</span><b class="mono" id="ed-n-paredes">0</b></div>
+        <div class="kv"><span>Plantas</span><b class="mono" id="ed-n-plantas">0</b></div>
+      </div>
+      <div class="card">
+        <h3>Usar y guardar</h3>
+        <div class="barra">
+          <input type="text" id="ed-nombre" placeholder="nombre del mapa" style="flex:1;background:var(--bg);border:1px solid var(--linea);color:var(--ink);border-radius:6px;padding:5px 8px">
+          <button id="ed-guardar">💾 Guardar</button>
+        </div>
+        <button id="ed-simular" style="width:100%;margin-top:8px" class="activo">▶ Simular en este mapa</button>
+        <p class="hint" style="margin-top:8px">Al simular, el robot arranca al principio del sendero dibujado.
+          Lo que entrenes aquí (manejo y correcciones) se guarda en las mismas muestras.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let mundo = null, estado = null, ws = null;
+
+// ---------------------------------------------------------------- pestañas
+document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("#tabs button").forEach((x) => x.classList.remove("activo"));
+  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("activa"));
+  b.classList.add("activo");
+  $("tab-" + b.dataset.tab).classList.add("activa");
+  dibujarMapa();
+  if (b.dataset.tab === "editor") { listarMundos(); dibujarEditor(); }
+}));
+const tabActiva = () => document.querySelector(".tab.activa").id.replace("tab-", "");
+
+// ---------------------------------------------------------------- WebSocket
+function conectar() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { $("ws-pill").classList.add("ok"); $("ws-txt").textContent = "conectado"; };
+  ws.onclose = () => { $("ws-pill").classList.remove("ok"); $("ws-txt").textContent = "desconectado"; setTimeout(conectar, 1200); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = (e) => { estado = JSON.parse(e.data); pintar(); };
+}
+
+function pintar() {
+  if (!estado || !estado.listo) return;
+  const p = estado.pose, v = estado.velocidad, s = estado.sendero, m = estado.metricas;
+  $("pill-t").textContent = `t ${estado.t} s`;
+  $("e-pose").textContent = `x ${p.x.toFixed(2)}  y ${p.y.toFixed(2)}  θ ${p.theta_deg.toFixed(0)}°`;
+  $("e-vel").textContent = `${v.v.toFixed(2)} m/s · ${v.omega.toFixed(2)} rad/s`;
+  $("e-vel-pedida").textContent = `${v.v_pedida.toFixed(2)} m/s · ${v.omega_pedida.toFixed(2)} rad/s`;
+  $("e-estado").textContent = estado.explorador.estado;
+  const cm = (x) => x == null ? "—" : `${(x * 100).toFixed(0)} cm`;
+  $("s-lateral").textContent = cm(estado.sensores.sendero_lateral_m);
+  $("s-rumbo").textContent = estado.sensores.sendero_rumbo_deg == null ? "—" : `${estado.sensores.sendero_rumbo_deg}°`;
+  $("s-ancho").textContent = cm(estado.sensores.sendero_ancho_m);
+  $("s-vision").textContent = s.vision;
+  $("a-muestras").textContent = m.muestras;
+  $("a-interv").textContent = m.intervenciones ?? 0;
+  $("a-usadas").textContent = m.aprendidas_usadas ?? 0;
+  if (estado.aprendizaje) pintarAprendizaje(estado.aprendizaje);
+  pintarSlam(estado);
+  $("e-metricas").innerHTML = [
+    ["Recorrido", `${m.recorrido_m} m`], ["Choques", m.colisiones],
+    ["Tiempo rozando", `${m.contacto_s} s`], ["En sendero", `${m.en_sendero_pct} %`],
+    ["Desvío actual", `${m.desvio_cm} cm`], ["Pulsos", estado.explorador.pulsos],
+    ["Giros", estado.explorador.giros], ["Correcciones", estado.explorador.correcciones],
+    ["Desatascos", estado.explorador.desatascos], ["Callejones", estado.explorador.callejones ?? 0],
+    ["Bucles", estado.explorador.bucles ?? 0], ["Escaneos", m.escaneos],
+  ].map(([k, val]) => `<div class="kv"><span>${k}</span><b class="mono">${val}</b></div>`).join("");
+  const se = estado.sensores;
+  $("e-lidar").innerHTML = [["Adelante", se.lidar_adelante_m], ["Atrás", se.lidar_atras_m],
+    ["Izquierda", se.lidar_izquierda_m], ["Derecha", se.lidar_derecha_m]]
+    .map(([k, val]) => `<div class="kv"><span>${k}</span><b class="mono">${val == null ? "libre" : (val * 100).toFixed(0) + " cm"}</b></div>`).join("");
+  if (estado.eventos.length) {
+    const cont = $("eventos");
+    estado.eventos.forEach((ev) => {
+      const d = document.createElement("div");
+      d.textContent = `${ev.t}s · ${ev.evento || ""} ${JSON.stringify(ev).slice(0, 110)}`;
+      cont.prepend(d);
+    });
+    while (cont.childElementCount > 80) cont.lastChild.remove();
+  }
+  $("btn-auto").classList.toggle("activo", estado.modo === "auto");
+  $("btn-manual").classList.toggle("activo", estado.modo === "manual");
+  if (tabActiva() === "mapa") dibujarMapa();
+  if (tabActiva() === "sensores") dibujarRadar();
+}
+
+// ---------------------------------------------------------------- mapa 2D
+function ajustarCanvas(c) {
+  const ancho = c.parentElement.clientWidth - 24;
+  if (c.width !== ancho) c.width = ancho;
+  return c.getContext("2d");
+}
+
+function dibujarMapa() {
+  const c = $("mapa2d");
+  if (!mundo || !c.parentElement.offsetParent) return;
+  const ctx = ajustarCanvas(c);
+  const [x0, y0, x1, y1] = mundo.limites;
+  const k = Math.min(c.width / (x1 - x0), c.height / (y1 - y0));
+  const px = (x) => (x - x0) * k, py = (y) => (y1 - y) * k;
+  ctx.fillStyle = "#4c4034"; ctx.fillRect(0, 0, c.width, c.height);
+
+  // Sendero y su paja
+  if (mundo.sendero.length > 1) {
+    for (const [ancho, color] of [[mundo.ancho_sendero + 2 * mundo.ancho_paja, "#b39b6a"],
+                                  [mundo.ancho_sendero, "#6b5a44"]]) {
+      ctx.strokeStyle = color; ctx.lineWidth = ancho * k; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.beginPath();
+      mundo.sendero.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y)));
+      ctx.stroke();
+    }
+  }
+  // Plantas
+  mundo.plantas.forEach(([x, y, r, plaga]) => {
+    ctx.beginPath(); ctx.arc(px(x), py(y), Math.max(2, r * k), 0, 7);
+    ctx.fillStyle = plaga ? "#d8e04a" : "#3fa85a"; ctx.fill();
+  });
+  // Puntos de escaneo
+  (mundo.escaneos || []).forEach(([x, y]) => {
+    ctx.font = "16px serif"; ctx.textAlign = "center"; ctx.fillText("🌱", px(x), py(y) + 5);
+  });
+  ctx.textAlign = "left";
+  // Paredes
+  ctx.strokeStyle = "#9aa3b2"; ctx.lineWidth = 4; ctx.lineCap = "butt";
+  mundo.paredes.forEach(([ax, ay, bx, by]) => {
+    ctx.beginPath(); ctx.moveTo(px(ax), py(ay)); ctx.lineTo(px(bx), py(by)); ctx.stroke();
+  });
+  if (!estado || !estado.listo) return;
+  // Recorrido y robot
+  if (estado.ruta && estado.ruta.length > 1) {      // ruta ideal
+    ctx.strokeStyle = "rgba(255,170,40,.95)"; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    estado.ruta.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y)));
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (estado.traza.length > 1) {
+    ctx.strokeStyle = "rgba(230,90,230,.9)"; ctx.lineWidth = 2; ctx.beginPath();
+    estado.traza.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y)));
+    ctx.stroke();
+  }
+  if (estado.traza_slam && estado.traza_slam.length > 1) {   // lo que el robot cree
+    ctx.strokeStyle = "rgba(90,140,255,.85)"; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    estado.traza_slam.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y)));
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  const p = estado.pose, th = -p.theta_deg * Math.PI / 180;
+  ctx.save(); ctx.translate(px(p.x), py(p.y)); ctx.rotate(th);
+  ctx.fillStyle = "#e0453a"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+  ctx.fillRect(-0.2 * k, -0.175 * k, 0.4 * k, 0.35 * k);
+  ctx.strokeRect(-0.2 * k, -0.175 * k, 0.4 * k, 0.35 * k);
+  ctx.beginPath(); ctx.moveTo(0.2 * k, 0); ctx.lineTo(0.42 * k, 0); ctx.stroke();
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- radar
+function dibujarRadar() {
+  const c = $("radar");
+  if (!estado || !estado.listo || !c.parentElement.offsetParent) return;
+  const ctx = ajustarCanvas(c);
+  const w = c.width, h = c.height, cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 12, escala = R / 4;
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = "#333b50"; ctx.fillStyle = "#8d97ad"; ctx.font = "10px monospace";
+  for (let m = 1; m <= 4; m++) {
+    ctx.beginPath(); ctx.arc(cx, cy, m * escala, 0, 7); ctx.stroke();
+    ctx.fillText(`${m} m`, cx + 3, cy - m * escala - 2);
+  }
+  ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+  estado.lidar.forEach(({ a, d }) => {
+    const rad = a * Math.PI / 180;
+    const x = cx + Math.sin(rad) * d * escala * -1, y = cy - Math.cos(rad) * d * escala;
+    ctx.beginPath(); ctx.arc(x, y, 1.8, 0, 7); ctx.fillStyle = "#00bd4f"; ctx.fill();
+  });
+  ctx.beginPath(); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx - 6, cy + 7); ctx.lineTo(cx + 6, cy + 7); ctx.closePath();
+  ctx.fillStyle = "#e0453a"; ctx.fill();
+}
+
+// ---------------------------------------------------------------- imágenes
+function refrescarImagen(id, url, siguiente) {
+  const img = $(id);
+  if (!img.parentElement.offsetParent) return setTimeout(() => refrescarImagen(id, url, siguiente), 600);
+  img.onload = img.onerror = () => setTimeout(() => refrescarImagen(id, url, siguiente), siguiente);
+  img.src = `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
+const vista3d = { yaw: -60, pitch: 32, distancia: 7 };
+function url3d() {
+  return `/vista3d.jpg?yaw=${vista3d.yaw.toFixed(1)}&pitch=${vista3d.pitch.toFixed(1)}` +
+         `&distancia=${vista3d.distancia.toFixed(1)}&seguir=${$("seguir").checked ? 1 : 0}`;
+}
+(function orbita() {
+  const img = $("img-3d");
+  let arrastre = null;
+  img.addEventListener("pointerdown", (e) => { arrastre = { x: e.clientX, y: e.clientY, ...vista3d }; img.setPointerCapture(e.pointerId); });
+  img.addEventListener("pointermove", (e) => {
+    if (!arrastre) return;
+    vista3d.yaw = arrastre.yaw + (e.clientX - arrastre.x) * 0.4;
+    vista3d.pitch = Math.max(5, Math.min(85, arrastre.pitch - (e.clientY - arrastre.y) * 0.3));
+  });
+  const soltar = () => { arrastre = null; };
+  img.addEventListener("pointerup", soltar); img.addEventListener("pointercancel", soltar);
+  img.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    vista3d.distancia = Math.max(1.5, Math.min(25, vista3d.distancia * (e.deltaY > 0 ? 1.15 : 1 / 1.15)));
+  }, { passive: false });
+})();
+
+// ---------------------------------------------------------------- controles
+async function post(url, cuerpo) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) alert(d.error || `HTTP ${r.status}`);
+  return d;
+}
+$("btn-auto").addEventListener("click", () => post("/modo", { modo: "auto" }));
+$("btn-manual").addEventListener("click", () => post("/modo", { modo: "manual" }));
+$("factor").addEventListener("change", (e) => post("/velocidad", { factor: parseFloat(e.target.value) }));
+$("btn-reset").addEventListener("click", async () => {
+  await post("/reset", { escenario: $("sel-escenario").value });
+  await cargarMundo();
+});
+$("btn-csv").addEventListener("click", () => location.href = "/muestras.csv");
+document.querySelectorAll("[data-accion]").forEach((b) =>
+  b.addEventListener("click", () => conducir(b.dataset.accion)));
+
+function conducir(accion) {
+  post("/control", { accion, maniobra: $("maniobra").checked });
+}
+const teclas = { w: "adelante", ArrowUp: "adelante", s: "atras", ArrowDown: "atras",
+                 a: "izquierda", ArrowLeft: "izquierda", d: "derecha", ArrowRight: "derecha", " ": "parar" };
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  const accion = teclas[e.key];
+  if (accion) { e.preventDefault(); conducir(accion); }
+});
+
+async function cargarMundo() {
+  mundo = await (await fetch("/mundo")).json();
+  const sel = $("sel-escenario");
+  if (!sel.options.length) {
+    mundo.escenarios.forEach((e) => sel.add(new Option(e, e)));
+  }
+  sel.value = mundo.nombre;
+  dibujarMapa();
+}
+
+// ---------------------------------------------------------------- SLAM y ruta
+function pintarSlam(e) {
+  const s = e.slam;
+  if (!s) return;
+  const cm = (v) => v == null ? "—" : `${(v * 100).toFixed(0)} cm`;
+  $("sl-error").textContent = cm(s.error_m);
+  $("sl-rumbo").textContent = s.error_rumbo_deg == null ? "—" : `${s.error_rumbo_deg}°`;
+  $("sl-saltos").textContent = `${s.saltos} (${s.salto_total_m} m)`;
+  $("sl-mapa").textContent = s.mapa && s.mapa.aciertos_pct != null
+    ? `${s.mapa.aciertos_pct}% · error ${s.mapa.error_medio_cm} cm` : "—";
+  $("sl-desvio").textContent = e.desvio_ruta_cm == null ? "—" : `${e.desvio_ruta_cm} cm`;
+  $("sl-filtro-n").textContent = e.correcciones_filtro ?? 0;
+  if ($("sl-usar") !== document.activeElement) $("sl-usar").checked = !!s.usar;
+  if ($("sl-ruido") !== document.activeElement) $("sl-ruido").value = s.ruido;
+  if ($("chk-filtro") !== document.activeElement) $("chk-filtro").checked = !!e.filtro_ideal;
+  $("btn-ideal").classList.toggle("activo", !e.recorrido_ideal);
+  if (e.comparacion && e.comparacion.autonomo) pintarComparacion(e.comparacion);
+}
+
+function pintarComparacion(c) {
+  const filas = ["recorrido_m", "desvio_medio_cm", "plantas_pisadas", "choques",
+                 "error_slam_final_cm", "saltos_slam", "segundos"];
+  const nombre = { recorrido_m: "Recorrido (m)", desvio_medio_cm: "Desvío medio (cm)",
+                   plantas_pisadas: "Plantas pisadas", choques: "Choques",
+                   error_slam_final_cm: "Error del SLAM (cm)", saltos_slam: "Saltos del SLAM",
+                   segundos: "Duración (s)" };
+  $("comparacion").innerHTML =
+    `<div class="kv"><span></span><b>ideal / autónomo</b></div>` +
+    filas.filter((k) => c.ideal && c.ideal[k] != null).map((k) => {
+      const i = c.ideal[k], a = c.autonomo[k];
+      const peor = (k === "recorrido_m" || k === "segundos") ? false : a > i;
+      return `<div class="kv"><span>${nombre[k]}</span>
+        <b class="mono" style="color:${peor ? "var(--crit)" : "var(--acento-ink)"}">${i} / ${a}</b></div>`;
+    }).join("");
+}
+
+$("btn-ideal").addEventListener("click", async () => {
+  const d = await post("/recorrido", { accion: "ideal" });
+  if (d.ok) document.querySelector('#tabs button[data-tab="mapa"]').click();
+});
+$("btn-ideal-parar").addEventListener("click", () => post("/recorrido", { accion: "parar" }));
+$("btn-comparar").addEventListener("click", () => post("/recorrido", { accion: "comparar" }));
+$("btn-cerrar-comp").addEventListener("click", async () => {
+  const c = await post("/recorrido", { accion: "cerrar_comparacion" });
+  if (c && c.autonomo) pintarComparacion(c);
+});
+$("chk-filtro").addEventListener("change", (e) => post("/filtro", { activo: e.target.checked }));
+$("sl-usar").addEventListener("change", (e) => post("/slam", { usar_slam: e.target.checked }));
+$("sl-ruido").addEventListener("change", (e) => post("/slam", { ruido: parseFloat(e.target.value) }));
+$("sl-corregir").addEventListener("click", () => post("/slam", { corregir: true }));
+
+// ---------------------------------------------------------------- aprendizaje
+function pintarAprendizaje(ap) {
+  $("a-situaciones").textContent = ap.situaciones;
+  $("a-maniobras").textContent = ap.maniobras;
+  $("a-ruta").textContent = ap.ruta;
+  $("a-lista").innerHTML = (ap.aprendidas || []).map((m) => `
+    <div class="kv">
+      <span><span class="mono" style="color:var(--soft)">${m.firma}</span><br>${m.pasos.join(" → ")}</span>
+      <span style="text-align:right">
+        <b class="mono">${m.exitos}✓ ${m.fracasos}✗</b><br>
+        <button data-olvidar="${m.firma}" style="padding:2px 8px;min-height:0;font-size:11px">olvidar</button>
+      </span>
+    </div>`).join("") || '<p class="hint">Todavía no te enseñó nada. Corregí al robot mientras va en automático.</p>';
+  $("a-lista").querySelectorAll("[data-olvidar]").forEach((b) =>
+    b.addEventListener("click", () => post("/aprendizaje", { olvidar: b.dataset.olvidar })));
+}
+$("usar-aprendido").addEventListener("change", (e) => post("/aprendizaje", { usar: e.target.checked }));
+
+// ---------------------------------------------------------------- editor
+const ed = { paredes: [], sendero: [], plantas: [], escaneos: [], limites: [-6, -6, 6, 6], herr: "sendero", pendiente: null, historia: [] };
+
+function edEscala(c) {
+  const [x0, y0, x1, y1] = ed.limites;
+  const k = Math.min(c.width / (x1 - x0), c.height / (y1 - y0));
+  return { k, px: (x) => (x - x0) * k, py: (y) => (y1 - y) * k,
+           mx: (p) => p / k + x0, my: (p) => y1 - p / k };
+}
+
+function dibujarEditor() {
+  const c = $("editor");
+  if (!c.parentElement.offsetParent) return;
+  const ctx = ajustarCanvas(c);
+  const e = edEscala(c);
+  ctx.fillStyle = "#10131d"; ctx.fillRect(0, 0, c.width, c.height);
+  // Rejilla de 1 m
+  ctx.strokeStyle = "rgba(255,255,255,.07)"; ctx.lineWidth = 1;
+  for (let x = Math.ceil(ed.limites[0]); x <= ed.limites[2]; x++) {
+    ctx.beginPath(); ctx.moveTo(e.px(x), 0); ctx.lineTo(e.px(x), c.height); ctx.stroke();
+  }
+  for (let y = Math.ceil(ed.limites[1]); y <= ed.limites[3]; y++) {
+    ctx.beginPath(); ctx.moveTo(0, e.py(y)); ctx.lineTo(c.width, e.py(y)); ctx.stroke();
+  }
+  // Sendero con su paja
+  const trazo = (pts, ancho, color) => {
+    if (pts.length < 2) return;
+    ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, ancho * e.k); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => i ? ctx.lineTo(e.px(x), e.py(y)) : ctx.moveTo(e.px(x), e.py(y)));
+    ctx.stroke();
+  };
+  const anchoS = parseFloat($("ed-ancho").value) || 0.65, anchoP = parseFloat($("ed-paja").value) || 0;
+  trazo(ed.sendero, anchoS + 2 * anchoP, "#b39b6a");
+  trazo(ed.sendero, anchoS, "#6b5a44");
+  ed.sendero.forEach(([x, y]) => {
+    ctx.beginPath(); ctx.arc(e.px(x), e.py(y), 4, 0, 7); ctx.fillStyle = "#00bd4f"; ctx.fill();
+  });
+  // Paredes
+  ctx.strokeStyle = "#9aa3b2"; ctx.lineWidth = 4; ctx.lineCap = "butt";
+  ed.paredes.forEach(([ax, ay, bx, by]) => {
+    ctx.beginPath(); ctx.moveTo(e.px(ax), e.py(ay)); ctx.lineTo(e.px(bx), e.py(by)); ctx.stroke();
+  });
+  // Plantas
+  ed.plantas.forEach(([x, y, r, plaga]) => {
+    ctx.beginPath(); ctx.arc(e.px(x), e.py(y), Math.max(3, r * e.k), 0, 7);
+    ctx.fillStyle = plaga ? "#d8e04a" : "#3fa85a"; ctx.fill();
+  });
+  // Puntos de escaneo
+  ed.escaneos.forEach(([x, y]) => {
+    ctx.font = `${Math.max(14, 0.3 * e.k)}px serif`; ctx.textAlign = "center";
+    ctx.fillText("🌱", e.px(x), e.py(y) + 5);
+  });
+  ctx.textAlign = "left";
+  // Lo que se está dibujando
+  if (ed.pendiente) {
+    const [x, y] = ed.pendiente;
+    ctx.beginPath(); ctx.arc(e.px(x), e.py(y), 5, 0, 7); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+  }
+  $("ed-n-sendero").textContent = ed.sendero.length;
+  $("ed-n-paredes").textContent = ed.paredes.length;
+  $("ed-n-plantas").textContent = ed.plantas.length;
+  $("ed-n-escaneos").textContent = ed.escaneos.length;
+}
+
+function edGuardarHistoria() {
+  ed.historia.push(JSON.stringify({ p: ed.paredes, s: ed.sendero, v: ed.plantas, e: ed.escaneos }));
+  if (ed.historia.length > 50) ed.historia.shift();
+}
+
+$("editor").addEventListener("click", (ev) => {
+  const c = $("editor"), r = c.getBoundingClientRect(), e = edEscala(c);
+  const x = +e.mx(ev.clientX - r.left).toFixed(2), y = +e.my(ev.clientY - r.top).toFixed(2);
+  edGuardarHistoria();
+  if (ed.herr === "sendero") ed.sendero.push([x, y]);
+  else if (ed.herr === "planta") ed.plantas.push([x, y, 0.08, 0]);
+  else if (ed.herr === "escaneo") ed.escaneos.push([x, y]);
+  else if (ed.herr === "pared") {
+    if (!ed.pendiente) ed.pendiente = [x, y];
+    else { ed.paredes.push([...ed.pendiente, x, y]); ed.pendiente = null; }
+  } else if (ed.herr === "borrar") {
+    const cerca = (ax, ay) => Math.hypot(ax - x, ay - y) < 0.4;
+    ed.sendero = ed.sendero.filter(([ax, ay]) => !cerca(ax, ay));
+    ed.plantas = ed.plantas.filter(([ax, ay]) => !cerca(ax, ay));
+    ed.escaneos = ed.escaneos.filter(([ax, ay]) => !cerca(ax, ay));
+    ed.paredes = ed.paredes.filter(([ax, ay, bx, by]) => !cerca((ax + bx) / 2, (ay + by) / 2));
+  }
+  dibujarEditor();
+});
+document.querySelectorAll(".herr").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".herr").forEach((x) => x.classList.remove("activo"));
+  b.classList.add("activo"); ed.herr = b.dataset.herr; ed.pendiente = null;
+  $("ed-pista").textContent = { sendero: "Clic para ir añadiendo puntos al sendero",
+    pared: "Clic en los dos extremos de cada pared", planta: "Clic donde va cada planta",
+    escaneo: "Clic donde el robot debe pararse a escanear 🌱",
+    borrar: "Clic cerca de lo que quieras quitar" }[ed.herr];
+}));
+$("ed-deshacer").addEventListener("click", () => {
+  const prev = ed.historia.pop();
+  if (!prev) return;
+  const d = JSON.parse(prev); ed.paredes = d.p; ed.sendero = d.s; ed.plantas = d.v; ed.escaneos = d.e || []; ed.pendiente = null;
+  dibujarEditor();
+});
+$("ed-vacio").addEventListener("click", () => {
+  edGuardarHistoria(); ed.paredes = []; ed.sendero = []; ed.plantas = []; ed.escaneos = [];
+  ed.limites = [-6, -6, 6, 6]; dibujarEditor();
+});
+$("ed-actual").addEventListener("click", () => {
+  if (!mundo) return;
+  edGuardarHistoria();
+  ed.paredes = mundo.paredes.map((p) => [...p]);
+  ed.sendero = mundo.sendero.map((p) => [...p]);
+  ed.plantas = mundo.plantas.map((p) => [...p]);
+  ed.escaneos = (mundo.escaneos || []).map((p) => [...p]);
+  ed.limites = [...mundo.limites];
+  $("ed-ancho").value = mundo.ancho_sendero; $("ed-paja").value = mundo.ancho_paja;
+  $("ed-seco").value = mundo.seco ?? 0.35;
+  dibujarEditor();
+});
+$("ed-cargar-real").addEventListener("click", async () => {
+  const nombre = $("ed-mapa-real").value;
+  if (!nombre) return;
+  const d = await (await fetch(`/mapa_real/${nombre}`)).json();
+  if (d.error) return alert(d.error);
+  edGuardarHistoria();
+  ed.paredes = d.paredes; ed.sendero = []; ed.plantas = []; ed.escaneos = []; ed.limites = d.limites;
+  $("ed-nombre").value = nombre + "_sim";
+  dibujarEditor();
+  $("ed-pista").textContent = "Mapa real cargado: dibujá encima el sendero a recorrer";
+});
+$("ed-cargar").addEventListener("click", async () => {
+  const nombre = $("ed-guardado").value;
+  if (!nombre) return;
+  await post("/reset", { guardado: nombre });
+  await cargarMundo();
+  $("ed-actual").click();
+});
+$("ed-guardar").addEventListener("click", async () => {
+  const nombre = $("ed-nombre").value.trim();
+  if (!nombre) return alert("Ponle un nombre al mapa");
+  const d = await post("/mundos", { nombre, mundo: mundoEditado() });
+  if (d.ok) { await listarMundos(); alert(`Guardado como «${d.nombre}»`); }
+});
+$("ed-simular").addEventListener("click", async () => {
+  if (ed.sendero.length < 2) return alert("Dibujá al menos dos puntos de sendero: ahí arranca el robot");
+  await post("/reset", { mundo: mundoEditado() });
+  await cargarMundo();
+  document.querySelector('#tabs button[data-tab="mapa"]').click();
+});
+function mundoEditado() {
+  const xs = ed.paredes.flatMap((p) => [p[0], p[2]]).concat(ed.sendero.map((p) => p[0]), [0]);
+  const ys = ed.paredes.flatMap((p) => [p[1], p[3]]).concat(ed.sendero.map((p) => p[1]), [0]);
+  const m = 1.0;
+  return { nombre: $("ed-nombre").value.trim() || "dibujado", paredes: ed.paredes,
+           sendero: ed.sendero, plantas: ed.plantas, escaneos: ed.escaneos,
+           seco: parseFloat($("ed-seco").value) || 0.35,
+           ancho_sendero: parseFloat($("ed-ancho").value) || 0.65,
+           ancho_paja: parseFloat($("ed-paja").value) || 0.35,
+           limites: [Math.min(...xs) - m, Math.min(...ys) - m, Math.max(...xs) + m, Math.max(...ys) + m] };
+}
+async function listarMundos() {
+  const d = await (await fetch("/mundos")).json();
+  const llenar = (sel, lista) => {
+    const v = sel.value; sel.innerHTML = "";
+    lista.forEach((n) => sel.add(new Option(n, n)));
+    if (lista.includes(v)) sel.value = v;
+  };
+  llenar($("ed-mapa-real"), d.mapas_reales);
+  llenar($("ed-guardado"), d.guardados);
+}
+["ed-ancho", "ed-paja", "ed-seco"].forEach((id) => $(id).addEventListener("input", dibujarEditor));
+
+window.addEventListener("resize", () => { dibujarMapa(); dibujarRadar(); dibujarEditor(); });
+cargarMundo();
+conectar();
+refrescarImagen("img-camara", "/camara.jpg", 200);
+refrescarImagen("img-camara2", "/camara.jpg", 250);
+refrescarImagen("img-sendero", "/sendero.jpg", 500);
+refrescarImagen("img-slam", "/mapa_slam.jpg", 700);
+(function refrescar3d() {
+  const img = $("img-3d");
+  if (!img.parentElement.offsetParent) return setTimeout(refrescar3d, 600);
+  img.onload = img.onerror = () => setTimeout(refrescar3d, 120);
+  img.src = url3d() + `&t=${Date.now()}`;
+})();
+</script>
+</body>
+</html>

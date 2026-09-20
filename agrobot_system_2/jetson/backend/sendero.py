@@ -63,6 +63,19 @@ BRILLO_MIN = 60           # suma R+G+B; en sombras muy oscuras el color es ruido
 #    amarillenta, y la tierra es gris.
 # La referencia del suelo es la zona central baja de la imagen, donde suele
 # estar el camino. H de OpenCV 0..180.
+# --- Modelo adaptativo del SENDERO -----------------------------------------
+# El borde no siempre es paja: puede ser hierba alta y verde, rastrojo, o
+# tierra de otro color. Describir el borde no escala. Lo que SÍ se sabe
+# siempre es por dónde va el robot: la franja justo delante del chasis es
+# camino. De ahí se saca el color del sendero y se marca como borde todo lo
+# que se aparte de él. Así el mismo detector vale para paja, maleza verde o
+# lo que haya.
+REF_FILAS = (0.80, 0.94)       # franja de la imagen que se toma como "camino seguro"
+REF_COLUMNAS = (0.35, 0.65)
+DIF_SENDERO = 2.6              # a cuántas desviaciones deja de ser camino
+DIF_MINIMA = 14.0              # suelo de tolerancia (ruido de la cámara)
+MEMORIA_SENDERO = 0.85         # el modelo se arrastra entre fotogramas
+
 PAJA_BRILLO_REL = 1.25
 PAJA_H = (5, 35)
 PAJA_S_MIN = 35              # criterio de brillo: deja fuera cielo y plástico blancos
@@ -117,6 +130,60 @@ def mascara_vegetacion(cv2, img, cfg):
     tono = cv2.inRange(hsv, (cfg["sendero_verde_h_min"], cfg["sendero_verde_s_min"], 40),
                        (cfg["sendero_verde_h_max"], 255, 255)) > 0
     return cv2.medianBlur(((veg & tono) * 255).astype(np.uint8), 3)
+
+
+class ModeloSendero:
+    """Color del camino, aprendido de lo que el robot tiene bajo las ruedas."""
+
+    def __init__(self):
+        self.media = None          # [L, a, b] del sendero
+        self.desv = None
+        self.muestras = 0
+
+    def actualizar(self, lab, alto, ancho):
+        """Toma la franja de delante del chasis como muestra de camino."""
+        import numpy as np
+
+        f0, f1 = int(alto * REF_FILAS[0]), int(alto * REF_FILAS[1])
+        c0, c1 = int(ancho * REF_COLUMNAS[0]), int(ancho * REF_COLUMNAS[1])
+        ref = lab[f0:f1, c0:c1].reshape(-1, 3)
+        if len(ref) < 30:
+            return
+        # Mediana y dispersión robusta (MAD): si al robot se le cuela media
+        # planta en la franja de referencia, la media se iría con ella.
+        mediana = np.median(ref, axis=0)
+        mad = np.median(np.abs(ref - mediana), axis=0) * 1.4826
+        mad = np.maximum(mad, DIF_MINIMA / DIF_SENDERO)
+        if self.media is None:
+            self.media, self.desv = mediana, mad
+        else:
+            k = MEMORIA_SENDERO
+            self.media = k * self.media + (1 - k) * mediana
+            self.desv = k * self.desv + (1 - k) * mad
+        self.muestras += 1
+
+    def distancia(self, lab):
+        """Cuánto se aparta cada píxel del color del sendero (en sigmas)."""
+        import numpy as np
+
+        if self.media is None:
+            return None
+        d = (lab.astype(np.float32) - self.media) / self.desv
+        return np.sqrt((d * d).sum(axis=2))
+
+
+def mascara_por_color(cv2, img, modelo: "ModeloSendero"):
+    """Bordes = lo que NO se parece al camino que el robot está pisando."""
+    import numpy as np
+
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+    modelo.actualizar(lab, img.shape[0], img.shape[1])
+    dist = modelo.distancia(lab)
+    if dist is None:
+        return np.zeros(img.shape[:2], np.uint8)
+    m = ((dist > DIF_SENDERO) * 255).astype(np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    return cv2.medianBlur(m, 5)
 
 
 def mascara_paja(cv2, img):
@@ -200,7 +267,8 @@ def _hueco(libre, inicio: int, max_salto: int):
 
 
 def detectar(cv2, frame, cfg, geo: dict, cenital: "Cenital",
-             centro_previo: float = 0.0, ancho_previo: float | None = None) -> dict:
+             centro_previo: float = 0.0, ancho_previo: float | None = None,
+             modelo: "ModeloSendero | None" = None) -> dict:
     """Análisis de un fotograma. No guarda estado.
 
     lateral_m: centro del sendero respecto del centro del robot (+ = a la
@@ -213,9 +281,16 @@ def detectar(cv2, frame, cfg, geo: dict, cenital: "Cenital",
     chico = cv2.resize(frame, (ANCHO_ANALISIS, ALTO_ANALISIS), interpolation=cv2.INTER_AREA)
     veg = mascara_vegetacion(cv2, chico, cfg)
     paja = mascara_paja(cv2, chico) if cfg.get("sendero_paja", True) else np.zeros_like(veg)
-    suelo = cenital.proyectar(cv2, cv2.bitwise_or(veg, paja))
+    # Borde por CONTRASTE con el camino: es el criterio que se adapta solo a
+    # lo que haya a los lados (paja, maleza verde, tierra distinta).
+    color = (mascara_por_color(cv2, chico, modelo)
+             if (modelo is not None and cfg.get("sendero_adaptativo", True))
+             else np.zeros_like(veg))
+    bordes = cv2.bitwise_or(cv2.bitwise_or(veg, paja), color)
+    suelo = cenital.proyectar(cv2, bordes)
     filas, cols = np.nonzero(suelo)
-    res = {"veg": veg, "paja": paja, "cenital": suelo, "lateral_m": None, "angulo_deg": None,
+    res = {"veg": veg, "paja": paja, "color": color, "cenital": suelo,
+           "lateral_m": None, "angulo_deg": None,
            "error_m": None, "bordes_m": None, "ancho_m": None, "confianza": 0.0}
 
     if len(filas) < MIN_PUNTOS:
@@ -296,6 +371,8 @@ def dibujar(cv2, frame, res) -> "np.ndarray":
 
     img = cv2.resize(frame, (ANCHO_ANALISIS, ALTO_ANALISIS), interpolation=cv2.INTER_AREA)
     tinte = img.copy()
+    if res.get("color") is not None:
+        tinte[res["color"] > 0] = (200, 120, 255)     # borde por contraste
     tinte[res["paja"] > 0] = (0, 220, 255)
     tinte[res["veg"] > 0] = (0, 255, 0)
     img = cv2.addWeighted(img, 0.5, tinte, 0.5, 0)
@@ -340,6 +417,7 @@ class VisionSendero:
         self.confianza = 0.0
         self.estado = "sin datos"
         self._cenital: Cenital | None = None
+        self.modelo = ModeloSendero()
 
     def cenital(self, geo) -> Cenital:
         clave = tuple(geo[k] for k in Cenital.CLAVES)
@@ -349,7 +427,8 @@ class VisionSendero:
 
     def detectar(self, cv2, frame, cfg, geo) -> dict:
         return detectar(cv2, frame, cfg, geo, self.cenital(geo),
-                        centro_previo=self.lateral_m or 0.0, ancho_previo=self.ancho_m)
+                        centro_previo=self.lateral_m or 0.0, ancho_previo=self.ancho_m,
+                        modelo=self.modelo)
 
     def analizar(self, cv2, frame, cfg, geo) -> float | None:
         """Desvío en metros MIRADA_M adelante (+ = corregir a la izquierda)."""

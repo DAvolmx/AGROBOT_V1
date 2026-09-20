@@ -110,6 +110,12 @@ DEFAULTS = {
         # La paja seca (mulch) de los costados también marca el borde del
         # sendero. Apagar si el camino mismo está cubierto de paja.
         "sendero_paja": True,
+        # Borde por contraste con el color del propio sendero: se adapta a
+        # bordes de paja, de maleza verde o de tierra distinta.
+        "sendero_adaptativo": True,
+        # Política entrenada en el simulador (politica.pt). Apagada por
+        # defecto: se enciende cuando se ha comprobado que mejora.
+        "politica_activa": False,
     },
     "odometria_webcam": {
         # Odometría visual con la webcam (odometria_webcam.py). `habilitada`

@@ -28,6 +28,15 @@ RENDIMIENTO_GIRO = 0.65
 DECEL_INERCIA = 0.19
 RADIO_ROBOT_M = 0.24          # media diagonal de la carrocería (40 × 35 cm)
 
+# Servo de la cámara. Medido en el robot real el 2026-09-19: INCLINA (no
+# panea), recorrido 25°..110°, reposo 98° ≈ 15,5° bajo el horizonte, y 1° de
+# servo ≈ 0,8° de inclinación. Se mueve a ~120°/s y tarda en asentarse.
+SERVO_MIN, SERVO_MAX, SERVO_HOME = 25.0, 110.0, 98.0
+SERVO_VEL_DEG_S = 120.0
+SERVO_ASENTADO_S = 0.35
+SERVO_GRADOS_POR_GRADO = 0.8
+INCLINACION_EN_HOME = 15.5
+
 
 class RobotSim:
     """Estado del robot y su integración. Recibe (v, omega) COMANDADAS."""
@@ -42,6 +51,11 @@ class RobotSim:
         self.v = self.omega = 0.0              # lo que realmente hace el robot
         self.recorrido = 0.0
         self.colisiones = 0          # episodios de choque, no pasos de física
+        self.servo = SERVO_HOME      # ángulo actual del servo de la cámara
+        self.servo_objetivo = SERVO_HOME
+        self._servo_quieto_desde = 0.0
+        self.plantas_pisadas = 0     # las que el LIDAR no ve y el robot aplasta
+        self.roces_rama = 0          # frenadas por hojas que no son obstáculo
         self.contacto_s = 0.0        # tiempo pegado a un obstáculo
         self.en_contacto = False
         self.t = 0.0
@@ -57,7 +71,32 @@ class RobotSim:
         signo = math.copysign(1.0, pedida)
         return signo * max(abs(pedida), piso)
 
+    def mover_servo(self, angulo):
+        """Pedir una inclinación de cámara (grados de servo, 25..110)."""
+        self.servo_objetivo = max(SERVO_MIN, min(SERVO_MAX, float(angulo)))
+
+    @property
+    def servo_asentado(self) -> bool:
+        """Tras moverse, el servo oscila: hasta que no se asienta, lo que ve
+        la cámara no sirve (el robot real lo comprueba igual)."""
+        return (abs(self.servo - self.servo_objetivo) < 0.5
+                and self.t - self._servo_quieto_desde > SERVO_ASENTADO_S)
+
+    @property
+    def inclinacion_camara(self) -> float:
+        """Grados que la cámara mira hacia abajo, según dónde esté el servo."""
+        return INCLINACION_EN_HOME + SERVO_GRADOS_POR_GRADO * (SERVO_HOME - self.servo)
+
+    def _paso_servo(self, dt):
+        objetivo = self.servo_objetivo
+        if abs(objetivo - self.servo) < 1e-3:
+            return
+        paso = SERVO_VEL_DEG_S * dt
+        self.servo += max(-paso, min(paso, objetivo - self.servo))
+        self._servo_quieto_desde = self.t
+
     def paso(self, dt):
+        self._paso_servo(dt)
         seg = self.cfg["safety"]
         # Orden IGUAL que en el robot real: primero la rampa del backend
         # (`safety.max_*_accel`), y el piso de los motores DESPUÉS, ya en el
@@ -81,6 +120,7 @@ class RobotSim:
         nx = self.x + v * math.cos(th) * dt
         ny = self.y + v * math.sin(th) * dt
 
+        self._pisar(nx, ny)
         if self._choca(nx, ny):
             # Un roce mantenido es UN choque, no uno por paso: si no, girar
             # pegado a una pared daba miles de "colisiones".
@@ -96,16 +136,63 @@ class RobotSim:
         self.theta = (th + om * dt / 2 + math.pi) % (2 * math.pi) - math.pi
         self.t += dt
 
+    def _pisar(self, x, y):
+        """Plantas aplastadas: las que quedan bajo la huella del robot.
+
+        Es EL daño que no se ve venir: el LIDAR barre a 30 cm y una plantita
+        de 10 no existe para él, así que el robot cree el camino libre, se
+        sale del sendero y la pisa. Aquí se cuenta."""
+        m = self.mundo
+        candidatas = []
+        if len(m.plantas):
+            candidatas.append((m.plantas[:, 0], m.plantas[:, 1], "c"))
+        bajas = m.objetos[m.objetos[:, 3] < 0.30] if len(m.objetos) else None
+        if bajas is not None and len(bajas):
+            candidatas.append((bajas[:, 0], bajas[:, 1], "o"))
+        for px, py, marca in candidatas:
+            cerca = np.nonzero(np.hypot(px - x, py - y) < RADIO_ROBOT_M)[0]
+            for i in cerca:
+                clave = (marca, int(i))
+                if clave not in m.pisadas:
+                    m.pisadas.add(clave)
+                    self.plantas_pisadas += 1
+
     def _choca(self, x, y):
-        """Choque contra una pared: el LIDAR y el chasis ven lo mismo (alto)."""
-        if len(self.mundo.paredes) == 0:
+        """Choque real: paredes y objetos SÓLIDOS (macetas, piedras).
+
+        Las ramas y arbustos NO cuentan: el LIDAR los ve y el robot frena por
+        ellos, pero se puede pasar. Esa diferencia es la que enseña al robot a
+        no quedarse bloqueado por un falso obstáculo."""
+        if len(self.mundo.paredes):
+            x1, y1, x2, y2 = self.mundo.paredes.T
+            ex, ey = x2 - x1, y2 - y1
+            largo2 = np.maximum(ex * ex + ey * ey, 1e-9)
+            t = np.clip(((x - x1) * ex + (y - y1) * ey) / largo2, 0, 1)
+            d = np.hypot(x - (x1 + t * ex), y - (y1 + t * ey))
+            if bool((d < RADIO_ROBOT_M).any()):
+                return True
+        obj = self.mundo.objetos
+        if len(obj):
+            solidos = obj[obj[:, 4] > 0.5]
+            if len(solidos):
+                d = np.hypot(solidos[:, 0] - x, solidos[:, 1] - y)
+                if bool((d < RADIO_ROBOT_M + solidos[:, 2]).any()):
+                    return True
+        return False
+
+    def falso_obstaculo_delante(self, alcance=0.8) -> bool:
+        """¿Lo que tengo delante es solo follaje? (para medir frenadas inútiles)"""
+        obj = self.mundo.objetos
+        if not len(obj):
             return False
-        x1, y1, x2, y2 = self.mundo.paredes.T
-        ex, ey = x2 - x1, y2 - y1
-        largo2 = np.maximum(ex * ex + ey * ey, 1e-9)
-        t = np.clip(((x - x1) * ex + (y - y1) * ey) / largo2, 0, 1)
-        d = np.hypot(x - (x1 + t * ex), y - (y1 + t * ey))
-        return bool((d < RADIO_ROBOT_M).any())
+        follaje = obj[(obj[:, 4] < 0.5) & (obj[:, 3] >= 0.30)]
+        if not len(follaje):
+            return False
+        dx, dy = follaje[:, 0] - self.x, follaje[:, 1] - self.y
+        delante = dx * math.cos(self.theta) + dy * math.sin(self.theta)
+        lado = abs(-dx * math.sin(self.theta) + dy * math.cos(self.theta))
+        return bool(((delante > 0) & (delante < alcance + follaje[:, 2]) &
+                     (lado < RADIO_ROBOT_M + follaje[:, 2])).any())
 
     # -------------------------------------------------------------- sensores
     def pose(self) -> dict:

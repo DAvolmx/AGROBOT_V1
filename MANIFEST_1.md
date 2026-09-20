@@ -3905,3 +3905,69 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   Archivos: `simulador/{mundo,robot,correr}.py`, `simulador/README.md`,
   `sendero.py`, `.gitignore`.
 
+- **2026-09-20 (tarde)** — **Entrenador completo: correcciones en vivo,
+  política `.pt`, SLAM simulado, ruta ideal y detector de bordes adaptativo.**
+
+  **Aprender del operador** (`jetson/backend/aprendizaje.py`, lo usa también
+  el robot real). Se puede corregir al robot SIN sacarlo de automático: al
+  tocar un control la autonomía cede el mando unos segundos
+  (`ExploradorReactivo.ceder_mando`). Los pulsos seguidos se agrupan en UNA
+  maniobra atada a la FIRMA de la situación (huecos libres en tramos gruesos,
+  dónde cae el sendero, qué intentaba hacer). Cuando el robot se ve así otra
+  vez, la repite; si falla dos veces, deja de proponerla. En
+  `~/.agrobot/aprendizaje/maniobras.json`.
+
+  **Política entrenada** (`politica.py` + `simulador/entrenar.py`). Red de
+  14 entradas → 4 acciones (~5000 parámetros, decide en <1 ms en CPU). Se
+  entrena imitando los recorridos ideales de escenarios ALEATORIOS, con
+  reflejo especular para equilibrar giros (la primera tanda salió 1184
+  "adelante" / 318 "izquierda" / 7 "derecha"). Con 3018 ejemplos: 82,6 % de
+  acierto y, evaluada en escenarios nuevos, desvío 35,7 → 3,5 cm, plantas
+  pisadas 1,67 → 0, choques 1,0 → 0. En el robot se activa con
+  `autonomia.politica_activa`; el freno por LIDAR manda siempre por encima.
+
+  **SLAM simulado** (`simulador/slam_sim.py`): pose estimada con deriva
+  (3,5 %/m, más en giros) y SALTOS al cerrar bucles, más el mapa de ocupación
+  que construye desde esa pose (paredes emborronadas cuando deriva). Reproduce
+  lo medido en el robot: 13,7 % y 29,9 % de deriva, y 22 saltos >25 cm en
+  154 s. El software del simulador navega con esa pose, no con la verdadera.
+
+  **Ruta ideal y comparación** (`simulador/ruta_ideal.py`): línea por el
+  centro del sendero y piloto de persecución pura. Botones "iniciar recorrido
+  ideal", "volver al inicio y comparar" y "filtro de conducción ideal". En el
+  bucle: ideal 5,0 cm de desvío y 0 plantas pisadas; autónomo 41,1 cm y 3.
+
+  **Objetos con ALTURA** (`mundo.TIPOS_OBJETO`), que es lo que decide qué ve
+  cada sensor con el LIDAR a 30 cm: paredes y macetas (las ve, choca), ramas
+  y arbustos (LAS VE pero se atraviesan: falso obstáculo), plantas chicas (no
+  las ve y **las pisa**, que es el daño real). Métricas nuevas
+  `plantas_pisadas` y `frenadas_por_follaje`.
+
+  **Servo de cámara simulado** con su recorrido real (25–110°, 0,8° de
+  inclinación por grado de servo, tiempo de asentado) y **calibración de
+  inclinación al arrancar**: prueba varios ángulos y se queda con el que mejor
+  ve el sendero, puntuando confianza × evidencia × estabilidad. A 62° el robot
+  perdía el sendero (39,5 % del tiempo dentro); a 72°, 100 %.
+
+  **Detector de senderos adaptativo al color** (`sendero.py`): además de paja
+  y vegetación, ahora aprende el COLOR DEL CAMINO de la franja que el robot
+  tiene bajo las ruedas (Lab, mediana y MAD) y marca como borde lo que se
+  aparta de él. Resuelve dos casos que antes fallaban por completo: bordes de
+  tierra removida (ni paja ni verde) y camino cubierto de paja con bordes de
+  tierra. Config `autonomia.sendero_adaptativo`. La regresión sintética pasa
+  36/36 y el error lateral baja de 1,1 a 0,7 cm.
+
+  **Dashboard del simulador** (`simulador/servidor.py` + `dashboard.html`):
+  7 pestañas (Estado, Sensores, Mapa 2D, Vista 3D, Aprendizaje, SLAM y ruta,
+  Editor de mapas), vista 3D propia sin librerías (`vista3d.py`), texturas de
+  terreno con ruido de valor, editor que importa los mapas reales del SLAM, y
+  escenarios aleatorios.
+
+  **Arreglos:** `robot.pose` es método y `slam.pose` propiedad — sin los
+  paréntesis el explorador reventaba con "'method' object is not
+  subscriptable"; ahora el bucle del explorador registra la TRAZA del error, no
+  solo el mensaje.
+
+  Archivos: `aprendizaje.py`, `politica.py`, `explorador.py`, `sendero.py`,
+  `jetson_server.py`, `config_store.py`, `simulador/*`.
+

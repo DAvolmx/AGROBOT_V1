@@ -49,6 +49,8 @@ from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
 from explorador import ExploradorReactivo
 from sendero import SeguidorSendero
 from navigation_logger import NavigationLogger, analizar_sesion
+from aprendizaje import Aprendizaje
+from politica import Politica
 
 # =============================================
 # ===== CONFIG =====
@@ -997,6 +999,30 @@ async def _barrido_camara():
             "servo_angle": state.servo_angle, "led": state.led_on}})
 
 
+aprendizaje = None
+politica = None
+
+
+def _percepcion_robot() -> dict:
+    """Lo que percibe el robot, con los MISMOS nombres que en el simulador.
+
+    De esto dependen las maniobras aprendidas y la política entrenada: si
+    aquí se llamara distinto, lo aprendido en simulación no valdría."""
+    d = lidar_reactive.distancias(state.config["slam"])
+    v = seguidor_sendero.vision if seguidor_sendero is not None else None
+    pose = current_pose()
+    return {
+        "lidar_adelante_m": d.get("adelante"), "lidar_atras_m": d.get("atras"),
+        "lidar_izquierda_m": d.get("izquierda"), "lidar_derecha_m": d.get("derecha"),
+        "sendero_lateral_m": getattr(v, "lateral_m", None),
+        "sendero_rumbo_deg": getattr(v, "angulo_deg", None),
+        "sendero_ancho_m": getattr(v, "ancho_m", None),
+        "sendero_confianza": getattr(v, "confianza", 0.0),
+        "v_actual": round(float(pose.get("vx", 0.0)), 3),
+        "omega_actual": round(float(pose.get("vyaw", 0.0)), 3),
+    }
+
+
 def _conducir_pulso(accion: str, maniobra: bool = True):
     """Un pulso del conductor manual, con el acelerador de la config.
 
@@ -1939,6 +1965,14 @@ async def start_background(app: web.Application):
     )
     print(f"[patrulla] lista — {len(patrol.waypoints)} waypoints grabados")
 
+    # Lo aprendido en el simulador y de las correcciones del operador. Ambos
+    # son opcionales: si no hay ficheros, el robot se comporta como siempre.
+    global aprendizaje, politica
+    aprendizaje = Aprendizaje()
+    politica = Politica()
+    print(f"[aprendizaje] {aprendizaje.resumen()['maniobras']} maniobras · "
+          f"política {'cargada' if politica.disponible else 'no disponible'}")
+
     global seguidor_sendero, explorador
     seguidor_sendero = SeguidorSendero(
         get_config=lambda: state.config["autonomia"],
@@ -1958,6 +1992,9 @@ async def start_background(app: web.Application):
         edad_scan=lidar_reactive.edad_scan_s,
         get_config=lambda: state.config["autonomia"],
         seguidor=seguidor_sendero,
+        aprendizaje=aprendizaje,
+        sensores=_percepcion_robot,
+        politica=politica if state.config["autonomia"].get("politica_activa") else None,
     )
 
     pose_estimator.gyro_weight = state.config["slam"]["pose_gyro_trust"]

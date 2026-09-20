@@ -29,6 +29,7 @@ grabación automática que en modo manual), así el mapa nuevo queda con su ruta
 import asyncio
 import math
 import time
+import traceback
 
 TICK_S = 0.25
 
@@ -76,8 +77,16 @@ FRENTE_CALLEJON_M = 0.45
 class ExploradorReactivo:
     def __init__(self, *, distancias, get_pose, conducir, parar,
                  escanear, on_event, grabar_recorrido, edad_scan, get_config,
-                 seguidor=None):
+                 seguidor=None, aprendizaje=None, sensores=None, politica=None):
         self._seguidor = seguidor          # SeguidorSendero | None
+        # Lo que enseñó el operador corrigiendo en vivo (aprendizaje.py).
+        self._aprendizaje = aprendizaje
+        self._sensores = sensores          # () -> dict con lo que percibe el robot
+        # Política aprendida en el simulador (politica.py). Propone el pulso
+        # en marcha normal; el freno por LIDAR y las reglas de atasco siguen
+        # mandando por encima.
+        self._politica = politica
+        self.pulsos_politica = 0
         self._get_config = get_config      # () -> sección `autonomia` de la config
         self._distancias = distancias      # () -> {adelante, atras, izquierda, derecha}
         self._edad_scan = edad_scan        # () -> segundos desde el último /scan
@@ -102,6 +111,8 @@ class ExploradorReactivo:
         self._forzar_lado = None
         self._compromiso = 0
         self._sin_corregir = 0
+        self._mando_cedido_hasta = 0.0
+        self.aprendidas = 0
         self.bucles = 0
         self.callejones = 0
         self._ref_pose = None
@@ -117,7 +128,8 @@ class ExploradorReactivo:
             return False, "sin datos del LIDAR — revisá el cable y que el SLAM esté corriendo"
         self.activo = True
         self.pulsos = self.giros = self.desatascos = self.escaneos = 0
-        self.correcciones = self.bucles = self.callejones = 0
+        self.correcciones = self.bucles = self.callejones = self.aprendidas = 0
+        self.pulsos_politica = 0
         self._memoria.clear()
         self._forzar_lado, self._compromiso = None, 0
         self._ultimo_escaneo = 0.0        # primer barrido nada más arrancar
@@ -139,7 +151,8 @@ class ExploradorReactivo:
         d = {"activo": self.activo, "estado": self.estado, "pulsos": self.pulsos,
              "giros": self.giros, "desatascos": self.desatascos,
              "escaneos": self.escaneos, "correcciones": self.correcciones,
-             "bucles": self.bucles, "callejones": self.callejones}
+             "bucles": self.bucles, "callejones": self.callejones,
+             "aprendidas": self.aprendidas, "pulsos_politica": self.pulsos_politica}
         if self._seguidor is not None:
             d["sendero"] = self._seguidor.snapshot()
         return d
@@ -158,6 +171,51 @@ class ExploradorReactivo:
 
     def _conducir(self, accion, maniobra=True):
         self._conducir_cb(accion, maniobra)
+
+    def ceder_mando(self, segundos: float):
+        """El operador acaba de corregir: la autonomía calla un rato.
+
+        Sin esto le quitaría el mando a mitad de la maniobra que le están
+        enseñando, y ni la lección saldría entera ni el robot obedecería."""
+        self._mando_cedido_hasta = time.monotonic() + segundos
+        self.estado = "corrigiendo el operador"
+
+    def _percepcion(self) -> dict | None:
+        """Lo que se le pasa al aprendizaje para reconocer la situación."""
+        if self._sensores is not None:
+            return self._sensores()
+        d = self._distancias()
+        v = getattr(self._seguidor, "vision", None)
+        return {"lidar_adelante_m": d.get("adelante"), "lidar_atras_m": d.get("atras"),
+                "lidar_izquierda_m": d.get("izquierda"), "lidar_derecha_m": d.get("derecha"),
+                "sendero_lateral_m": getattr(v, "lateral_m", None)}
+
+    async def _probar_aprendido(self, apurado=True) -> bool:
+        """¿Me enseñaron algo para esta situación? Entonces eso, y no la regla.
+
+        Se ejecuta la SECUENCIA entera: salir de un atasco suele necesitar
+        varios movimientos encadenados, no uno.
+
+        `apurado=False` es marcha normal, y ahí el listón sube: hace falta que
+        la lección se haya dado (o confirmado) más de una vez. Si no, una
+        corrección suelta en campo abierto secuestraría la conducción."""
+        if self._aprendizaje is None:
+            return False
+        sensores = self._percepcion()
+        m = self._aprendizaje.consultar(sensores, self.estado)
+        if m is None or (not apurado and m.exitos < 1):
+            return False
+        self.aprendidas += 1
+        self.estado = f"aprendido: {' → '.join(p['accion'] for p in m.pasos)}"
+        self._emitir(evento="usa_aprendido", firma=m.firma,
+                     pasos=[p["accion"] for p in m.pasos], confianza=round(m.confianza, 2))
+        self._aprendizaje.aplicada(m, sensores, ahora=time.monotonic())
+        for paso in m.pasos:
+            if not self.activo:
+                return True
+            self._conducir(paso["accion"], maniobra=paso.get("maniobra", True))
+            await asyncio.sleep(PAUSA_GIRO_S)
+        return True
 
     def _hay_sitio_para_maniobra(self, d) -> bool:
         """La maniobra traslada el robot hacia delante y hacia atrás."""
@@ -252,8 +310,14 @@ class ExploradorReactivo:
                     self._parar()
                     continue
 
+                # El operador tiene prioridad: mientras corrige, la autonomía
+                # mira y aprende, no manda.
+                if time.monotonic() < self._mando_cedido_hasta:
+                    continue
+
                 if self._atascado():
-                    await self._desatascar()
+                    if not await self._probar_aprendido():
+                        await self._desatascar()
                     continue
 
                 self._registrar_celda()
@@ -268,6 +332,10 @@ class ExploradorReactivo:
                 izq, der = self._hueco(d, "izquierda"), self._hueco(d, "derecha")
 
                 if frente >= avance_libre:
+                    # Lo enseñado por el operador manda sobre la regla, también
+                    # en marcha normal (con el listón más alto: ver _probar_aprendido).
+                    if await self._probar_aprendido(apurado=False):
+                        continue
                     # Con sitio delante, antes de avanzar se mira si hay que
                     # recentrarse en el sendero. La corrección es un pulso de
                     # giro corto: este chasis no sabe girar "un poco".
@@ -282,6 +350,16 @@ class ExploradorReactivo:
                         self.correcciones += 1
                         self._sin_corregir = 0
                         continue
+                    accion_politica = None
+                    if self._politica is not None and self._politica.disponible:
+                        accion_politica, seguridad = self._politica.decidir(self._percepcion())
+                    if accion_politica in ("adelante", "izquierda", "derecha"):
+                        self.estado = f"política: {accion_politica} ({seguridad:.2f})"
+                        self._conducir(accion_politica, maniobra=False)
+                        self.pulsos_politica += 1
+                        self.pulsos += 1
+                        self._sin_corregir += 1
+                        continue
                     self.estado = f"avanzando ({frente:.2f} m libres)"
                     self._conducir("adelante")
                     self.pulsos += 1
@@ -295,7 +373,8 @@ class ExploradorReactivo:
                 # Sin sitio delante ni a los lados: es un callejón, y se sale
                 # con una maniobra comprometida en vez de re-decidir cada tick.
                 if frente < FRENTE_CALLEJON_M and izq < lado_libre and der < lado_libre:
-                    await self._salir_callejon(d)
+                    if not await self._probar_aprendido():
+                        await self._salir_callejon(d)
                     continue
 
                 # Girar hacia donde más hueco haya. Tras detectar un bucle se
@@ -317,6 +396,8 @@ class ExploradorReactivo:
                     self._conducir("atras")
                     continue
 
+                if await self._probar_aprendido():
+                    continue
                 self.estado = "encerrado: girando en el sitio"
                 self._conducir(self._ultimo_lado, maniobra=False)
                 self.giros += 1
@@ -327,7 +408,10 @@ class ExploradorReactivo:
             self.estado = f"error: {exc}"
             self._parar()
             self._emitir(evento="error", detalle=str(exc))
-            print(f"[exploración] bucle abortado: {type(exc).__name__}: {exc}", flush=True)
+            # Con la traza: "TypeError" a secas no dice en qué línea fue, y
+            # este bucle es el que conduce el robot.
+            print(f"[exploración] bucle abortado: {type(exc).__name__}: {exc}\n"
+                  + traceback.format_exc(), flush=True)
 
     def _correccion_sendero(self):
         if self._seguidor is None:

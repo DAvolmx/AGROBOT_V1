@@ -41,3 +41,7 @@ __pycache__/
 
 # Resultados de episodios del simulador (se regeneran)
 agrobot_system_2/simulador/resultados/
+
+# Texturas PBR opcionales del simulador (se añaden a mano, no al repo)
+agrobot_system_2/simulador/texturas/*.jpg
+agrobot_system_2/simulador/texturas/*.png

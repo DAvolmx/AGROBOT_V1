@@ -180,6 +180,37 @@ def crear_app(sim: Simulacion) -> web.Application:
                                       (ep.robot.x, ep.robot.y, ep.robot.theta), cam, ep.traza)
         return _jpeg(img)
 
+    async def textura_terreno(request):
+        """El suelo del escenario como imagen, para el visor 3D.
+
+        Es la MISMA que ve la cámara del robot y el mapa 2D: bandas de paja,
+        plantas, humedad y piedras. Así el 3D no es una decoración aparte,
+        sino el terreno de verdad."""
+        px = int(request.query.get("px", 70))
+        img = await asyncio.to_thread(sim.ep.mundo.dibujo, px)
+        return _jpeg(img, calidad=88)
+
+    async def relieve_terreno(request):
+        """Mapa de relieve (normales) sacado del propio terreno.
+
+        Con esto la luz marca los surcos y la paja en vez de verse el suelo
+        como una calcomanía plana, y no hace falta descargar ningún paquete
+        de texturas."""
+        px = int(request.query.get("px", 70))
+
+        def render():
+            base = sim.ep.mundo.dibujo(px)
+            gris = cv2.cvtColor(base, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
+            gx = cv2.Sobel(gris, cv2.CV_32F, 1, 0, ksize=3)
+            gy = cv2.Sobel(gris, cv2.CV_32F, 0, 1, ksize=3)
+            fuerza = 2.5
+            n = np.dstack([-gx * fuerza, -gy * fuerza, np.ones_like(gris)])
+            n /= np.linalg.norm(n, axis=2, keepdims=True)
+            # Normales a color, como cualquier mapa de normales: RGB = XYZ.
+            return ((n * 0.5 + 0.5) * 255).astype(np.uint8)[:, :, ::-1]
+
+        return _jpeg(await asyncio.to_thread(render), calidad=88)
+
     async def geometria_mundo(_):
         m = sim.ep.mundo
         return web.json_response({
@@ -187,7 +218,11 @@ def crear_app(sim: Simulacion) -> web.Application:
             "paredes": m.paredes.tolist(), "sendero": m.sendero.tolist(),
             "ancho_sendero": m.ancho_sendero, "ancho_paja": m.ancho_paja,
             "plantas": m.plantas.tolist(), "escaneos": m.escaneos.tolist(),
-            "seco": m.seco,
+            "seco": m.seco, "borde": m.borde,
+            "objetos": [{"tipo": t, "x": float(o[0]), "y": float(o[1]), "radio": float(o[2]),
+                         "altura": float(o[3]), "solido": bool(o[4])}
+                        for o, t in zip(m.objetos, m.tipos)],
+            "altura_pared": 0.6, "altura_lidar": mundo_mod.ALTURA_LIDAR_M,
             "escenarios": list(mundo_mod.ESCENARIOS),
         })
 
@@ -366,6 +401,9 @@ def crear_app(sim: Simulacion) -> web.Application:
     app.router.add_get("/sendero.jpg", sendero_vista)
     app.router.add_get("/vista3d.jpg", vista_3d)
     app.router.add_get("/mundo", geometria_mundo)
+    app.router.add_get("/textura.jpg", textura_terreno)
+    app.router.add_get("/relieve.jpg", relieve_terreno)
+    app.router.add_static("/static", AQUI / "static", show_index=False)
     app.router.add_get("/muestras.csv", muestras_csv)
     app.router.add_post("/control", control)
     app.router.add_post("/modo", modo)

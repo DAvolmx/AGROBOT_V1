@@ -43,6 +43,12 @@ img.vista{width:100%;border-radius:8px;background:#000;display:block}
 #eventos{font-size:11.5px;max-height:190px;overflow:auto}
 #eventos div{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)}
 .barra{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#gl-mando{position:absolute;right:12px;bottom:12px;z-index:6;display:flex;flex-direction:column;gap:6px;
+          background:rgba(20,24,34,.82);padding:8px;border-radius:10px;border:1px solid var(--linea)}
+.mando-fila{display:flex;gap:6px;justify-content:center}
+.mando-fila button{min-width:44px;min-height:38px;font-size:15px}
+#v3d-mando{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+#v3d-mando button{min-width:44px}
 </style>
 </head>
 <body>
@@ -68,6 +74,7 @@ img.vista{width:100%;border-radius:8px;background:#000;display:block}
   <button data-tab="sensores">Sensores</button>
   <button data-tab="mapa">Mapa 2D</button>
   <button data-tab="tres-d">Vista 3D</button>
+  <button data-tab="webgl">3D interactivo</button>
   <button data-tab="aprender">Aprendizaje</button>
   <button data-tab="slam">SLAM y ruta</button>
   <button data-tab="editor">Editor de mapas</button>
@@ -136,10 +143,56 @@ img.vista{width:100%;border-radius:8px;background:#000;display:block}
       <div class="card" style="flex:1">
         <div class="barra" style="margin-bottom:8px">
           <h3 style="margin:0">Vista 3D</h3>
-          <span class="hint">arrastrá para girar · rueda para acercar</span>
+          <span class="hint">con los botones de abajo, o arrastrando</span>
           <label class="hint" style="margin-left:auto"><input type="checkbox" id="seguir" checked> seguir al robot</label>
         </div>
         <img class="vista" id="img-3d" alt="">
+        <div id="v3d-mando">
+          <button data-v3d="izquierda">⟲ girar</button>
+          <button data-v3d="derecha">⟳ girar</button>
+          <button data-v3d="arriba">▲ subir</button>
+          <button data-v3d="abajo">▼ bajar</button>
+          <button data-v3d="acercar">➕ acercar</button>
+          <button data-v3d="alejar">➖ alejar</button>
+          <button data-v3d="reset">↺ vista inicial</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3D INTERACTIVO (WebGL) -->
+  <section class="tab" id="tab-webgl">
+    <div class="col" style="flex:1">
+      <div class="card" style="flex:1;padding:0;overflow:hidden;position:relative">
+        <div class="barra" style="position:absolute;top:8px;left:8px;right:8px;z-index:5">
+          <span class="pill" id="gl-estado">iniciando…</span>
+          <label class="hint" style="background:rgba(20,24,34,.8);padding:3px 8px;border-radius:6px">
+            <input type="checkbox" id="gl-seguir" checked> seguir al robot</label>
+          <label class="hint" style="background:rgba(20,24,34,.8);padding:3px 8px;border-radius:6px">
+            <input type="checkbox" id="gl-slam" checked> mostrar el robot del SLAM</label>
+          <label class="hint" style="background:rgba(20,24,34,.8);padding:3px 8px;border-radius:6px">
+            <input type="checkbox" id="gl-sombras" checked> sombras</label>
+          <span class="hint" style="margin-left:auto;background:rgba(20,24,34,.8);padding:3px 8px;border-radius:6px">
+            también podés arrastrar con el ratón</span>
+        </div>
+        <div id="gl-mando">
+          <div class="mando-fila">
+            <button data-gl="izquierda" title="girar a la izquierda">⟲</button>
+            <button data-gl="arriba" title="subir la vista">▲</button>
+            <button data-gl="derecha" title="girar a la derecha">⟳</button>
+          </div>
+          <div class="mando-fila">
+            <button data-gl="acercar" title="acercar">➕</button>
+            <button data-gl="abajo" title="bajar la vista">▼</button>
+            <button data-gl="alejar" title="alejar">➖</button>
+          </div>
+          <div class="mando-fila">
+            <button data-gl="cenital" title="vista desde arriba">⬓ Cenital</button>
+            <button data-gl="detras" title="detrás del robot">🤖 Detrás</button>
+            <button data-gl="primera" title="desde la cámara del robot">👁 Cámara</button>
+          </div>
+        </div>
+        <div id="gl-lienzo" style="width:100%;height:calc(100vh - 190px);min-height:420px"></div>
       </div>
     </div>
   </section>
@@ -307,6 +360,8 @@ img.vista{width:100%;border-radius:8px;background:#000;display:block}
   </section>
 </main>
 
+<script src="/static/three.min.js"></script>
+<script src="/static/OrbitControls.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let mundo = null, estado = null, ws = null;
@@ -319,6 +374,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("cli
   $("tab-" + b.dataset.tab).classList.add("activa");
   dibujarMapa();
   if (b.dataset.tab === "editor") { listarMundos(); dibujarEditor(); }
+  if (b.dataset.tab === "webgl") { glIniciar(); glAjustar(); }
 }));
 const tabActiva = () => document.querySelector(".tab.activa").id.replace("tab-", "");
 
@@ -479,6 +535,17 @@ function url3d() {
   return `/vista3d.jpg?yaw=${vista3d.yaw.toFixed(1)}&pitch=${vista3d.pitch.toFixed(1)}` +
          `&distancia=${vista3d.distancia.toFixed(1)}&seguir=${$("seguir").checked ? 1 : 0}`;
 }
+function v3dMover(accion) {
+  const paso = 8, zoom = 1.15;
+  if (accion === "izquierda") vista3d.yaw -= paso;
+  else if (accion === "derecha") vista3d.yaw += paso;
+  else if (accion === "arriba") vista3d.pitch = Math.min(85, vista3d.pitch + 5);
+  else if (accion === "abajo") vista3d.pitch = Math.max(5, vista3d.pitch - 5);
+  else if (accion === "acercar") vista3d.distancia = Math.max(1.5, vista3d.distancia / zoom);
+  else if (accion === "alejar") vista3d.distancia = Math.min(25, vista3d.distancia * zoom);
+  else if (accion === "reset") { vista3d.yaw = -60; vista3d.pitch = 32; vista3d.distancia = 7; }
+}
+
 (function orbita() {
   const img = $("img-3d");
   let arrastre = null;
@@ -490,11 +557,8 @@ function url3d() {
   });
   const soltar = () => { arrastre = null; };
   img.addEventListener("pointerup", soltar); img.addEventListener("pointercancel", soltar);
-  img.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    vista3d.distancia = Math.max(1.5, Math.min(25, vista3d.distancia * (e.deltaY > 0 ? 1.15 : 1 / 1.15)));
-  }, { passive: false });
 })();
+mandoPulsable("#v3d-mando button", "v3d", v3dMover);
 
 // ---------------------------------------------------------------- controles
 async function post(url, cuerpo) {
@@ -527,12 +591,298 @@ window.addEventListener("keydown", (e) => {
 
 async function cargarMundo() {
   mundo = await (await fetch("/mundo")).json();
+  gl.mundoPintado = null;            // el escenario cambió: repintar el 3D
   const sel = $("sel-escenario");
   if (!sel.options.length) {
     mundo.escenarios.forEach((e) => sel.add(new Option(e, e)));
   }
   sel.value = mundo.nombre;
   dibujarMapa();
+}
+
+// ---------------------------------------------------------------- 3D interactivo
+// Visor WebGL con Three.js. El terreno se texturiza con la MISMA imagen que
+// ve la cámara del robot (/textura.jpg) más un mapa de relieve sacado de
+// ella (/relieve.jpg), así la luz marca los surcos y la paja. Todo lo demás
+// (paredes, macetas, ramas, plantas, puntos de escaneo) sale de /mundo.
+const gl = { listo: false, escena: null, camara: null, render: null, control: null,
+             robot: null, fantasma: null, traza: null, trazaSlam: null, ruta: null,
+             grupoMundo: null, luz: null, mundoPintado: null };
+
+function glIniciar() {
+  const cont = $("gl-lienzo");
+  if (gl.listo || !cont.offsetParent || typeof THREE === "undefined") return;
+  const ancho = cont.clientWidth || 800, alto = cont.clientHeight || 500;
+
+  gl.escena = new THREE.Scene();
+  gl.escena.background = new THREE.Color(0x8fa6bd);
+  gl.escena.fog = new THREE.Fog(0x8fa6bd, 12, 45);
+
+  gl.camara = new THREE.PerspectiveCamera(55, ancho / alto, 0.05, 200);
+  gl.camara.position.set(4, 4, 4);
+
+  gl.render = new THREE.WebGLRenderer({ antialias: true });
+  gl.render.setPixelRatio(Math.min(devicePixelRatio, 2));
+  gl.render.setSize(ancho, alto);
+  gl.render.shadowMap.enabled = true;
+  gl.render.shadowMap.type = THREE.PCFSoftShadowMap;
+  cont.appendChild(gl.render.domElement);
+
+  gl.control = new THREE.OrbitControls(gl.camara, gl.render.domElement);
+  gl.control.enableDamping = true;
+  gl.control.maxPolarAngle = Math.PI / 2 - 0.05;   // no meterse bajo el suelo
+  gl.control.enableZoom = false;                   // el zoom va por botones
+
+  gl.escena.add(new THREE.HemisphereLight(0xbcd3ea, 0x4a4033, 0.85));
+  gl.luz = new THREE.DirectionalLight(0xfff0d8, 1.15);
+  gl.luz.position.set(6, 9, 4);
+  gl.luz.castShadow = true;
+  gl.luz.shadow.mapSize.set(1024, 1024);
+  const s = gl.luz.shadow.camera;
+  s.left = s.bottom = -12; s.right = s.top = 12; s.far = 40;
+  gl.escena.add(gl.luz);
+
+  gl.grupoMundo = new THREE.Group();
+  gl.escena.add(gl.grupoMundo);
+
+  // Robot real (verde) y el "fantasma" de donde cree estar el SLAM (rojo).
+  gl.robot = glRobot(0x3fbf5a, false);
+  gl.fantasma = glRobot(0xe0453a, true);
+  gl.escena.add(gl.robot, gl.fantasma);
+
+  gl.traza = glLinea(0xe65ae6, 2);
+  gl.trazaSlam = glLinea(0x5a8cff, 1);
+  gl.ruta = glLinea(0xffaa28, 2);
+  gl.escena.add(gl.traza, gl.trazaSlam, gl.ruta);
+
+  gl.listo = true;
+  $("gl-estado").textContent = "WebGL listo";
+  new ResizeObserver(() => glAjustar()).observe(cont);
+  glBucle();
+}
+
+function glRobot(color, fantasma) {
+  const g = new THREE.Group();
+  const cuerpo = new THREE.Mesh(
+    new THREE.BoxGeometry(0.40, 0.22, 0.35),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1,
+                                     transparent: fantasma, opacity: fantasma ? 0.35 : 1 }));
+  cuerpo.position.y = 0.11; cuerpo.castShadow = !fantasma;
+  const morro = new THREE.Mesh(
+    new THREE.ConeGeometry(0.07, 0.18, 12),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: fantasma,
+                                     opacity: fantasma ? 0.4 : 1 }));
+  morro.rotation.z = -Math.PI / 2; morro.position.set(0.26, 0.16, 0);
+  g.add(cuerpo, morro);
+  if (!fantasma) {                                  // ruedas, solo decorativas
+    for (const dx of [-0.13, 0.13]) for (const dz of [-0.19, 0.19]) {
+      const r = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 12),
+                               new THREE.MeshStandardMaterial({ color: 0x23262e }));
+      r.rotation.x = Math.PI / 2; r.position.set(dx, 0.075, dz); r.castShadow = true;
+      g.add(r);
+    }
+  }
+  return g;
+}
+
+function glLinea(color, ancho) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3 * 2000), 3));
+  geo.setDrawRange(0, 0);
+  return new THREE.Line(geo, new THREE.LineBasicMaterial({ color, linewidth: ancho }));
+}
+
+function glPuntos(linea, pts, altura) {
+  const arr = linea.geometry.attributes.position.array;
+  const n = Math.min(pts.length, arr.length / 3);
+  for (let i = 0; i < n; i++) {
+    arr[i * 3] = pts[i][0]; arr[i * 3 + 1] = altura; arr[i * 3 + 2] = -pts[i][1];
+  }
+  linea.geometry.setDrawRange(0, n);
+  linea.geometry.attributes.position.needsUpdate = true;
+  linea.geometry.computeBoundingSphere();
+}
+
+// El mundo en 3D. Ejes: x del mundo -> x, y del mundo -> -z (three usa y arriba).
+function glConstruirMundo(m) {
+  if (!gl.listo || !m) return;
+  const firma = JSON.stringify([m.nombre, m.limites, m.paredes.length, m.plantas.length,
+                                (m.objetos || []).length, m.seco, m.borde]);
+  if (gl.mundoPintado === firma) return;
+  gl.mundoPintado = firma;
+  while (gl.grupoMundo.children.length) {
+    const h = gl.grupoMundo.children.pop();
+    h.geometry && h.geometry.dispose();
+    h.material && (h.material.map && h.material.map.dispose(), h.material.dispose());
+  }
+  const [x0, y0, x1, y1] = m.limites, anchoM = x1 - x0, altoM = y1 - y0;
+
+  // Suelo: textura y relieve generados por el simulador (el mismo terreno
+  // que ve la cámara del robot).
+  const cargador = new THREE.TextureLoader();
+  const sello = Date.now();
+  const mat = new THREE.MeshStandardMaterial({
+    map: cargador.load(`/textura.jpg?t=${sello}`),
+    normalMap: cargador.load(`/relieve.jpg?t=${sello}`),
+    normalScale: new THREE.Vector2(1.1, 1.1), roughness: 0.95, metalness: 0.0 });
+  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(anchoM, altoM), mat);
+  suelo.rotation.x = -Math.PI / 2;
+  suelo.position.set((x0 + x1) / 2, 0, -(y0 + y1) / 2);
+  suelo.receiveShadow = true;
+  gl.grupoMundo.add(suelo);
+
+  // Paredes: cajas a lo largo de cada segmento.
+  const matPared = new THREE.MeshStandardMaterial({ color: 0x9aa1ac, roughness: 0.85 });
+  const h = m.altura_pared || 0.6;
+  m.paredes.forEach(([ax, ay, bx, by]) => {
+    const largo = Math.hypot(bx - ax, by - ay);
+    if (largo < 0.02) return;
+    const pared = new THREE.Mesh(new THREE.BoxGeometry(largo, h, 0.07), matPared);
+    pared.position.set((ax + bx) / 2, h / 2, -(ay + by) / 2);
+    pared.rotation.y = Math.atan2(-(by - ay), bx - ax);
+    pared.castShadow = pared.receiveShadow = true;
+    gl.grupoMundo.add(pared);
+  });
+
+  // Plantas del cultivo: dos planos cruzados, verdes (amarillas si tienen plaga).
+  m.plantas.forEach(([x, y, r, plaga]) => {
+    const alto = Math.max(0.12, r * 2.4);
+    const matP = new THREE.MeshStandardMaterial({
+      color: plaga ? 0xd8e04a : 0x3fa85a, side: THREE.DoubleSide, roughness: 0.8 });
+    for (const rot of [0, Math.PI / 2]) {
+      const hoja = new THREE.Mesh(new THREE.PlaneGeometry(r * 2.4, alto), matP);
+      hoja.position.set(x, alto / 2, -y); hoja.rotation.y = rot; hoja.castShadow = true;
+      gl.grupoMundo.add(hoja);
+    }
+  });
+
+  // Objetos: macetas y piedras como cilindros, ramas y arbustos como esferas.
+  (m.objetos || []).forEach((o) => {
+    const solido = o.solido;
+    const malla = solido
+      ? new THREE.Mesh(new THREE.CylinderGeometry(o.radio * 0.8, o.radio, o.altura, 14),
+                       new THREE.MeshStandardMaterial({ color: 0x8c5a46, roughness: 0.9 }))
+      : new THREE.Mesh(new THREE.SphereGeometry(o.radio, 12, 10),
+                       new THREE.MeshStandardMaterial({ color: 0x55a05f, roughness: 1,
+                                                        transparent: true, opacity: 0.85 }));
+    malla.position.set(o.x, solido ? o.altura / 2 : o.altura - o.radio * 0.6, -o.y);
+    malla.castShadow = true;
+    gl.grupoMundo.add(malla);
+  });
+
+  // Puntos de escaneo: poste con esfera, para verlos desde lejos.
+  (m.escaneos || []).forEach(([x, y]) => {
+    const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.5, 8),
+                                 new THREE.MeshStandardMaterial({ color: 0xe65ae6 }));
+    poste.position.set(x, 0.25, -y);
+    const bola = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10),
+                                new THREE.MeshStandardMaterial({ color: 0xe65ae6,
+                                                                 emissive: 0x551155 }));
+    bola.position.set(x, 0.53, -y);
+    gl.grupoMundo.add(poste, bola);
+  });
+
+  // Altura a la que barre el LIDAR: el plano que explica qué ve y qué no.
+  const plano = new THREE.Mesh(
+    new THREE.PlaneGeometry(anchoM, altoM),
+    new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.05,
+                                  side: THREE.DoubleSide }));
+  plano.rotation.x = -Math.PI / 2;
+  plano.position.set((x0 + x1) / 2, m.altura_lidar || 0.30, -(y0 + y1) / 2);
+  gl.grupoMundo.add(plano);
+}
+
+function glActualizar() {
+  if (!gl.listo || !estado || !estado.listo) return;
+  const p = estado.pose;
+  gl.robot.position.set(p.x, 0, -p.y);
+  gl.robot.rotation.y = -p.theta_deg * Math.PI / 180;
+  const sl = estado.slam && estado.slam.pose;
+  gl.fantasma.visible = $("gl-slam").checked && !!sl;
+  if (sl) {
+    gl.fantasma.position.set(sl.x, 0, -sl.y);
+    gl.fantasma.rotation.y = -sl.theta_deg * Math.PI / 180;
+  }
+  glPuntos(gl.traza, estado.traza || [], 0.02);
+  glPuntos(gl.trazaSlam, estado.traza_slam || [], 0.03);
+  glPuntos(gl.ruta, estado.ruta || [], 0.015);
+  if ($("gl-seguir").checked) {
+    gl.control.target.lerp(new THREE.Vector3(p.x, 0.2, -p.y), 0.15);
+    gl.luz.position.set(p.x + 6, 9, -p.y + 4);
+    gl.luz.target.position.set(p.x, 0, -p.y);
+    gl.luz.target.updateMatrixWorld();
+  }
+  gl.render.shadowMap.enabled = $("gl-sombras").checked;
+}
+
+// Mando por botones: mantener pulsado sigue moviendo. La rueda queda
+// desactivada a propósito (con ella, desplazar la página movía la cámara).
+function glMover(accion) {
+  if (!gl.listo) return;
+  const cam = gl.camara, obj = gl.control.target;
+  const rel = cam.position.clone().sub(obj);
+  const radio = rel.length();
+  const giro = Math.atan2(rel.x, rel.z);
+  const alto = Math.asin(Math.max(-1, Math.min(1, rel.y / radio)));
+  const paso = 0.09, zoom = 1.12;
+  let g = giro, a = alto, r = radio;
+  if (accion === "izquierda") g += paso;
+  else if (accion === "derecha") g -= paso;
+  else if (accion === "arriba") a = Math.min(1.45, a + paso);
+  else if (accion === "abajo") a = Math.max(0.05, a - paso);
+  else if (accion === "acercar") r = Math.max(0.8, radio / zoom);
+  else if (accion === "alejar") r = Math.min(60, radio * zoom);
+  else if (accion === "cenital") { g = 0; a = 1.4; r = Math.max(8, radio); }
+  else if (accion === "detras") {
+    const p = estado && estado.pose;
+    if (p) { g = Math.PI + (-p.theta_deg * Math.PI / 180); a = 0.35; r = 2.6; }
+  } else if (accion === "primera") {
+    const p = estado && estado.pose;
+    if (!p) return;
+    const th = -p.theta_deg * Math.PI / 180;
+    // A la altura y en el sitio de la cámara real del robot.
+    cam.position.set(p.x + 0.42 * Math.cos(th), 0.30, -(p.y + 0.42 * Math.sin(th)));
+    gl.control.target.set(p.x + 2.2 * Math.cos(th), 0.05, -(p.y + 2.2 * Math.sin(th)));
+    $("gl-seguir").checked = false;
+    return;
+  }
+  cam.position.set(obj.x + r * Math.cos(a) * Math.sin(g),
+                   obj.y + r * Math.sin(a),
+                   obj.z + r * Math.cos(a) * Math.cos(g));
+  cam.lookAt(obj);
+}
+
+function mandoPulsable(selector, atributo, accionar) {
+  document.querySelectorAll(selector).forEach((b) => {
+    let repetir = null;
+    const arranca = (e) => {
+      e.preventDefault();
+      accionar(b.dataset[atributo]);
+      clearInterval(repetir);
+      repetir = setInterval(() => accionar(b.dataset[atributo]), 110);
+    };
+    const para = () => clearInterval(repetir);
+    b.addEventListener("pointerdown", arranca);
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, para));
+  });
+}
+mandoPulsable("#gl-mando button", "gl", glMover);
+
+function glAjustar() {
+  const cont = $("gl-lienzo");
+  if (!gl.listo || !cont.clientWidth) return;
+  gl.camara.aspect = cont.clientWidth / cont.clientHeight;
+  gl.camara.updateProjectionMatrix();
+  gl.render.setSize(cont.clientWidth, cont.clientHeight);
+}
+
+function glBucle() {
+  requestAnimationFrame(glBucle);
+  if (!gl.listo || !$("tab-webgl").classList.contains("activa")) return;
+  glConstruirMundo(mundo);
+  glActualizar();
+  gl.control.update();
+  gl.render.render(gl.escena, gl.camara);
 }
 
 // ---------------------------------------------------------------- SLAM y ruta

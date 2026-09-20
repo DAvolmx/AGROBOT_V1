@@ -63,10 +63,16 @@ class RobotSim:
     def ordenar(self, v, omega):
         self.v_obj, self.omega_obj = float(v), float(omega)
 
+    # Orden mínima que el firmware considera "moverse". Muy baja a propósito:
+    # el ESP32-C3 mapea CUALQUIER velocidad distinta de cero a PWM 200..255.
+    # Con el umbral en 0,02 el robot simulado casi no se movía, porque con
+    # `max_linear_accel` = 0,1 m/s² y el troceado de pulsos la rampa nunca
+    # llegaba a ese valor — y el robot real sí se mueve en esas condiciones.
+    UMBRAL_ORDEN = 0.004
+
     def _efectiva(self, pedida, piso):
-        """Piso de los motores: por debajo no mueven, y cualquier orden por
-        encima sale casi a fondo (el firmware mapea a PWM 200..255)."""
-        if abs(pedida) < 0.02:
+        """Piso de los motores: cualquier orden no nula sale casi a fondo."""
+        if abs(pedida) < self.UMBRAL_ORDEN:
             return 0.0
         signo = math.copysign(1.0, pedida)
         return signo * max(abs(pedida), piso)

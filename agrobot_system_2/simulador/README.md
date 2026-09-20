@@ -93,6 +93,23 @@ En el robot real se activa con `autonomia.politica_activa` en la config. El
 freno por LIDAR y las reglas de atasco siguen por encima: la política
 propone, no dispone.
 
+### Entrenar toda la noche sobre TU terreno
+
+```bash
+python3 simulador/entrenar.py --horas 8 --mundo exterior_2_sim --mezcla 0.7 --segundos 150
+```
+
+- `--mundo` es un mapa dibujado en el dashboard (`simulador/mundos/NOMBRE.json`).
+  En cada episodio se VARÍA: lo seco que está el suelo, de qué es el borde
+  (paja, maleza, mixto, tierra), el ancho del sendero, ramas y macetas
+  sueltas al lado del camino, y desde qué punto del recorrido arranca. Sin
+  esas variaciones aprendería ese mapa concreto, no a conducir.
+- `--mezcla 0.7`: siete de cada diez episodios en tu mapa, el resto en
+  escenarios al azar, para que lo aprendido no valga solo ahí.
+- Cada tanda guarda una copia del modelo (`politica_tandaNNN.pt`) y escribe
+  en `~/.agrobot/aprendizaje/entrenamiento.log`. Se puede cortar con Ctrl-C
+  sin perder nada, y un episodio que falle no tumba la sesión.
+
 ## Corregir en vivo y enseñar maniobras
 
 En el dashboard, pestaña **Aprendizaje**: se puede corregir al robot **sin

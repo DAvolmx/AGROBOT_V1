@@ -339,7 +339,11 @@ class Episodio:
                                          "evento": "maniobra_juzgada", "funciono": ok})
 
             # ¿Hace rato que no se ve el sendero? Probar otra inclinación.
-            if self.seguidor.vision.error_m is not None:
+            # Solo mientras la autonomía USE la cámara: durante el recorrido
+            # ideal el piloto va por la ruta y nadie mira, así que el vigía se
+            # disparaba cada 6 s y el robot se pasaba media sesión buscando.
+            usa_camara = self.explorador.activo or self.piloto is not None
+            if self.seguidor.vision.error_m is not None or not usa_camara:
                 self._sendero_visto_en = self.reloj.t
             elif (self.reloj.t - self._sendero_visto_en > SIN_SENDERO_PARA_BUSCAR_S
                   and (self._buscando_servo is None or self._buscando_servo.done())
@@ -376,6 +380,18 @@ class Episodio:
     # ------------------------------------------------- recorrido ideal
     def _pilotar(self):
         """Un pulso del piloto que sigue la ruta ideal."""
+        # La cámara TIENE que mirar también aquí: cada pulso del recorrido
+        # ideal es un ejemplo de entrenamiento, y sin el detector de senderos
+        # los ejemplos salen sin la mitad de la información (el modelo
+        # entrenado así solo sabía decir "adelante").
+        if self.cfg["autonomia"].get("sendero_activo") and self.robot.servo_asentado:
+            dato = self._frame()
+            try:
+                self.seguidor.vision.analizar(cv2, dato[0], self.cfg["autonomia"],
+                                              self.geometria())
+            except Exception as exc:
+                self.eventos.append({"t": round(self.reloj.t, 1), "evento": "error_vision",
+                                     "detalle": f"{type(exc).__name__}: {exc}"})
         pose = (self.robot.x, self.robot.y, self.robot.theta)
         accion, detalle = self.piloto.orden(pose)
         ctrl, escala = self.cfg["control"], self.cfg["autonomia"]["escala_velocidad"]

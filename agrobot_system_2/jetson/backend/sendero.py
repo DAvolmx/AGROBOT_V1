@@ -132,6 +132,50 @@ def mascara_vegetacion(cv2, img, cfg):
     return cv2.medianBlur(((veg & tono) * 255).astype(np.uint8), 3)
 
 
+def igualar_luz(cv2, img):
+    """Aplana el gradiente de luz antes de decidir qué es sendero y qué borde.
+
+    El problema, medido: con la cámara realista del simulador el seguimiento
+    del sendero caía del 83 % al 52 %, y al desactivar SOLO el viñeteo volvía
+    al 86 %. Es decir, casi toda la pérdida venía de que los bordes de la
+    imagen salen más oscuros que el centro. Los criterios de "esto es paja"
+    (brillo) y "esto no es del color del camino" (distancia en Lab) son
+    absolutos, así que una esquina oscurecida se marca como borde y el robot
+    cree que el sendero es más estrecho de lo que es.
+
+    No es un defecto del simulador: TODO objetivo viñetea, y en el campo pasa
+    lo mismo y peor cuando el sol deja media imagen en sombra y la otra media
+    quemada.
+
+    Cómo: el viñeteo y la sombra grande varían muy despacio de un lado a otro
+    de la imagen; la paja y las plantas, no. Así que se estima la iluminación
+    con un desenfoque BRUTAL del canal de luminancia y se divide por ella
+    (corrección de campo plano). Lo que varía despacio desaparece y lo que
+    tiene detalle se queda.
+
+    El desenfoque se hace a 1/8 de tamaño: un Gaussiano de kernel medio
+    fotograma costaría más que todo el resto del detector junto, y a esa
+    escala el resultado es el mismo porque justamente interesa lo grueso.
+
+    La ganancia se aplica a los tres canales por igual, no a la luminancia de
+    Lab. Sale lo mismo y ahorra las dos conversiones de espacio de color (7 ms
+    contra 2 en la Jetson), y de paso no toca los ratios entre canales, que es
+    de lo que vive el índice de exceso de verde.
+    """
+    import numpy as np
+
+    gris = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    chico = cv2.resize(gris, (ANCHO_ANALISIS // 8, ALTO_ANALISIS // 8),
+                       interpolation=cv2.INTER_AREA).astype(np.float32)
+    campo = cv2.GaussianBlur(chico, (0, 0), 3.0)
+    # Suelo: dividir por un campo casi negro dispararía el ruido de una zona
+    # sin información hasta valores de sendero perfectamente iluminado.
+    campo = np.maximum(campo, 8.0)
+    ganancia = cv2.resize(float(campo.mean()) / campo, (img.shape[1], img.shape[0]),
+                          interpolation=cv2.INTER_LINEAR)
+    return np.clip(img.astype(np.float32) * ganancia[..., None], 0, 255).astype(np.uint8)
+
+
 class ModeloSendero:
     """Color del camino, aprendido de lo que el robot tiene bajo las ruedas."""
 
@@ -279,6 +323,8 @@ def detectar(cv2, frame, cfg, geo: dict, cenital: "Cenital",
     import numpy as np
 
     chico = cv2.resize(frame, (ANCHO_ANALISIS, ALTO_ANALISIS), interpolation=cv2.INTER_AREA)
+    if cfg.get("sendero_igualar_luz", True):
+        chico = igualar_luz(cv2, chico)
     veg = mascara_vegetacion(cv2, chico, cfg)
     paja = mascara_paja(cv2, chico) if cfg.get("sendero_paja", True) else np.zeros_like(veg)
     # Borde por CONTRASTE con el camino: es el criterio que se adapta solo a

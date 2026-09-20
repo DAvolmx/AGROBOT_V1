@@ -28,6 +28,11 @@ DEFAULTS = {
         "gyro_bias_x_dps": 0.0,
         "gyro_bias_y_dps": 0.0,
         "gyro_bias_z_dps": 0.0,
+        # Sentido del eje de cabeceo del MPU6050 tal como está montado.
+        # Comprobación: con el robot quieto, levantar el morro a mano; en
+        # /api/diagnostics el `cabeceo_deg` debe volverse NEGATIVO (positivo =
+        # morro abajo). Si sube, poner -1 aquí.
+        "imu_cabeceo_signo": 1,
     },
     "hardware": {
         "camera_enabled": True,
@@ -113,6 +118,14 @@ DEFAULTS = {
         # Borde por contraste con el color del propio sendero: se adapta a
         # bordes de paja, de maleza verde o de tierra distinta.
         "sendero_adaptativo": True,
+        # Aplanar el gradiente de luz de la imagen antes de buscar los bordes
+        # del sendero (viñeteo del objetivo, media imagen al sol). Ver
+        # sendero.igualar_luz: sin esto el seguimiento cae a la mitad.
+        "sendero_igualar_luz": True,
+        # Corregir la inclinación de la cámara con el cabeceo que mide el IMU.
+        # Sin esto, en terreno con baches el detector cree mirar a un sitio y
+        # mira a otro (2° de cabeceo = 5 cm de error a 1 m).
+        "compensar_cabeceo": True,
         # Política entrenada en el simulador (politica.pt). Apagada por
         # defecto: se enciende cuando se ha comprobado que mejora.
         "politica_activa": False,

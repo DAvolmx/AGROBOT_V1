@@ -40,6 +40,28 @@ COLOR_BORDE_TIERRA = (52, 62, 78)      # caballón de tierra removida, ni paja n
 COLOR_MACETA = (70, 95, 140)
 COLOR_RAMA = (60, 125, 85)
 
+# --- Realismo de los sensores -----------------------------------------------
+# Todo esto se puede apagar (`realismo=0`) para que las tandas largas corran
+# más rápido, o subir para entrenar contra condiciones peores de las reales.
+# Los valores por defecto salen de las fotos y los registros del robot:
+# imágenes movidas al avanzar, viñeteo del gran angular, ruido en sombra, y
+# un LIDAR que pierde rayos sobre tierra suelta y hierba.
+DESENFOQUE_POR_VELOCIDAD = 26.0    # px de arrastre por (m/s) a 320 px de ancho
+VIÑETEO = 0.35                     # cuánto cae la luz en las esquinas
+RUIDO_BASE, RUIDO_EN_SOMBRA = 4.0, 14.0
+SOL_ACIMUT_DEG, SOL_ALTURA_DEG = 135.0, 42.0
+SOMBRA_OSCURIDAD = 0.45
+
+# LIDAR. El C1 no devuelve un rayo limpio por ángulo: sobre tierra suelta,
+# hierba o superficies oscuras pierde retornos, el error crece con la
+# distancia, y en los bordes de un objeto un mismo rayo recoge dos
+# profundidades y devuelve algo intermedio que no existe.
+LIDAR_PERDIDA_BASE = 0.03          # fracción de rayos sin retorno, de cerca
+LIDAR_PERDIDA_LEJOS = 0.18         # a alcance máximo
+LIDAR_RUIDO_M = 0.012              # ruido a 1 m
+LIDAR_RUIDO_POR_METRO = 0.004
+LIDAR_MEZCLA_BORDE = 0.35          # probabilidad de píxel mezclado en un salto
+
 # ALTURA A LA QUE BARRE EL LIDAR. Es el número que explica casi todos los
 # problemas del robot real:
 #   · Lo que llega a esta altura, el LIDAR lo ve — aunque sean hojas por las
@@ -204,14 +226,33 @@ class Mundo:
             d = np.minimum(d, t_obj.min(axis=1))
         return np.minimum(d, alcance).astype(np.float32)
 
-    def scan(self, x, y, theta, n=720, alcance=8.0, ruido_m=0.01, rng=None):
-        """Scan de 360° como el del RPLIDAR C1: lista de puntos con el ángulo
-        en grados relativo al robot (0 = adelante, + = izquierda)."""
+    def scan(self, x, y, theta, n=720, alcance=8.0, rng=None, realismo=1.0):
+        """Scan de 360° como el del RPLIDAR C1.
+
+        Con `realismo` se añaden los defectos del sensor de verdad: rayos
+        perdidos (más cuanto más lejos), ruido que crece con la distancia y
+        píxeles mezclados en los bordes. Un scan perfecto le pone las cosas
+        demasiado fáciles al casamiento de scans y al freno."""
         ang = np.linspace(-math.pi, math.pi, n, endpoint=False, dtype=np.float32)
         d = self.rayos(x, y, theta, ang, alcance)
-        if ruido_m and rng is not None:
-            d = d + rng.normal(0, ruido_m, d.shape).astype(np.float32)
         visible = d < alcance - 1e-3
+
+        if rng is not None and realismo > 0:
+            # Ruido proporcional a la distancia.
+            sigma = (LIDAR_RUIDO_M + LIDAR_RUIDO_POR_METRO * d) * realismo
+            d = d + rng.normal(0, 1, d.shape).astype(np.float32) * sigma
+            # Píxeles mezclados: donde dos rayos vecinos ven cosas a
+            # profundidades muy distintas, el de en medio cae a mitad camino.
+            salto = np.abs(np.diff(d, append=d[:1])) > 0.35
+            mezcla = salto & (rng.random(d.shape) < LIDAR_MEZCLA_BORDE * realismo)
+            if mezcla.any():
+                vecino = np.roll(d, -1)
+                d = np.where(mezcla, (d + vecino) / 2, d)
+            # Rayos perdidos, más frecuentes cuanto más lejos.
+            p_perdida = (LIDAR_PERDIDA_BASE
+                         + (LIDAR_PERDIDA_LEJOS - LIDAR_PERDIDA_BASE) * np.clip(d / alcance, 0, 1))
+            visible &= rng.random(d.shape) > p_perdida * realismo
+
         return [{"angle_deg": float(math.degrees(a)), "distance_m": float(r)}
                 for a, r in zip(ang[visible], d[visible])]
 
@@ -286,6 +327,26 @@ class Mundo:
             clase = np.where(dentro, PLANTA_ALTA if altura >= ALTURA_LIDAR_M else PLANTA, clase)
         return clase
 
+    def sombras(self, px, py):
+        """Máscara de sombra en el suelo, proyectada por lo que sobresale.
+
+        Importa más de lo que parece: una sombra dura sobre el sendero cambia
+        el color del camino, y el detector tiene que seguir funcionando. En
+        las fotos reales del usuario hay sombras de las matas y del talud."""
+        import numpy as np
+
+        sombra = np.zeros(np.shape(px), bool)
+        acimut = math.radians(SOL_ACIMUT_DEG)
+        largo = 1.0 / max(math.tan(math.radians(SOL_ALTURA_DEG)), 0.2)
+        dx, dy = math.cos(acimut) * largo, math.sin(acimut) * largo
+        altas = self.plantas_altas
+        piezas = [(o[0], o[1], o[2], o[3]) for o in self.objetos] +                  [(p[0], p[1], p[2], p[4]) for p in altas]
+        for cx, cy, r, altura in piezas:
+            # La sombra es el objeto desplazado según el sol y su altura.
+            sx, sy = cx + dx * altura, cy + dy * altura
+            sombra |= ((px - sx) ** 2 + (py - sy) ** 2) < (r * 1.15) ** 2
+        return sombra
+
     def pintar_objetos(self, img, px, py):
         """Macetas, ramas y demás sobre una imagen ya pintada del suelo."""
         for (ox, oy, r, altura, solido), tipo in zip(self.objetos, self.tipos):
@@ -321,7 +382,8 @@ class Mundo:
         return np.clip(img, 0, 255)
 
     # ---------------------------------------------------------------- cámara
-    def camara(self, x, y, theta, geo, ancho=640, alto=480, rng=None):
+    def camara(self, x, y, theta, geo, ancho=640, alto=480, rng=None,
+               velocidad=0.0, realismo=1.0, cabeceo_deg=0.0):
         """Imagen BGR sintética desde la cámara del robot.
 
         Cada píxel se proyecta al suelo con la misma geometría que usa
@@ -329,7 +391,9 @@ class Mundo:
         cámara). Lo que cae por encima del horizonte, o más allá de la
         primera pared en ese rumbo, se pinta como pared o cielo."""
         h = geo["camara_altura_m"]
-        phi = math.radians(geo["camara_inclinacion_deg"])
+        # El cabeceo del chasis (baches, suspensión) mueve la cámara: con 2°
+        # de más, lo que la cámara cree que está a 1 m está en realidad a 1,2.
+        phi = math.radians(geo["camara_inclinacion_deg"] + cabeceo_deg)
         fx = (ancho / 2) / math.tan(math.radians(geo["camara_hfov_deg"]) / 2)
         u, v = np.meshgrid(np.arange(ancho, dtype=np.float32),
                            np.arange(alto, dtype=np.float32))
@@ -346,6 +410,9 @@ class Mundo:
         clase = self.clases_suelo(px, py, rng)
         img = self.pintar(clase, px, py, rng, self.seco)
         img = self.pintar_objetos(img, px, py)
+        if realismo > 0:
+            oscuro = self.sombras(px, py)
+            img[oscuro] *= (1 - SOMBRA_OSCURIDAD * realismo)
         # Lo lejano se ve más claro y con menos contraste (neblina).
         dist = np.hypot(px - x, py - y)
         niebla = np.clip((dist - 1.5) / 8.0, 0, 0.35)[..., None]
@@ -359,7 +426,44 @@ class Mundo:
             tapado = dist_suelo > dist_pared[None, :]
             img[tapado] = COLOR_PARED
         img[~suelo] = COLOR_CIELO
-        return np.clip(img, 0, 255).astype(np.uint8)
+        img = np.clip(img, 0, 255).astype(np.uint8)
+        return self._degradar(img, rng, velocidad, realismo) if realismo > 0 else img
+
+    def _degradar(self, img, rng, velocidad, realismo):
+        """Le quita a la imagen lo que una cámara real no puede dar.
+
+        Sin esto el detector se entrena contra una imagen perfecta y en el
+        campo se encuentra otra cosa: movida al avanzar, con las esquinas
+        apagadas y con grano en las zonas oscuras."""
+        import cv2
+
+        alto, ancho = img.shape[:2]
+        # 1. Movida: el arrastre es proporcional a la velocidad.
+        px_arrastre = DESENFOQUE_POR_VELOCIDAD * abs(velocidad) * realismo * (ancho / 320)
+        if px_arrastre > 1.2:
+            k = int(min(21, px_arrastre)) | 1
+            nucleo = np.zeros((k, k), np.float32)
+            nucleo[k // 2, :] = 1.0 / k                # arrastre horizontal
+            img = cv2.filter2D(img, -1, nucleo)
+        # 2. Viñeteo del gran angular.
+        if VIÑETEO > 0:
+            if getattr(self, "_vineta", (None,))[0] != (alto, ancho):
+                yy, xx = np.mgrid[0:alto, 0:ancho]
+                r = np.hypot((xx - ancho / 2) / (ancho / 2), (yy - alto / 2) / (alto / 2))
+                self._vineta = ((alto, ancho), (1 - VIÑETEO * np.clip(r, 0, 1.4) ** 2)[..., None])
+            img = (img * (1 - realismo + realismo * self._vineta[1])).astype(np.uint8)
+        # 3. Ruido: mucho más visible en lo oscuro, como en cualquier sensor.
+        #    Se genera a media resolución y se amplía: el grano queda algo más
+        #    grueso (que es lo que hace una cámara con ganancia alta) y cuesta
+        #    la cuarta parte, que importa en tandas de miles de episodios.
+        if rng is not None:
+            medio = (alto // 2, ancho // 2)
+            grano = cv2.resize(rng.normal(0, 1, medio + (3,)).astype(np.float32),
+                               (ancho, alto), interpolation=cv2.INTER_LINEAR)
+            luz = img.mean(axis=2, keepdims=True) / 255.0
+            sigma = (RUIDO_EN_SOMBRA - (RUIDO_EN_SOMBRA - RUIDO_BASE) * luz) * realismo
+            img = np.clip(img + grano * sigma, 0, 255).astype(np.uint8)
+        return img
 
     # ------------------------------------------------------------ vista cenital
     def dibujo(self, px_por_m=60):

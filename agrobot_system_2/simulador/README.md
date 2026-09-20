@@ -173,10 +173,29 @@ en proporción, y premia avanzar.
 - `escaneos` y `plagas_detectadas`
 - `bucles_detectados`: volver 3 veces a la misma celda de 50 cm tras 15 s fuera
 
+## Defectos de sensor que SÍ simula
+
+Se activan con `realismo` (0 = limpio, 1 = como el robot). No son adorno: cada
+uno se añadió porque explica un fallo visto en el campo.
+
+| Defecto | Cómo | Qué destapó |
+|---|---|---|
+| Viñeteo del objetivo | bordes hasta un 35 % más oscuros | **el más dañino**: hundía el seguimiento del sendero del 83 % al 52 %. De ahí salió `sendero.igualar_luz` |
+| Desenfoque de movimiento | 26 px por m/s | pérdida menor (~3 puntos) |
+| Ruido según la luz | más grano en sombra | pérdida menor (~5 puntos) |
+| Sombras del sol | de paredes y plantas altas, acimut 135° | sin efecto medible sobre el sendero |
+| Cabeceo del chasis | del relieve del terreno bajo las ruedas, ±5° | descuadra la vista cenital; se corrige con el IMU |
+| LIDAR | ruido con la distancia, píxeles mezclados en los bordes, rayos perdidos (3 % cerca, 18 % lejos) | 82 % de rayos válidos en vez de 94 % |
+
+El cabeceo se estima con `cabeceo.CabeceoIMU`, **el mismo módulo que corre en
+la Jetson**: al simulador se le dan las cuentas del MPU6050 (gravedad
+inclinada, más la aceleración propia del robot, más ruido), no el ángulo
+verdadero. Así lo que se mide es el estimador de verdad. Error medio 0,1°
+frente a 2,2° si se supone que el robot nunca cabecea.
+
 ## Límites (lo que NO simula)
 
 - Física de contacto real: un choque para el robot, no lo vuelca ni lo desvía.
-- Terreno plano: la huerta real tiene pendiente, y eso descuadra la vista cenital.
-- SLAM: la pose que ve el software es la verdadera, sin deriva ni saltos. Para
-  estudiar la deriva hay que usar los registros del robot real.
-- Iluminación: la cámara sintética no tiene sol duro, sombras móviles ni motion blur.
+- Pendiente del terreno: hay relieve (y cabeceo), pero el suelo es plano de
+  media; una huerta en cuesta descuadra la vista cenital de otra manera.
+- Sol en movimiento: la sombra es fija durante el episodio.

@@ -50,6 +50,7 @@ from explorador import ExploradorReactivo
 from sendero import SeguidorSendero
 from navigation_logger import NavigationLogger, analizar_sesion
 from aprendizaje import Aprendizaje
+from cabeceo import CabeceoIMU
 from politica import Politica
 
 # =============================================
@@ -136,6 +137,10 @@ CAPTURES_DIR.mkdir(exist_ok=True)
 # disponible en este entorno, o como respaldo del filtro complementario
 # mientras el EKF de robot_localization no haya publicado pose todavía.
 pose_estimator = PoseEstimator()
+# Cabeceo del chasis a partir del MPU6050. Se crea aquí porque la telemetría
+# empieza a llegar antes de que arranque la cámara; el signo se ajusta al
+# cargar la configuración.
+cabeceo_imu = CabeceoIMU()
 lidar_reactive = LidarReactive()
 
 # Última pose/mapa que llegaron de ROS (robot_localization / slam_toolbox),
@@ -339,6 +344,11 @@ class EnvTelemetryProtocol(asyncio.DatagramProtocol):
         # Va a la frecuencia completa del nodo (20 Hz desde 2026-09-06), que
         # es justo la `frequency: 20.0` del EKF en ekf.yaml.
         pose_estimator.on_gyro(payload.get("gyroZ", 0.0))
+        # El mismo paquete sirve para saber cuánto cabecea el chasis, que es
+        # lo que descuadra la vista del sendero (ver cabeceo.py).
+        cabeceo_imu.actualizar(payload.get("accelX", 0.0), payload.get("accelY", 0.0),
+                               payload.get("accelZ", 0.0), payload.get("gyroY", 0.0),
+                               time.monotonic())
         ros_bridge.publish_imu(
             {"x": payload.get("accelX", 0.0), "y": payload.get("accelY", 0.0), "z": payload.get("accelZ", 0.0)},
             {"x": payload.get("gyroX", 0.0), "y": payload.get("gyroY", 0.0), "z": payload.get("gyroZ", 0.0)},
@@ -912,6 +922,27 @@ async def drive_handler(request: web.Request):
     return web.json_response({"ok": True, "accion": accion})
 
 
+def _geometria_camara() -> dict:
+    """La geometría de la cámara, corregida con lo que cabecea el chasis.
+
+    El detector de senderos proyecta la imagen al suelo suponiendo una
+    inclinación fija de la cámara. En la huerta el robot cabecea en cada surco
+    y 2° de error desplazan el suelo estimado 5 cm a un metro: el sendero
+    aparece corrido y el robot corrige hacia donde no debe. Medido en el
+    simulador, suponer cero da 2,6° de error medio; con el IMU, 0,2°.
+
+    Solo se corrige aquí, para la cámara. La odometría visual sigue con la
+    geometría cruda a propósito: alimenta el EKF y no se toca sin medirlo.
+    """
+    g = state.config["odometria_webcam"]
+    if not state.config["autonomia"].get("compensar_cabeceo", True):
+        return g
+    cabeceo = cabeceo_imu.grados
+    if cabeceo is None:                       # sin telemetría todavía
+        return g
+    return {**g, "camara_inclinacion_deg": g["camara_inclinacion_deg"] + cabeceo}
+
+
 async def sendero_vista_handler(request: web.Request):
     """GET /api/sendero/vista.jpg — lo que ve el detector de hileras ahora:
     cámara con las plantas marcadas + vista cenital con hileras y sendero.
@@ -925,7 +956,7 @@ async def sendero_vista_handler(request: web.Request):
     def _render():
         import sendero as sd
         res = seguidor_sendero.vision.detectar(cv2, dato[0], state.config["autonomia"],
-                                               state.config["odometria_webcam"])
+                                               _geometria_camara())
         ok, jpg = cv2.imencode(".jpg", sd.dibujar(cv2, dato[0], res),
                                [cv2.IMWRITE_JPEG_QUALITY, 80])
         return jpg.tobytes() if ok else None
@@ -1796,6 +1827,9 @@ async def session_report_handler(request: web.Request):
         "captures_count": len(state.captures),
         "captures": state.captures,
         "env_last": state.env_telemetry,
+        # Para comprobar el signo del IMU: levantar el morro a mano y ver si
+        # `cabeceo_deg` se vuelve negativo (ver calibration.imu_cabeceo_signo).
+        "cabeceo_imu": cabeceo_imu.resumen(),
     }
     out_path = SESSION_REPORT_DIR / f"session_{int(time.time())}.json"
     out_path.write_text(json.dumps(report, indent=2))
@@ -1973,6 +2007,8 @@ async def start_background(app: web.Application):
     print(f"[aprendizaje] {aprendizaje.resumen()['maniobras']} maniobras · "
           f"política {'cargada' if politica.disponible else 'no disponible'}")
 
+    cabeceo_imu.signo = 1.0 if state.config["calibration"].get("imu_cabeceo_signo", 1) >= 0 else -1.0
+
     global seguidor_sendero, explorador
     seguidor_sendero = SeguidorSendero(
         get_config=lambda: state.config["autonomia"],
@@ -1980,7 +2016,7 @@ async def start_background(app: web.Application):
         # dejaba el seguidor sin cámara para siempre.
         obtener_frame=lambda: camera.ultimo_frame() if camera is not None else None,
         camara_al_frente=_servo_al_frente,
-        get_geometria=lambda: state.config["odometria_webcam"])
+        get_geometria=_geometria_camara)
     explorador = ExploradorReactivo(
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
         get_pose=ros_bridge.pose_en_mapa,

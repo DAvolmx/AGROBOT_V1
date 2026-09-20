@@ -51,6 +51,13 @@ class RobotSim:
         self.v = self.omega = 0.0              # lo que realmente hace el robot
         self.recorrido = 0.0
         self.colisiones = 0          # episodios de choque, no pasos de física
+        # Cabeceo del chasis: la suspensión es de recorrido largo y el
+        # terreno tiene baches, así que la cámara se mueve arriba y abajo
+        # mientras rueda. Dos grados bastan para que lo que la cámara cree
+        # que está a 1 m esté en realidad a 1,2.
+        self.cabeceo_deg = 0.0
+        self._v_anterior = 0.0
+        self.realismo = 1.0
         self.servo = SERVO_HOME      # ángulo actual del servo de la cámara
         self.servo_objetivo = SERVO_HOME
         self._servo_quieto_desde = 0.0
@@ -59,6 +66,8 @@ class RobotSim:
         self.contacto_s = 0.0        # tiempo pegado a un obstáculo
         self.en_contacto = False
         self.t = 0.0
+        self._imu = None             # cabeceo.CabeceoIMU, el del robot real
+        self._cabeceo_anterior = 0.0
 
     def ordenar(self, v, omega):
         self.v_obj, self.omega_obj = float(v), float(omega)
@@ -69,6 +78,9 @@ class RobotSim:
     # `max_linear_accel` = 0,1 m/s² y el troceado de pulsos la rampa nunca
     # llegaba a ese valor — y el robot real sí se mueve en esas condiciones.
     UMBRAL_ORDEN = 0.004
+
+    # Suavizado del cabeceo del IMU (paso bajo de ~0,3 s a 20 Hz).
+    ALFA_IMU = 0.25
 
     def _efectiva(self, pedida, piso):
         """Piso de los motores: cualquier orden no nula sale casi a fondo."""
@@ -93,6 +105,62 @@ class RobotSim:
         """Grados que la cámara mira hacia abajo, según dónde esté el servo."""
         return INCLINACION_EN_HOME + SERVO_GRADOS_POR_GRADO * (SERVO_HOME - self.servo)
 
+    def _paso_cabeceo(self, dt):
+        """Cabeceo del chasis: lo marca el TERRENO bajo las ruedas.
+
+        Se toma el desnivel del suelo entre delante y detrás del robot (el
+        mismo ruido de terreno que dibuja `mundo.py`), así el mismo bache da
+        siempre el mismo bandazo y el episodio es repetible. Se le suma el
+        cabeceo de acelerar o frenar, y la suspensión lo sigue con retardo."""
+        if self.realismo <= 0:
+            self.cabeceo_deg = 0.0
+            return
+        from mundo import ruido
+
+        c, sn = math.cos(self.theta), math.sin(self.theta)
+        L = 0.2                                   # medio eje, aproximado
+        delante = float(ruido(np.float32(self.x + c * L), np.float32(self.y + sn * L), 2.5, 2))
+        detras = float(ruido(np.float32(self.x - c * L), np.float32(self.y - sn * L), 2.5, 2))
+        # El desnivel se convierte en grados: ±1 de ruido ≈ ±4 cm de altura.
+        pendiente = math.degrees(math.atan2((delante - detras) * 0.08, 2 * L))
+        a_long = (self.v - self._v_anterior) / max(dt, 1e-3)
+        empuje = -6.0 * a_long * 0.05
+        self._v_anterior = self.v
+        objetivo = float(np.clip((pendiente + empuje) * self.realismo, -5.0, 5.0))
+        anterior = self.cabeceo_deg
+        self.cabeceo_deg += (objetivo - self.cabeceo_deg) * min(1.0, dt * 8.0)
+        self._alimentar_imu(dt, (self.cabeceo_deg - anterior) / max(dt, 1e-3), a_long)
+
+    def _alimentar_imu(self, dt, giro_dps, a_long):
+        """Sintetiza la cuenta del MPU6050 y se la pasa al estimador REAL.
+
+        No se le entrega el cabeceo verdadero ni una imitación del filtro: se
+        arma lo que mediría el sensor —gravedad inclinada, MÁS la aceleración
+        propia del robot, más ruido— y se mete en `cabeceo.CabeceoIMU`, el
+        mismo módulo que corre en la Jetson. Así lo que se mide en simulación
+        es el estimador de verdad, con sus fallos, y no una versión ideal.
+        Se llama en cada paso de física porque en el robot el IMU llega a
+        20 Hz, muy por encima del ritmo al que la cámara pide la geometría."""
+        if self._imu is None:
+            from cabeceo import CabeceoIMU
+            self._imu = CabeceoIMU()
+            # El sensor no está perfectamente a nivel en el chasis. Ese
+            # desalineo es lo ÚNICO que debe absorber el cero, y por eso se
+            # fija aquí y no con `poner_cero()` en la primera muestra: en el
+            # robot la calibración se hace parado en suelo plano, mientras que
+            # la primera muestra del episodio cae donde caiga. Fijándolo con
+            # la primera muestra, el cero se tragaba los 2° de pendiente del
+            # punto de salida y el estimador quedaba peor que no corregir.
+            self._sesgo_imu = float(self.rng.normal(0, 0.3))
+            self._imu.cero_deg = self._sesgo_imu
+        r = math.radians(self.cabeceo_deg + self._sesgo_imu)
+        # Aceleración longitudinal en g: es justo lo que confunde a un
+        # estimador que solo mire el acelerómetro.
+        propia = a_long / 9.80665
+        n = lambda sigma: float(self.rng.normal(0, sigma))
+        self._imu.actualizar(math.sin(r) + propia + n(0.012), 0.0,
+                             math.cos(r) + n(0.012), giro_dps + n(0.3), self.t)
+
     def _paso_servo(self, dt):
         objetivo = self.servo_objetivo
         if abs(objetivo - self.servo) < 1e-3:
@@ -103,6 +171,7 @@ class RobotSim:
 
     def paso(self, dt):
         self._paso_servo(dt)
+        self._paso_cabeceo(dt)
         seg = self.cfg["safety"]
         # Orden IGUAL que en el robot real: primero la rampa del backend
         # (`safety.max_*_accel`), y el piso de los motores DESPUÉS, ya en el
@@ -204,14 +273,30 @@ class RobotSim:
                      (lado < RADIO_ROBOT_M + follaje[:, 2])).any())
 
     # -------------------------------------------------------------- sensores
+    def cabeceo_medido(self) -> float:
+        """Cabeceo tal como lo vería el robot, pasando por SU estimador.
+
+        No se devuelve el cabeceo verdadero ni una imitación del filtro: se
+        sintetizan las cuentas del MPU6050 (gravedad inclinada + la
+        aceleración propia del robot + ruido) y se meten en `cabeceo.CabeceoIMU`,
+        el mismo módulo que corre en la Jetson. Así el simulador mide el
+        estimador de verdad, con sus fallos, y no una versión idealizada."""
+        if self.realismo <= 0:
+            return self.cabeceo_deg
+        medido = None if self._imu is None else self._imu.grados
+        return self.cabeceo_deg if medido is None else medido
+
     def pose(self) -> dict:
         return {"x": self.x, "y": self.y, "theta_deg": math.degrees(self.theta) % 360}
 
     def scan(self):
-        return self.mundo.scan(self.x, self.y, self.theta, rng=self.rng)
+        return self.mundo.scan(self.x, self.y, self.theta, rng=self.rng,
+                               realismo=self.realismo)
 
     def frame(self, geo, ancho=320, alto=240):
-        return self.mundo.camara(self.x, self.y, self.theta, geo, ancho, alto, rng=self.rng)
+        return self.mundo.camara(self.x, self.y, self.theta, geo, ancho, alto, rng=self.rng,
+                                 velocidad=self.v, realismo=self.realismo,
+                                 cabeceo_deg=self.cabeceo_deg)
 
     def desvio_del_sendero(self) -> float:
         return float(self.mundo.distancia_al_sendero(np.array(self.x), np.array(self.y)))

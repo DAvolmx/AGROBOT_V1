@@ -38,6 +38,7 @@ AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI))
 sys.path.insert(0, str(AQUI.parent / "jetson" / "backend"))
 
+import historial                   # noqa: E402
 import mundo as mundo_mod          # noqa: E402
 import vista3d                     # noqa: E402
 from correr import Episodio        # noqa: E402
@@ -395,6 +396,55 @@ def crear_app(sim: Simulacion) -> web.Application:
         return web.Response(body=buf.getvalue().encode(), content_type="text/csv",
                             headers={"Content-Disposition": "attachment; filename=muestras.csv"})
 
+    async def hist_handler(request):
+        import subprocess, re
+        entrenando = False
+        try:
+            out = subprocess.check_output(["pgrep", "-af", "entrenar.py"], text=True, timeout=2)
+            entrenando = bool(out.strip())
+        except Exception:
+            pass
+        # Parsear el log de entrenamiento para gráficos
+        log_path = Path.home() / ".agrobot" / "aprendizaje" / "entrenamiento.log"
+        tandas = []
+        sesion_actual = None
+        if log_path.exists():
+            for linea in log_path.read_text().splitlines():
+                if "=== entrenamiento de" in linea:
+                    sesion_actual = linea.split("===")[1].strip() if "===" in linea else ""
+                    continue
+                m = re.search(r"tanda (\d+): (\d+) ejemplos.*acierto ([\d.]+)%", linea)
+                if m:
+                    ts = linea[:19]
+                    tandas.append({"tanda": int(m.group(1)), "ejemplos": int(m.group(2)),
+                                   "acierto": float(m.group(3)), "cuando": ts})
+                m2 = re.search(r"evaluación:.*desvío ([\d.]+) -> ([\d.]+).*pisadas ([\d.]+) -> ([\d.]+)", linea)
+                if m2:
+                    tandas.append({"tipo": "eval", "desvio_sin": float(m2.group(1)),
+                                   "desvio_con": float(m2.group(2)),
+                                   "pisadas_sin": float(m2.group(3)),
+                                   "pisadas_con": float(m2.group(4)),
+                                   "cuando": linea[:19]})
+        return web.json_response({
+            "ranking": historial.ranking(solo_validados=False),
+            "eventos": historial.leer(limite=50),
+            "entrenando": entrenando,
+            "tandas": tandas[-60:],
+        })
+
+    async def desplegar_modelo(request):
+        cuerpo = await request.json()
+        src = Path(cuerpo.get("ruta", ""))
+        if not src.exists() or not src.suffix == ".pt":
+            return web.json_response({"error": "modelo no encontrado"}, status=400)
+        dst = src.parent / "politica.pt"
+        import shutil
+        shutil.copy2(str(src), str(dst))
+        historial.anotar("despliegue", {"modelo": src.name, "destino": str(dst)})
+        return web.json_response({"ok": True, "modelo": src.name})
+
+    app.router.add_get("/historial", hist_handler)
+    app.router.add_post("/desplegar", desplegar_modelo)
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/camara.jpg", camara)
@@ -438,7 +488,9 @@ def _pose_inicial(m) -> tuple:
 
 def main():
     p = argparse.ArgumentParser(description="Dashboard del simulador AgroBot")
-    p.add_argument("--escenario", default="bucle", choices=list(mundo_mod.ESCENARIOS))
+    guardados = [f.stem for f in MUNDOS_DIR.glob("*.json")]
+    p.add_argument("--escenario", default="bucle",
+                   choices=list(mundo_mod.ESCENARIOS) + guardados)
     p.add_argument("--puerto", type=int, default=8090)
     p.add_argument("--semilla", type=int, default=0)
     p.add_argument("--config", default=str(AQUI.parent / "jetson" / "backend" / "agrobot_config.json"))
@@ -447,7 +499,14 @@ def main():
     cfg = json.loads(Path(a.config).read_text())
     cfg["autonomia"].setdefault("sendero_paja", True)
     cfg["autonomia"]["sendero_activo"] = True
-    sim = Simulacion(cfg, a.escenario, a.semilla)
+    escenario = a.escenario
+    guardado = MUNDOS_DIR / f"{escenario}.json"
+    if escenario not in mundo_mod.ESCENARIOS and guardado.exists():
+        m = mundo_mod.Mundo.desde_dict(json.loads(guardado.read_text()))
+        s = m.sendero
+        pose = (float(s[0][0]), float(s[0][1]), 0.0) if len(s) else (0, 0, 0)
+        escenario = (m, pose)
+    sim = Simulacion(cfg, escenario, a.semilla)
 
     async def arrancar(app):
         await sim.arrancar()

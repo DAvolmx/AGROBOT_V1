@@ -240,10 +240,33 @@ def entrenar(epocas=60, lote=256, oculta=64, semilla=0):
     opt = torch.optim.Adam(red.parameters(), lr=2e-3)
     # Las clases están desbalanceadas (se avanza mucho más de lo que se gira):
     # sin pesos, la red aprendería a decir "adelante" siempre.
-    pesos = torch.tensor((cuenta.sum() / np.maximum(cuenta, 1)) ** 0.5, dtype=torch.float32)
+    # Exponente 0,75, no 0,5: con 0,5 el empuje se quedaba corto para las
+    # clases muy raras ("atrás" es el 1 % de los ejemplos).
+    pesos = torch.tensor((cuenta.sum() / np.maximum(cuenta, 1)) ** 0.75, dtype=torch.float32)
     perdida = nn.CrossEntropyLoss(weight=pesos)
 
-    mejor, mejores_pesos = 0.0, None
+    def notas(salida, cierto):
+        """Acierto llano y acierto EQUILIBRADO (media de aciertos por clase).
+
+        Quedarse con la época de mejor acierto llano fue lo que rompió el
+        modelo anterior: con 4000 "adelante" y 40 "atrás", la red que dice
+        siempre "adelante" saca un 79 % y gana. Y eso fue exactamente lo que
+        salió: el .pt del 2026-09-20 respondía "adelante" ante una pared a
+        40 cm y en un callejón sin salida. Los pesos de la pérdida empujaban
+        al equilibrio y el criterio de selección deshacía el empujón.
+
+        El acierto equilibrado promedia el acierto de CADA clase, así que una
+        red que ignora los giros saca 25 % por mucho que acierte el resto."""
+        pred = salida.argmax(1)
+        llano = float((pred == cierto).float().mean())
+        recalls = []
+        for c in range(len(pol.ACCIONES)):
+            hay = cierto == c
+            if int(hay.sum()):
+                recalls.append(float((pred[hay] == c).float().mean()))
+        return llano, (sum(recalls) / len(recalls) if recalls else 0.0)
+
+    mejor, mejor_llano, mejores_pesos = 0.0, 0.0, None
     for e in range(epocas):
         red.train()
         for i in range(0, len(Xe), lote):
@@ -254,22 +277,34 @@ def entrenar(epocas=60, lote=256, oculta=64, semilla=0):
             opt.step()
         red.eval()
         with torch.no_grad():
-            acierto = float((red(Xv).argmax(1) == yv).float().mean())
-        if acierto > mejor:
-            mejor, mejores_pesos = acierto, {k: v.clone() for k, v in red.state_dict().items()}
+            llano, equilibrado = notas(red(Xv), yv)
+        if equilibrado > mejor:
+            mejor, mejor_llano = equilibrado, llano
+            mejores_pesos = {k: v.clone() for k, v in red.state_dict().items()}
         if (e + 1) % 15 == 0:
-            print(f"  época {e+1:3d}: acierto en validación {acierto*100:.1f}%")
+            print(f"  época {e+1:3d}: acierto {llano*100:.1f}% | equilibrado {equilibrado*100:.1f}%")
 
     red.load_state_dict(mejores_pesos)
+    # Última barrera: una red que responde casi siempre lo mismo no sirve, y
+    # es mejor enterarse aquí que en el campo.
+    with torch.no_grad():
+        reparto = np.bincount(red(Xv).argmax(1).numpy(), minlength=len(pol.ACCIONES))
+    dominante = reparto.max() / max(reparto.sum(), 1)
+    if dominante > 0.92:
+        print(f"  ¡CUIDADO! el modelo responde '{pol.ACCIONES[int(reparto.argmax())]}' "
+              f"en el {dominante*100:.0f} % de los casos: ha colapsado a una sola acción. "
+              f"Hacen falta más ejemplos de giro (--recolectar con más escenarios).")
     MODELO.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"pesos": red.state_dict(), "medias": medias.tolist(),
                 "desviaciones": desv.tolist(), "entradas": list(pol.ENTRADAS),
                 "acciones": list(pol.ACCIONES), "oculta": oculta,
                 "version_entradas": pol.VERSION_ENTRADAS,
                 "entrenado": time.strftime("%Y-%m-%d %H:%M"), "ejemplos": len(X),
-                "acierto": round(mejor, 4), "escenarios": escenarios}, MODELO)
-    print(f"-> {MODELO} | acierto en validación {mejor*100:.1f}% con {len(X)} ejemplos")
-    return {"ejemplos": len(X), "acierto": mejor}
+                "acierto": round(mejor_llano, 4), "acierto_equilibrado": round(mejor, 4),
+                "reparto_predicho": reparto.tolist(), "escenarios": escenarios}, MODELO)
+    print(f"-> {MODELO} | acierto {mejor_llano*100:.1f}% | equilibrado {mejor*100:.1f}% "
+          f"con {len(X)} ejemplos")
+    return {"ejemplos": len(X), "acierto": mejor_llano, "acierto_equilibrado": mejor}
 
 
 # ------------------------------------------------------------------- evaluar
@@ -349,6 +384,15 @@ def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epoca
                 # posterior empeora, se puede volver a esta.
                 copia = CARPETA / f"politica_tanda{tanda:03d}.pt"
                 copia.write_bytes(MODELO.read_bytes())
+                # Ficha en el historial: con varias noches de tandas, el .pt
+                # más nuevo NO es el mejor, y sin registro no hay manera de
+                # saber cuál elegir. Ver simulador/historial.py.
+                try:
+                    import historial as hist
+                    hist.registrar_modelo(copia, tanda=tanda, mundo=mundo_nombre,
+                                          mezcla=mezcla, segundos=segundos, **r)
+                except Exception as exc:
+                    anotar(f"no se pudo fichar el modelo: {type(exc).__name__}: {exc}")
                 if tanda % 3 == 0:
                     ev = evaluar(2, cfg, segundos, semilla0=90000 + tanda)
                     anotar(f"evaluación: desvío {ev['sin']['desvio_cm']} -> "

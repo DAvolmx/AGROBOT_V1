@@ -176,8 +176,13 @@ class Episodio:
         Si no, el detector creería mirar a un sitio y estaría mirando a otro:
         el mismo error que habría tenido el robot real al mover el servo."""
         g = dict(self.cfg["odometria_webcam"])
-        g["camara_inclinacion_deg"] = self.robot.inclinacion_camara
-        return g
+        incl = self.robot.inclinacion_camara
+        # El chasis cabecea en los baches y la cámara mira a otro sitio. Con
+        # el IMU se sabe cuánto y se corrige; sin él, el detector cree estar
+        # mirando a 1 m cuando mira a 1,2 y el sendero le sale desplazado.
+        if self.cfg["autonomia"].get("compensar_cabeceo", True):
+            incl += self.robot.cabeceo_medido()
+        return {**g, "camara_inclinacion_deg": incl}
 
     async def _buscar_inclinacion(self):
         """Mover el servo hasta encontrar desde dónde SE VE el sendero.

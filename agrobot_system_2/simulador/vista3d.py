@@ -111,8 +111,9 @@ def render(mundo, pose=None, cam: Camara = None, traza=None, px_por_m=40):
 
     # --- Plantas: cruces de dos planos verticales (truco clásico: parecen
     # volumen desde cualquier ángulo y cuestan cuatro polígonos) ---
-    for cx, cy, r, plaga in getattr(mundo, "plantas", []):
-        alto_p = max(ALTURA_PLANTA_M, float(r) * 2.2)
+    for p in getattr(mundo, "plantas", []):
+        cx, cy, r, plaga = float(p[0]), float(p[1]), float(p[2]), int(p[3])
+        alto_p = float(p[4]) if len(p) > 4 else max(ALTURA_PLANTA_M, float(r) * 2.2)
         color = COLOR_PLAGA_3D if plaga else COLOR_PLANTA_3D
         for dx, dy in ((r, 0.0), (0.0, r)):
             hoja = np.array([[cx - dx, cy - dy, 0], [cx + dx, cy + dy, 0],

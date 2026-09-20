@@ -37,8 +37,25 @@ CASOS = [  # nombre, robot a la izquierda del centro (m), robot girado a la izq 
     ("curva a la derecha", 0, 0, -0.12), ("curva izq + 10 cm der", -0.10, 0, 0.12),
     ("sombra fuerte, 15 cm izq", 0.15, 0, 0),
 ]
+# Cada caso se corre también con la imagen viñeteada. Está aquí porque este
+# defecto pasó desapercibido hasta que el simulador lo midió: los bordes más
+# oscuros que el centro hundían el seguimiento del sendero del 83 % al 52 %,
+# y las escenas sintéticas de antes eran todas de luz perfectamente plana. La
+# corrección vive en `sendero.igualar_luz`.
+VINETEOS = (0.0, 0.35)
 SEMILLAS = (1, 2, 3)
 ANCHO_REAL = 0.50
+
+
+def vinetear(img, fuerza):
+    """Oscurece los bordes como hace cualquier objetivo real."""
+    if fuerza <= 0:
+        return img
+    h, w = img.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w]
+    r = np.sqrt(((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2)
+    caida = 1 - fuerza * np.clip(r, 0, 1) ** 2
+    return np.clip(img.astype(np.float32) * caida[..., None], 0, 255).astype(np.uint8)
 
 
 def escena(lateral=0.0, yaw_deg=0.0, curva=0.0, ancho=ANCHO_REAL, paja_ancho=0.35, semilla=0, sombra=0.25):
@@ -75,13 +92,15 @@ def escena(lateral=0.0, yaw_deg=0.0, curva=0.0, ancho=ANCHO_REAL, paja_ancho=0.3
 def main() -> int:
     SALIDA.mkdir(parents=True, exist_ok=True)
     filas, fallos, errores_lat = [], 0, []
-    for nombre, lat, yaw, cur in CASOS:
+    for (nombre, lat, yaw, cur), vineta in ((c, v) for c in CASOS for v in VINETEOS):
         sombra = 0.55 if nombre.startswith("sombra") else 0.25
+        if vineta:
+            nombre = f"{nombre} (viñeteado)"
         for sem in SEMILLAS:
             seg = sendero.SeguidorSendero(lambda: CFG, None, get_geometria=lambda: GEO)
             dec = None
             for k in range(3):          # 3 fotogramas: el seguidor aprende el ancho
-                img = escena(lat, yaw, cur, semilla=sem * 10 + k, sombra=sombra)
+                img = vinetear(escena(lat, yaw, cur, semilla=sem * 10 + k, sombra=sombra), vineta)
                 seg._obtener_frame = lambda im=img: (im, 0, 0)
                 dec = seg.correccion(cv2, {})
             err_real = ((-lat + cur * sendero.MIRADA_M ** 2) * math.cos(math.radians(yaw))

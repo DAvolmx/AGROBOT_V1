@@ -3971,3 +3971,55 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   Archivos: `aprendizaje.py`, `politica.py`, `explorador.py`, `sendero.py`,
   `jetson_server.py`, `config_store.py`, `simulador/*`.
 
+
+### 2026-09-20 — Realismo de sensores, historial de modelos, mapa EXTERIOR1, paredes 3D
+
+  **IMU cabeceo** (`jetson/backend/cabeceo.py`, nuevo): filtro complementario
+  (giroscopio + acelerómetro) para estimar la inclinación de la cámara. Gating
+  de innovación (rechaza accel si contradice gyro >5°) y de magnitud
+  (0.85–1.15g). El simulador usa el mismo módulo (`simulador/robot.py`).
+  Config: `autonomia.compensar_cabeceo`, `calibration.imu_cabeceo_signo`.
+
+  **Aplanado de iluminación** (`jetson/backend/sendero.py`): `igualar_luz()`
+  divide por el campo de iluminación estimado a 1/8 de resolución. Reduce
+  viñeteo de 36% a 4%. Config: `autonomia.sendero_igualar_luz`. Ablación:
+  viñeteo era la causa dominante de degradación (51.9%→85.7% sin él).
+
+  **Entrenamiento con acierto equilibrado** (`simulador/entrenar.py`): la
+  selección de modelo usaba accuracy plana, que premiaba colapso a clase
+  mayoritaria ("adelante" 100%). Ahora usa balanced accuracy (media de recall
+  por clase) + exponente de pesos 0.75. Detección de colapso.
+
+  **Historial y ranking** (`simulador/historial.py`, nuevo): registro JSONL de
+  sucesos + `modelos.json` con ficha de cada .pt. Validación cruzada en 5
+  escenarios (huerta_real, bucle, hileras, pasillo, callejón) con semillas
+  fijas. `ranking()` ordena por puntuación Montecarlo (menos = mejor).
+
+  **Mapa EXTERIOR1** (`simulador/mundos/EXTERIOR1.json`): mapa dibujado por el
+  usuario, 241 plantas, 31 paredes. Sendero densificado de 18 a 115 puntos
+  (18.4m). Copiado como `huerta_real.json` para entrenamiento. Filas paralelas
+  rectas con giros cerrados.
+
+  **Paredes 3D corregidas** (`simulador/dashboard.html`): la rotación en WebGL
+  tenía el signo invertido (`atan2(-(by-ay), ...)` → `atan2(by-ay, ...)`),
+  las paredes diagonales se dibujaban reflejadas. `vista3d.py`: plantas con 5
+  elementos (formato nuevo con altura) ya no crashean el render del servidor.
+
+  **Pestaña Historial en dashboard**: gráfico en vivo del entrenamiento
+  (acierto y ejemplos por tanda, auto-refresh 15s), ranking de modelos con
+  puntaje por escenario, botón de despliegue, indicador de entrenamiento
+  activo. Endpoints `/historial` y `/desplegar` en `servidor.py`.
+
+  **Servidor acepta mapas guardados** (`simulador/servidor.py`): `--escenario`
+  ahora acepta nombres de JSON en `mundos/` además de los escenarios
+  built-in.
+
+  **Post-entrenamiento automático** (`simulador/post_entrenamiento.sh`):
+  espera a que termine el entrenamiento, valida todos los .pt, monta el mejor
+  y reinicia el backend.
+
+  Archivos: `cabeceo.py` (nuevo), `historial.py` (nuevo), `huerta_real.json`
+  (nuevo), `EXTERIOR1.json` (nuevo), `post_entrenamiento.sh` (nuevo),
+  `jetson_server.py`, `sendero.py`, `config_store.py`, `robot.py`, `correr.py`,
+  `dashboard.html`, `entrenar.py`, `servidor.py`, `vista3d.py`, `mundo.py`,
+  `probar_sendero.py`, `README.md`, `agrobot_config.json`.

@@ -443,6 +443,13 @@ class ActuatorController:
     def en_reposo(self) -> bool:
         return self._ramp_v == 0.0 and self._ramp_omega == 0.0
 
+    def velocidades(self) -> dict:
+        """Lo que pidió el software y lo que salió tras la rampa. Sin esto el
+        registro de calibración guardaba velocidades en cero (2026-09-19) y
+        no se podía comparar lo comandado con lo real."""
+        return {"v_pedida": self._obj_v, "omega_pedida": self._obj_omega,
+                "v_aplicada": self._ramp_v, "omega_aplicada": self._ramp_omega}
+
     def _aplicar(self, scan_cmd: int):
         v_ref, omega_ref = self._apply_ramp(
             self._obj_v, self._obj_omega, state.config["safety"])
@@ -2051,8 +2058,15 @@ async def _nav_cal_loop():
             frontal_cm = round(d["adelante"] * 100) if d.get("adelante") is not None else None
             izq_cm = round(d["izquierda"] * 100) if d.get("izquierda") is not None else None
             der_cm = round(d["derecha"] * 100) if d.get("derecha") is not None else None
+            # Velocidades: lo PEDIDO sale del actuador (tras la rampa) y lo
+            # REAL del EKF, que es la única medida de verdad (rf2o + giroscopio).
+            vel = actuator_proto.velocidades() if actuator_proto is not None else {}
             nav_logger.log_pose(
                 pose["x"], pose["y"], pose.get("theta_deg", 0),
+                vx_desired=round(vel.get("v_aplicada", 0.0), 3),
+                omega_desired=round(vel.get("omega_aplicada", 0.0), 3),
+                vx_real=round(pose.get("vx", 0.0), 3),
+                omega_real=round(pose.get("vyaw", 0.0), 3),
                 lidar_frontal=frontal_cm, lidar_izq=izq_cm, lidar_der=der_cm,
             )
             poses_count += 1

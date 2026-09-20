@@ -3890,9 +3890,15 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   (unos 42–47° hacia abajo), donde la cámara abarca de 0,5 a 1,5 m. Escala
   medida: 1° de servo ≈ 0,8° de inclinación. El simulador usa servo 62°.
 
-  **⚠️ Pendientes detectados en los datos del robot (2026-09-19, 22:12):**
-  `navigation_logger` graba `vx_desired` y `vx_real` SIEMPRE en cero, así que
-  no se puede comparar lo comandado con lo real. Y en esa sesión hay 22
+  **Registro de velocidades ARREGLADO.** `_nav_cal_loop` llamaba a
+  `log_pose()` sin las velocidades, así que `vx_desired`, `omega_desired`,
+  `vx_real` y `omega_real` quedaban en su valor por defecto (cero) en TODAS
+  las sesiones. Ahora lo pedido sale de `ActuatorController.velocidades()`
+  (nuevo, la velocidad tras la rampa) y lo real del EKF (`vx`/`vyaw` de
+  `/odometry/filtered`). Comprobado: con el robot quieto `vx_real` marca el
+  ruido del EKF (0,001) en vez de un cero fijo.
+
+  **⚠️ Pendiente en los datos del robot (2026-09-19, 22:12):** en esa sesión hay 22
   saltos de pose de >25 cm en 0,5 s que suman 6,8 de los 15 m "recorridos":
   la deriva del 50,7 % que sale en la tabla está inflada por esos saltos.
 

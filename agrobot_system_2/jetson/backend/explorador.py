@@ -41,6 +41,37 @@ ATASCO_S = 25.0           # sin moverse tanto tiempo = atascado
 ATASCO_MOVIMIENTO_M = 0.2
 DESATASCO_GIROS = 3       # pulsos de giro seguidos al desatascarse
 
+# La maniobra de giro (arco adelante + arco atrás, para tierra blanda) SOLO
+# vale con sitio por delante y por detrás: con una pared cerca el robot gira
+# rozándola. Medido en el simulador el 2026-09-20: 43 s de roce en el
+# escenario `callejon`. Sin sitio se gira sobre el eje, que no traslada.
+MARGEN_MANIOBRA_M = 0.35
+# Salir de un callejón: pivotar hasta que haya salida, sin volver a decidir
+# en cada tick (antes oscilaba entre girar y retroceder).
+GIROS_CALLEJON = 8
+PAUSA_GIRO_S = 1.0
+
+# Detección de "estoy dando vueltas": volver a una celda de este tamaño
+# después de haber estado fuera un rato.
+CELDA_M = 0.5
+REVISITA_S = 15.0
+REVISITAS_BUCLE = 3
+# Al detectar el bucle, se insiste en el lado menos visitado durante varios
+# pulsos en vez de volver a elegir con el mismo criterio de siempre.
+COMPROMISO_PULSOS = 5
+
+# Recentrarse en el sendero es corregir el RUMBO: con pivote el robot no
+# traslada (y en el campo no pisa las plantas). Ver la comparación del
+# 2026-09-20 en el simulador antes de cambiarlo.
+MANIOBRA_EN_CORRECCION = False
+# No corregir dos veces seguidas: entre corrección y corrección va al menos un
+# pulso de avance. Si no, el robot se pasa el rato pivotando sin recorrer
+# (102 correcciones y la mitad de distancia en el simulador, 2026-09-20).
+PULSOS_ENTRE_CORRECCIONES = 1
+# Un callejón es que NO se pueda seguir, no que haya poco sitio: en un pasillo
+# estrecho los dos lados siempre están cerca y se confundía con un callejón.
+FRENTE_CALLEJON_M = 0.45
+
 
 class ExploradorReactivo:
     def __init__(self, *, distancias, get_pose, conducir, parar,
@@ -51,7 +82,7 @@ class ExploradorReactivo:
         self._distancias = distancias      # () -> {adelante, atras, izquierda, derecha}
         self._edad_scan = edad_scan        # () -> segundos desde el último /scan
         self._get_pose = get_pose          # () -> {x, y, theta_deg} | None
-        self._conducir = conducir          # (accion) -> None  (pulso)
+        self._conducir_cb = conducir       # (accion, maniobra) -> None  (pulso)
         self._parar = parar                # () -> None
         self._escanear = escanear          # corutina(motivo)
         self._on_event = on_event          # (dict)
@@ -67,6 +98,12 @@ class ExploradorReactivo:
         self._tarea: asyncio.Task | None = None
         self._ultimo_escaneo = 0.0
         self._ultimo_lado = "izquierda"
+        self._memoria: dict[tuple[int, int], tuple[int, float]] = {}
+        self._forzar_lado = None
+        self._compromiso = 0
+        self._sin_corregir = 0
+        self.bucles = 0
+        self.callejones = 0
         self._ref_pose = None
         self._ref_t = 0.0
 
@@ -80,7 +117,9 @@ class ExploradorReactivo:
             return False, "sin datos del LIDAR — revisá el cable y que el SLAM esté corriendo"
         self.activo = True
         self.pulsos = self.giros = self.desatascos = self.escaneos = 0
-        self.correcciones = 0
+        self.correcciones = self.bucles = self.callejones = 0
+        self._memoria.clear()
+        self._forzar_lado, self._compromiso = None, 0
         self._ultimo_escaneo = 0.0        # primer barrido nada más arrancar
         self._ref_pose, self._ref_t = None, time.monotonic()
         self._grabar_recorrido(True)      # deja el rastro del recorrido
@@ -99,7 +138,8 @@ class ExploradorReactivo:
     def snapshot(self) -> dict:
         d = {"activo": self.activo, "estado": self.estado, "pulsos": self.pulsos,
              "giros": self.giros, "desatascos": self.desatascos,
-             "escaneos": self.escaneos, "correcciones": self.correcciones}
+             "escaneos": self.escaneos, "correcciones": self.correcciones,
+             "bucles": self.bucles, "callejones": self.callejones}
         if self._seguidor is not None:
             d["sendero"] = self._seguidor.snapshot()
         return d
@@ -115,6 +155,66 @@ class ExploradorReactivo:
         """None en las distancias significa "nada a la vista" = libre."""
         v = d.get(lado)
         return math.inf if v is None else v
+
+    def _conducir(self, accion, maniobra=True):
+        self._conducir_cb(accion, maniobra)
+
+    def _hay_sitio_para_maniobra(self, d) -> bool:
+        """La maniobra traslada el robot hacia delante y hacia atrás."""
+        return (self._hueco(d, "adelante") >= MARGEN_MANIOBRA_M
+                and self._hueco(d, "atras") >= MARGEN_MANIOBRA_M)
+
+    def _registrar_celda(self):
+        """Marca dónde está y avisa si YA había estado ahí hace rato.
+
+        Contar el tiempo dentro de la celda no sirve: avanzando despacio el
+        robot pasa segundos en la misma sin estar dando vueltas. Lo que
+        delata el bucle es VOLVER tras haberse ido."""
+        pose = self._get_pose()
+        if pose is None:
+            return
+        celda = (round(pose["x"] / CELDA_M), round(pose["y"] / CELDA_M))
+        ahora = time.monotonic()
+        veces, ultimo = self._memoria.get(celda, (0, -1e9))
+        if ahora - ultimo > REVISITA_S:
+            veces += 1
+            if veces >= REVISITAS_BUCLE:
+                self.bucles += 1
+                self._forzar_lado = self._lado_menos_visitado(pose, celda)
+                self._compromiso = COMPROMISO_PULSOS
+                self._emitir(evento="bucle", celda=list(celda), visitas=veces,
+                             lado=self._forzar_lado)
+        self._memoria[celda] = (veces, ahora)
+
+    def _lado_menos_visitado(self, pose, celda) -> str:
+        """Hacia qué lado hay menos terreno ya pisado (en ejes del robot)."""
+        rumbo = math.radians(pose.get("theta_deg", 0.0))
+        pesos = {}
+        for lado, signo in (("izquierda", 1), ("derecha", -1)):
+            ang = rumbo + signo * math.pi / 2
+            cx = celda[0] + round(2 * math.cos(ang))
+            cy = celda[1] + round(2 * math.sin(ang))
+            pesos[lado] = self._memoria.get((cx, cy), (0, 0))[0]
+        return min(pesos, key=pesos.get)
+
+    async def _salir_callejon(self, d):
+        """Sin salida: pivotar hasta encontrarla, SIN volver a decidir en cada
+        tick. Antes oscilaba entre girar y retroceder y se quedaba rozando."""
+        self.callejones += 1
+        lado = self._forzar_lado or ("izquierda" if self._hueco(d, "izquierda")
+                                     >= self._hueco(d, "derecha") else "derecha")
+        self._ultimo_lado = lado
+        avance_libre = self._get_config()["avance_libre_cm"] / 100.0
+        self.estado = f"callejón: girando a la {lado} hasta encontrar salida"
+        self._emitir(evento="callejon", lado=lado, total=self.callejones)
+        for _ in range(GIROS_CALLEJON):
+            if not self.activo:
+                return
+            if self._hueco(self._distancias(), "adelante") >= avance_libre:
+                return
+            self._conducir(lado, maniobra=False)     # pivote: no empuja contra la pared
+            self.giros += 1
+            await asyncio.sleep(PAUSA_GIRO_S)
 
     def _atascado(self) -> bool:
         pose = self._get_pose()
@@ -156,6 +256,8 @@ class ExploradorReactivo:
                     await self._desatascar()
                     continue
 
+                self._registrar_celda()
+
                 cfg = self._get_config()
                 avance_libre = cfg["avance_libre_cm"] / 100.0
                 lado_libre = cfg["lado_libre_cm"] / 100.0
@@ -169,24 +271,44 @@ class ExploradorReactivo:
                     # Con sitio delante, antes de avanzar se mira si hay que
                     # recentrarse en el sendero. La corrección es un pulso de
                     # giro corto: este chasis no sabe girar "un poco".
-                    correccion = self._correccion_sendero()
+                    correccion = (self._correccion_sendero()
+                                  if self._sin_corregir >= PULSOS_ENTRE_CORRECCIONES else None)
                     if correccion is not None:
                         self.estado = f"sendero: {self._seguidor.estado}"
-                        self._conducir(correccion)
+                        # Recentrarse es corregir el RUMBO: pivote, que no
+                        # traslada. Con la maniobra el robot se salía del
+                        # sendero (y en el campo pisa las plantas).
+                        self._conducir(correccion, maniobra=MANIOBRA_EN_CORRECCION)
                         self.correcciones += 1
+                        self._sin_corregir = 0
                         continue
                     self.estado = f"avanzando ({frente:.2f} m libres)"
                     self._conducir("adelante")
                     self.pulsos += 1
+                    self._sin_corregir += 1
+                    if self._compromiso:
+                        self._compromiso -= 1
+                        if not self._compromiso:
+                            self._forzar_lado = None
                     continue
 
-                # Sin sitio delante: girar hacia donde más hueco haya. Se
-                # recuerda el lado para no quedar oscilando izquierda-derecha.
-                lado = "izquierda" if izq >= der else "derecha"
+                # Sin sitio delante ni a los lados: es un callejón, y se sale
+                # con una maniobra comprometida en vez de re-decidir cada tick.
+                if frente < FRENTE_CALLEJON_M and izq < lado_libre and der < lado_libre:
+                    await self._salir_callejon(d)
+                    continue
+
+                # Girar hacia donde más hueco haya. Tras detectar un bucle se
+                # insiste en el lado menos pisado, aunque no sea el más ancho.
+                lado = self._forzar_lado or ("izquierda" if izq >= der else "derecha")
+                if self._hueco(d, lado) < lado_libre:
+                    lado = "izquierda" if izq >= der else "derecha"
                 if self._hueco(d, lado) >= lado_libre:
-                    self.estado = f"girando a la {lado} (frente {frente:.2f} m)"
+                    maniobra = self._hay_sitio_para_maniobra(d)
+                    self.estado = (f"girando a la {lado} (frente {frente:.2f} m"
+                                   + ("" if maniobra else ", pivote") + ")")
                     self._ultimo_lado = lado
-                    self._conducir(lado)
+                    self._conducir(lado, maniobra=maniobra)
                     self.giros += 1
                     continue
 
@@ -196,7 +318,7 @@ class ExploradorReactivo:
                     continue
 
                 self.estado = "encerrado: girando en el sitio"
-                self._conducir(self._ultimo_lado)
+                self._conducir(self._ultimo_lado, maniobra=False)
                 self.giros += 1
         except asyncio.CancelledError:
             raise
@@ -233,7 +355,7 @@ class ExploradorReactivo:
         for _ in range(DESATASCO_GIROS):
             if not self.activo:
                 return
-            self._conducir(contrario)
+            self._conducir(contrario, maniobra=self._hay_sitio_para_maniobra(self._distancias()))
             self.giros += 1
             await asyncio.sleep(1.3)
         self._ref_pose, self._ref_t = None, time.monotonic()

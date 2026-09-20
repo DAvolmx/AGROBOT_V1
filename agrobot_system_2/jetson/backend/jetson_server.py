@@ -997,12 +997,15 @@ async def _barrido_camara():
             "servo_angle": state.servo_angle, "led": state.led_on}})
 
 
-def _conducir_pulso(accion: str):
-    """Un pulso del conductor manual, con el acelerador de la config."""
+def _conducir_pulso(accion: str, maniobra: bool = True):
+    """Un pulso del conductor manual, con el acelerador de la config.
+
+    `maniobra` la decide quien llama (el explorador): con una pared cerca la
+    maniobra de tierra blanda haría girar al robot rozándola."""
     ctrl = state.config["control"]
     escala = state.config["autonomia"]["escala_velocidad"]
     conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * escala,
-                      omega_max=ctrl["max_omega_rps"] * escala, maniobra=True)
+                      omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
 
 
 def _evento(tipo: str, data: dict):

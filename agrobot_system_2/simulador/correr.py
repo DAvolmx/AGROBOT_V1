@@ -134,9 +134,9 @@ class Episodio:
         self.explorador = ExploradorReactivo(
             distancias=lambda: self.lidar.distancias(self.cfg["slam"]),
             get_pose=self.robot.pose,
-            conducir=lambda accion: self.conductor.ordenar(
+            conducir=lambda accion, maniobra=True: self.conductor.ordenar(
                 accion, v_max=ctrl["max_v_mps"] * escala,
-                omega_max=ctrl["max_omega_rps"] * escala, maniobra=True),
+                omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra),
             parar=self.conductor.parar,
             escanear=self._escanear,
             on_event=lambda d: self.eventos.append({"t": round(self.reloj.t, 1), **d}),
@@ -276,6 +276,8 @@ class Episodio:
             "pulsos": self.explorador.pulsos, "giros": self.explorador.giros,
             "correcciones_sendero": self.explorador.correcciones,
             "desatascos": self.explorador.desatascos,
+            "callejones": self.explorador.callejones,
+            "bucles_explorador": self.explorador.bucles,
             "escaneos": self.escaneos,
             "plagas_detectadas": f"{len(self.plagas_vistas)}/{plagas}",
             "bucles_detectados": self.bucles,

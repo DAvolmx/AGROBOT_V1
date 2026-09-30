@@ -18,6 +18,7 @@ import math
 from collections import deque
 
 import numpy as np
+import mundo as mundo_mod
 
 # Piso de velocidad efectiva: por debajo de esto el motor no mueve el robot,
 # y por encima del piso cualquier orden sale casi a fondo (PWM 200..255).
@@ -329,7 +330,11 @@ class RobotSim:
         return self.mundo.scan(self.x, self.y, self.theta, rng=self.rng,
                                realismo=self.realismo, omega=self.omega)
 
-    def frame(self, geo, ancho=320, alto=240):
+    def frame(self, geo, ancho=None, alto=None):
+        # Con GPU, la resolución de la NexiGo (640x480): el detector la reduce
+        # a 320x240 igual que en el robot, y eso también suaviza el ruido.
+        if ancho is None:
+            ancho, alto = mundo_mod.resolucion_camara()
         return self.mundo.camara(self.x, self.y, self.theta, geo, ancho, alto, rng=self.rng,
                                  velocidad=self.v, realismo=self.realismo,
                                  cabeceo_deg=self.cabeceo_deg, omega=self.omega)

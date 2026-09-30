@@ -32,6 +32,8 @@ import numpy as np
 
 # Ruido del casamiento de scans (rf2o + EKF), por metro recorrido y por radián
 # girado. Los giros ensucian mucho más que los tramos rectos.
+# Recorte de alcance del SLAM real (ver mundo.LIDAR_RANGO_MIN_SLAM).
+RANGO_MIN_M = 0.18
 DERIVA_POR_METRO = 0.05
 DERIVA_POR_RADIAN = 0.08
 SESGO_GIRO = 0.02              # el giróscopo tiene un sesgo residual
@@ -224,7 +226,11 @@ class SlamSimulado:
         if not puntos:
             return
         self._casamiento(omega)
-        sub = puntos[::2]
+        # Como el filtro_scan_slam del robot real: lo que está a menos de
+        # 0,18 m es el propio chasis (mástil, cable) y no entra al mapa.
+        sub = [p for p in puntos[::2] if p["distance_m"] >= RANGO_MIN_M]
+        if not sub:
+            return
         ang = np.radians(np.fromiter((p["angle_deg"] for p in sub), np.float32, len(sub)))
         d = np.minimum(np.fromiter((p["distance_m"] for p in sub), np.float32, len(sub)), alcance)
         ang += self.theta

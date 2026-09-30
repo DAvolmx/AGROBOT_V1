@@ -79,6 +79,12 @@
 #include <WiFiUdp.h>
 #endif
 
+// Declaración adelantada. El IDE de Arduino genera solo los prototipos de
+// TODAS las funciones y los pone antes de la primera función del sketch,
+// que está más arriba que la definición de CmdFrame: sin esta línea,
+// aplicarComando(const CmdFrame &) no compila ("does not name a type").
+struct CmdFrame;
+
 
 // =============================================
 // ===== PINES Y RUEDAS (confirmados en el robot real) =====

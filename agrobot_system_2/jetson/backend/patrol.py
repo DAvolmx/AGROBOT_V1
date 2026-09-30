@@ -27,6 +27,16 @@ TICK_S = 0.5                  # cadencia del bucle de vigilancia
 # segundo sobre la misma planta. Sin esta ventana el robot se quedaría
 # barriendo en bucle delante del primer arbusto enfermo que encontrara.
 COOLDOWN_DETECCION_S = 30.0
+# Una detección cuenta para escanear solo si PERSISTE: al menos
+# DETECCIONES_MIN en VENTANA_DETECCION_S. Un destello suelto de YOLO no.
+DETECCIONES_MIN = 3
+VENTANA_DETECCION_S = 2.0
+# Tras un escaneo por detección, el siguiente pide que el robot se haya
+# movido: escanear la misma escena desde el mismo sitio no aporta nada. El
+# 2026-09-30, aparcado ante una estantería que YOLO tomaba por planta, el
+# servo barría cada 30 s ("el servo está loco").
+MOVIDO_MIN_M = 0.5
+GIRADO_MIN_DEG = 30.0
 
 # Grabación automática del recorrido: un punto cada tanto avance. La
 # distancia la fija la config (`autonomia.distancia_puntos_m`, 0,50 m); este
@@ -230,19 +240,39 @@ class PatrolController:
             self._escaneando = False
             self.estado = "navegando" if self.activo else "detenido"
 
-    def solicitar_escaneo_por_deteccion(self) -> bool:
+    def solicitar_escaneo_por_deteccion(self, modo: str = "siempre") -> bool:
         """Dispara un barrido al detectar una planta.
 
         Funciona con la patrulla apagada también: el usuario pidió que el
         escaneo se active SIEMPRE que se detecte una planta, no solo en
-        modo autónomo.
+        modo autónomo. `modo` (config detection.escanear_al_detectar):
+        "siempre" | "autonomo" (solo con la patrulla en marcha) | "nunca".
+
+        Filtros (2026-09-30): la detección tiene que persistir, y tras un
+        escaneo el robot tiene que haberse movido antes de repetir.
         """
         ahora = time.monotonic()
+        if modo == "nunca" or (modo == "autonomo" and not self.activo):
+            return False
+        self._detecciones_recientes = [t for t in getattr(self, "_detecciones_recientes", [])
+                                       if ahora - t < VENTANA_DETECCION_S] + [ahora]
+        if len(self._detecciones_recientes) < DETECCIONES_MIN:
+            return False
         if ahora - self._ultima_deteccion_escaneada < COOLDOWN_DETECCION_S:
             return False
         if self._escaneando:
             return False
+        pose = self._get_pose() or {}
+        previa = getattr(self, "_pose_ultimo_escaneo", None)
+        if previa is not None and pose:
+            movido = math.hypot(pose.get("x", 0) - previa.get("x", 0),
+                                pose.get("y", 0) - previa.get("y", 0))
+            giro = abs((pose.get("theta_deg", 0) - previa.get("theta_deg", 0) + 180) % 360 - 180)
+            if movido < MOVIDO_MIN_M and giro < GIRADO_MIN_DEG:
+                return False
+        self._pose_ultimo_escaneo = dict(pose) if pose else None
         self._ultima_deteccion_escaneada = ahora
+        self._detecciones_recientes = []
         asyncio.create_task(self.escanear("planta detectada"))
         return True
 

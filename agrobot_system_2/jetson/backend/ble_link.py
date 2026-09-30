@@ -84,6 +84,11 @@ RESUMEN_BUSQUEDA_S = 60.0
 # Wi-Fi en modo AP y puede quedarse sordo; con la C3 simplemente apagada se
 # suele oír algún otro aparato.
 ESCANEOS_SORDOS_ANTES_DE_REINICIAR = 6
+# Con la otra vía (WiFi) funcionando, el BLE se reintenta con calma. Con la
+# C3 nueva fuera de alcance BLE (-95 dBm), reintentar cada ~6 s con escaneo
+# continuo tenía la tarjeta Intel 8265 (WiFi + BT en una radio) a 79 °C
+# (2026-09-30). El robot no pierde nada: las órdenes van por WiFi.
+ESPERA_CON_RESPALDO_S = 30.0
 REINICIO_RADIO_ENFRIAMIENTO_S = 600.0
 
 
@@ -142,6 +147,9 @@ class BleActuatorLink:
         self._escaneos_sordos = 0
         self.reinicios_radio = 0
         self._ultimo_reinicio_radio = 0.0
+
+        # Lo pone enlace_c3: devuelve True si la C3 responde por otra vía.
+        self.otra_via_viva = None
 
         self._v = 0.0
         self._omega = 0.0
@@ -367,6 +375,10 @@ class BleActuatorLink:
     async def _run(self):
         while not self._stop.is_set():
             try:
+                if self.otra_via_viva is not None and self.otra_via_viva():
+                    # Un intento cada ESPERA_CON_RESPALDO_S: si el BLE vuelve
+                    # (mejor señal), se recupera la vía rápida.
+                    await asyncio.sleep(ESPERA_CON_RESPALDO_S)
                 device = await self._find_device()
                 if device is None:
                     await asyncio.sleep(RECONNECT_DELAY_S)

@@ -53,6 +53,11 @@ DEFAULTS = {
         # 2026-09-29 (yolo11s, GPU): 640 px = 72-96 ms, 480 px = 44 ms. El
         # robot va lento y en los barridos la plaga ocupa mucha imagen.
         "imgsz": 480,
+        # Cuándo una detección dispara el barrido de cámara: "siempre",
+        # "autonomo" (solo con la patrulla en marcha) o "nunca". Con
+        # cualquiera, la detección tiene que persistir y el robot haberse
+        # movido desde el último escaneo (patrol.py).
+        "escanear_al_detectar": "siempre",
     },
     "slam": {
         # TODO EN CENTÍMETROS Y GRADOS, que es como se mide en el robot.

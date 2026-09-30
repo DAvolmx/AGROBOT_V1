@@ -49,7 +49,11 @@ MAPA_EXTENSION_SOSPECHOSA_M = 500.0
 # Covarianza de la velocidad cero que se publica en /zupt con el robot
 # quieto. Firme (sigma 0,1 m/s) pero no absoluta: si alguien empuja el robot
 # a mano, rf2o todavía pesa.
-ZUPT_COVARIANZA = 0.01
+ZUPT_COVARIANZA = 0.001
+# Quieto es quieto: el giro en reposo es cero con mucha más certeza de la que
+# da el giroscopio (varianza IMU_VAR_GIRO), así que en reposo manda el ZUPT.
+ZUPT_COVARIANZA_GIRO = 1e-5
+IMU_VAR_GIRO = math.radians(2.4) ** 2
 
 # Giro del LIDAR respecto al robot. Con el C1 montado según la flecha de la
 # carcasa, el 0° de sllidar_ros2 mira HACIA ATRÁS (2026-09-19: una persona a
@@ -417,6 +421,13 @@ if ROS_AVAILABLE:
             msg.angular_velocity.z = math.radians(float(gyro.get("z", 0.0)))
             # orientación desconocida (no hay magnetómetro/fusión propia): covarianza -1 = "no la uses"
             msg.orientation_covariance[0] = -1.0
+            # Ruido REAL del giroscopio (MPU6050 en la LoRa V3, medido en
+            # reposo el 2026-09-30: sigma 2,4 °/s). Con covarianza 0 el EKF
+            # lo tomaba por perfecto y ninguna otra medida (ni el ZUPT) podía
+            # corregirlo: con el sesgo sin calibrar giraba 53°/min quieto.
+            for i in (0, 4, 8):
+                msg.angular_velocity_covariance[i] = IMU_VAR_GIRO
+                msg.linear_acceleration_covariance[i] = 0.1
             self.imu_pub.publish(msg)
 
         def publish_wheel_odom(self, v_ref: float, omega_ref: float):
@@ -504,7 +515,7 @@ if ROS_AVAILABLE:
                 msg.twist.covariance[i * 7] = 1e3
             msg.twist.covariance[0] = ZUPT_COVARIANZA     # vx
             msg.twist.covariance[7] = ZUPT_COVARIANZA     # vy
-            msg.twist.covariance[35] = ZUPT_COVARIANZA    # vyaw
+            msg.twist.covariance[35] = ZUPT_COVARIANZA_GIRO   # vyaw
             self.zupt_pub.publish(msg)
 
         def publish_odom_webcam(self, vx, vyaw, var_vx, var_vyaw):

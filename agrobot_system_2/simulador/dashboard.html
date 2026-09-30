@@ -73,6 +73,39 @@ img.vista{width:100%;border-radius:8px;background:#000;display:block}
 .problema.error{border-color:rgba(239,90,76,.6);color:var(--crit)}
 .problema.aviso{border-color:rgba(245,166,35,.55);color:var(--warn)}
 @media (max-width:900px){#panel{width:260px}#gl-mando{max-width:calc(100% - 290px)}}
+:focus-visible{outline:2px solid var(--acento-ink);outline-offset:2px}
+/* ---- Teléfono (2026-09-30). Antes: las 8 fichas apretadas en una columna
+   con los valores cortados ("aut…", "erro…"), el visor 3D tapado por los
+   paneles flotantes y las columnas de SLAM / Entrenamiento / Editor con su
+   ancho mínimo de escritorio, cortadas por la derecha. ---- */
+@media (max-width:760px){
+  body{height:100dvh}
+  header{padding:8px 10px;row-gap:6px}
+  header h1{font-size:14px}
+  #chips{order:3;flex:0 0 100%;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  #chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;min-width:128px;max-width:230px;padding:3px 10px}
+  .chip b{font-size:12.5px}
+  .controles{order:4;flex:0 0 100%}
+  .controles select{flex:1;min-width:0}
+  .controles button,.controles select,.controles input{min-height:38px}
+  #tabs{overflow-x:auto;scrollbar-width:none;padding:5px 8px 0}
+  #tabs::-webkit-scrollbar{display:none}
+  #tabs button{flex:none;padding:8px 12px;min-height:40px}
+  .tab.activa{flex-direction:column}
+  .tab .col{flex:none!important;min-width:0!important;width:100%}
+  /* Simulación 3D: el visor arriba; el mando y los sensores, debajo y no
+     encima de la imagen. */
+  #tab-sim{overflow-y:auto;overflow-x:hidden}
+  #gl-lienzo{position:relative;inset:auto;height:52dvh;flex:none;order:1}
+  #gl-mando{left:8px;right:8px;max-width:none;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  #gl-mando::-webkit-scrollbar{display:none}
+  #mando{position:static;order:2;margin:10px 10px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .cruceta{grid-template-columns:repeat(3,56px)}
+  .cruceta button{min-height:48px}
+  #panel{position:static;order:3;width:auto;margin:10px;bottom:auto;overflow:visible}
+  #ed-lienzo{min-height:58dvh}
+}
 </style>
 </head>
 <body>

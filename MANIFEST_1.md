@@ -4115,3 +4115,81 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   config/nav2_params.yaml, launch/*.py, scripts/elegir_puerto_lidar.sh}`,
   `simulador/*`.
 
+
+### 2026-09-30 (tarde) — Sensores calibrados con la habitación, GPU, memoria, servo, giroscopio, dashboards
+
+  **Firmware C3** (flasheado por el usuario, funciona): declaración adelantada
+  `struct CmdFrame;` (el IDE de Arduino pone los prototipos antes de la
+  definición). La C3 nueva se asocia al AP como `agrobot-c3` (192.168.12.137,
+  -85 dBm); medido: 10 estados/s por WiFi, 0 failsafe en 30 s. Con los nuevos
+  parámetros de conexión también conecta el BLE: BLE ✓ + WiFi ✓.
+  Verificación reproducible: `compilar_c3.sh` + `prototipos_arduino.py`
+  (ctags de Arduino) en el scratchpad de la sesión; `tests/verificar.sh`.
+
+  **Simulador calibrado con 100 scans y 10 fotogramas reales** (robot quieto
+  en la habitación; mundo `simulador/mundos/habitacion_real.json`, marcado
+  `"entrenar": false`). LIDAR real vs simulado: ruido 1,3/1,8/3,3/13,5 mm a
+  0,6/1,5/2,5/4 m -> modelo 1,2 mm + 0,18 mm/m³·d³; pérdida 0,8 % cerca y
+  ~4,5 % desde 1,5 m; atípicos 4,5 %; bordes mezclados 5 %; autoimpactos del
+  propio robot (mástil 15,5 cm a 20-26°, cable 7,8 cm a -133..-122°). Cámara:
+  ruido temporal 1,07 vs 1,00 real, JPEG 85 por defecto (la NexiGo da MJPEG).
+  Nuevo: superficies del camino (tierra, grava, césped, hojarasca, barro),
+  sol por mundo, parámetros de cámara y `lidar_peor` por episodio.
+
+  **GPU**: `simulador/camara_gpu.py` (render en PyTorch/CUDA, idéntico al de
+  CPU: diferencia media <1 nivel; 640x480 en 15,6 ms vs 47,9 ms). La PyTorch
+  cu130 funciona en la Orin pese al aviso. `entrenar.py` entrena en GPU (lotes
+  de 1024, barajado por época; 13x más rápido por época). YOLO del robot ya
+  iba en GPU. `AGROBOT_SIM_GPU=0` / `AGROBOT_ENTRENAR_GPU=0` fuerzan CPU.
+
+  **Memoria del entrenamiento**: MALLOC_ARENA_MAX=2 + malloc_trim por tanda,
+  relanzarse solo por encima de 2,5 GB, `oom_score_adj=600` (a las 17:30 el
+  OOM mató el entrenamiento y NO a ROS gracias a esto). Pendiente: con el
+  render a 640x480, backend + simulador + entrenamiento no caben a la vez en
+  7,5 GB: entrenar con el robot en reposo y sin el servidor del simulador.
+  Copias de modelos con fecha (`politica_AAAAMMDD_HHMM_tNNN.pt`): antes cada
+  noche pisaba las `politica_tandaNNN.pt` de la anterior (y sus notas de
+  validación quedaban apuntando a otro archivo).
+
+  **Robot real**:
+  - Servo "loco": cada detección de YOLO (falsos positivos en la habitación)
+    lanzaba un barrido cada 30 s, también en manual. Ahora la detección debe
+    persistir (3 en 2 s) y el robot haberse movido 0,5 m o girado 30° desde
+    el último barrido. `detection.escanear_al_detectar`: siempre|autonomo|nunca
+    (Parámetros). Medido: 0 barridos en 3 min parado (antes 6).
+  - Giroscopio: sesgo Z sin calibrar (+0,92 °/s) y el IMU publicado con
+    covarianza 0 -> el EKF giraba 53°/min quieto. Ahora covarianza real
+    (σ 2,4 °/s), ZUPT de giro firme (1e-5) y `SesgoGiroscopio` (autocalibrado
+    en reposo, τ 30 s): deriva -0,025 °/s (35x menos).
+  - Temperatura: los "80 °C" eran la tarjeta WiFi/BT (iwlwifi), no el chip
+    (57 °C). El BLE reintentaba cada ~6 s con escaneo continuo aunque la C3
+    iba por WiFi: ahora cada 30 s si la otra vía está viva. Con el ventilador
+    del usuario: 80 -> 61 °C en 5 min. Dashboard: TEMP CHIP (tj) y TEMP WIFI;
+    fila de salud `radio` (aviso > 75 °C). `gpu_pct` leído del driver (jtop no
+    lo daba).
+  - Vigía del LIDAR: relanza al instante si cambia el puerto (antes podía
+    tardar 5 min en volver tras enchufar el USB).
+  - `jetson/modo_terreno.sh terreno|casa`: sin router, NetworkManager sigue
+    buscando LoRa_Wan y cada barrido saca la radio del canal del AP.
+
+  **Dashboards** (skill ce-frontend-design, modo "sistema existente"):
+  - Robot: cabecera móvil que ya no tapa el título (píldoras en fila
+    deslizable, nueva de LIDAR, la de la C3 dice la vía: "C3 · BLE+WiFi"),
+    cámara 4:3 y radar apilados en móvil, sin hueco bajo el vídeo en
+    escritorio, hueco para el STOP, avisos por encima del STOP (nunca sobre
+    él), foco visible, favicon. Errores: `log` no existía (cada aviso lanzaba
+    ReferenceError) y al cargar se hacía un POST a /api/nav/mode que nunca
+    llegó a ejecutarse: eliminado (abrir la página no cambia la config).
+    Oruga de "Detectado" siempre visible (atributo style duplicado).
+  - Entrenamiento (training.html): columna `minmax(0,1fr)` (con `1fr` la
+    barra de herramientas ensanchaba la página en el teléfono), cabecera y
+    panel con scroll propio, rótulo de herramienta legible.
+  - Simulador: diseño de teléfono (fichas deslizables, visor 3D arriba y
+    paneles debajo, columnas apiladas).
+
+  Archivos: firmware `.ino`; `jetson/backend/{jetson_server,ros_bridge,
+  ble_link,enlace_c3,patrol,config_store}.py`; `jetson/dashboard/{index,
+  training}.html`; `jetson/modo_terreno.sh`; `simulador/{mundo,camara_gpu,
+  robot,entrenar,slam_sim,dashboard.html}`, `simulador/mundos/habitacion_real.json`;
+  `ros2_ws/.../config/ekf.yaml`.
+

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AgroBot — Command Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2300bd4f'/%3E%3Cpath d='M9 21c0-6 4-10 13-11-1 8-5 12-11 12m-2-1 5-5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 /* ============================================================
    AgroBot · Command — tema "Agricultura 5.0".
@@ -199,13 +200,24 @@ header.topbar {
 }
 header.topbar h2 { font-size: 18px; margin: 0; color: var(--ink); letter-spacing: 0.04em; font-weight: 700; }
 @media (max-width: 768px) {
+  /* Altura libre: con 60 px fijos las píldoras, al partirse en dos líneas,
+     tapaban el título (2026-09-30). Ahora van en su propia fila, que se
+     desliza de lado si no caben. */
   header.topbar {
-    height: 60px;
-    padding: 0 12px;
+    height: auto; min-height: 56px;
+    flex-wrap: wrap; row-gap: 6px;
+    padding: 8px 12px;
   }
-  header.topbar h2 { font-size: 16px; }
-  .pills { flex-wrap: wrap; gap: 6px; }
-  .pill { font-size: 12px; padding: 4px 8px; }
+  header.topbar h2 { font-size: 16px; white-space: nowrap; }
+  header.topbar h2 .largo { display: none; }
+  .pills {
+    order: 3; width: 100%; gap: 6px;
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .pills::-webkit-scrollbar { display: none; }
+  .pill { font-size: 12.5px; padding: 4px 9px; flex: none; }
+  #clock { margin-left: auto; flex: none; }
 }
 .pills { display: flex; gap: 8px; align-items: center; }
 .pill {
@@ -257,6 +269,9 @@ header.topbar h2 { font-size: 18px; margin: 0; color: var(--ink); letter-spacing
   overflow-y: scroll;
   overflow-x: hidden;
   padding: 22px;
+  /* Hueco al final para el botón STOP flotante: sin él tapaba lo último
+     de cada pestaña y no se podía llegar a tocarlo. */
+  padding-bottom: 130px;
   scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: var(--accent) transparent;
@@ -361,6 +376,20 @@ header.topbar h2 { font-size: 18px; margin: 0; color: var(--ink); letter-spacing
 @keyframes card-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .gallery-empty { text-align: center; padding: 60px 20px; color: var(--ink-soft); }
 .gallery-empty svg { opacity: 0.4; margin-bottom: 10px; }
+
+/* ---------- cámara + radar ----------
+   En el teléfono iban lado a lado: la cámara quedaba aplastada sobre un
+   bloque blanco vacío y el radar en una columna de 100 px (2026-09-30). */
+.cam-radar { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 16px; }
+.cam-card { display: flex; flex-direction: column; }
+/* En escritorio el vídeo llena la tarjeta (sin hueco debajo)… */
+.cam-card .video-wrap { flex: 1; aspect-ratio: auto; min-height: 280px; }
+@media (max-width: 900px) {
+  .cam-radar { grid-template-columns: 1fr; }
+  /* …y en columna manda la proporción de la NexiGo (640x480). */
+  .cam-card .video-wrap { flex: none; aspect-ratio: 4 / 3; min-height: 0; }
+  .cam-radar .lidar-wrap { min-height: 300px !important; }
+}
 
 /* ---------- video ---------- */
 .video-wrap {
@@ -523,7 +552,12 @@ input[type="text"], select { font-family: inherit; }
 .term .t-err { color: var(--crit-ink); }
 
 /* ---------- toasts ---------- */
-.toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 200; max-width: 360px; }
+/* Por ENCIMA del botón STOP, nunca sobre él: un aviso tapaba la parada de
+   emergencia justo cuando algo fallaba (2026-09-30). */
+.toast-container { position: fixed; bottom: 132px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 140; max-width: 360px; }
+@media (max-width: 768px) {
+  .toast-container { left: 12px; right: 12px; bottom: 104px; max-width: none; }
+}
 .toast {
   background: rgba(255, 255, 255, 0.97); backdrop-filter: blur(8px);
   border: 1px solid var(--line); border-left: 3px solid var(--accent);
@@ -573,6 +607,13 @@ input[type="text"], select { font-family: inherit; }
   animation: breathe 3s ease-in-out infinite;
 }
 .estop:hover { filter: brightness(1.08); }
+/* Foco visible para quien maneja con teclado (o un mando BT en el móvil). */
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.estop:focus-visible { outline-offset: 4px; border-radius: 50%; }
+@media (max-width: 768px) {
+  .estop { width: 76px; height: 76px; bottom: 18px; right: 16px; }
+  .estop .ic { font-size: 28px; }
+}
 .estop span { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; }
 .estop .ic { font-size: 34px; }
 @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.045); } }
@@ -617,12 +658,13 @@ input[type="text"], select { font-family: inherit; }
       <button class="sidebar-toggle" id="btn-menu" aria-label="Abrir menú" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
-      <h2>AGROBOT · COMMAND</h2>
+      <h2>AGROBOT<span class="largo"> · COMMAND</span></h2>
     </div>
     <div class="pills">
       <div class="pill" id="pill-ws"><span class="dot"></span><span>enlace Jetson</span></div>
-      <div class="pill" id="pill-actuator"><span class="dot"></span><span>ESP32-C3</span></div>
-      <div class="pill" id="pill-lora"><span class="dot"></span><span>ESP32 LoRa</span></div>
+      <div class="pill" id="pill-actuator" role="status"><span class="dot"></span><span class="pill-txt">ESP32-C3</span></div>
+      <div class="pill" id="pill-lidar" role="status"><span class="dot"></span><span class="pill-txt">LIDAR</span></div>
+      <div class="pill" id="pill-lora" role="status"><span class="dot"></span><span class="pill-txt">ESP32 LoRa</span></div>
       <span class="mono" id="clock" style="font-size:14px; color:var(--ink-soft);">--:--:--</span>
     </div>
   </header>
@@ -657,7 +699,7 @@ input[type="text"], select { font-family: inherit; }
         </div>
         <div style="width:1px; height:30px; background:var(--line);"></div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:24px;" id="detection-alert-emoji" style="display:none;">🐛</span>
+          <span style="font-size:24px; display:none;" id="detection-alert-emoji" aria-hidden="true">🐛</span>
           <div>
             <div class="row-kv" style="margin:0; border-top:none;">
               <span class="k">Detectado</span><span class="v mono" id="detection-alert-name">—</span>
@@ -680,8 +722,8 @@ input[type="text"], select { font-family: inherit; }
       </div>
 
       <!-- Cámara + Radar -->
-      <div style="display:grid; grid-template-columns:2fr 1fr; gap:12px; margin-bottom:16px;">
-        <div class="card" style="padding:0; overflow:hidden;">
+      <div class="cam-radar">
+        <div class="card cam-card" style="padding:0; overflow:hidden;">
           <div class="video-wrap" id="video-wrap">
             <div class="pest-banner" id="pest-banner">
               <span id="pest-banner-text">¡Plaga detectada!</span>
@@ -765,7 +807,7 @@ input[type="text"], select { font-family: inherit; }
       <div class="card">
         <div class="gallery-toolbar">
           <h3 style="margin:0;">Capturas de la misión</h3>
-          <div style="display:flex; gap:10px; align-items:center;">
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <select id="gallery-filter">
               <option value="">Todas las clases</option>
             </select>
@@ -1156,6 +1198,15 @@ input[type="text"], select { font-family: inherit; }
                 <div class="label-row"><span>Umbral para alerta / grabar clip</span><span class="v mono" id="p-clip-val">0.60</span></div>
                 <input type="range" min="0.1" max="0.95" step="0.01" value="0.60" id="p-clip">
               </div>
+              <div class="slider-row" style="margin-top:14px;">
+                <label class="label-row" for="p-escanear"><span>Barrido de cámara al detectar una planta</span></label>
+                <select id="p-escanear" style="width:100%; margin-top:6px; background:var(--panel-2); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-size:15px;">
+                  <option value="siempre">Siempre (también en manual)</option>
+                  <option value="autonomo">Solo en modo autónomo</option>
+                  <option value="nunca">Nunca</option>
+                </select>
+                <div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">Solo si la detección se mantiene y el robot se movió desde el último barrido.</div>
+              </div>
             </div>
             <button class="btn primary" id="p-detection-save">Guardar</button>
           </div>
@@ -1370,7 +1421,8 @@ input[type="text"], select { font-family: inherit; }
           <div class="donut-wrap"><div class="donut" id="donut-cpu"><span class="d-val mono" id="donut-cpu-val">—</span></div><span class="d-label">CPU</span></div>
           <div class="donut-wrap"><div class="donut" id="donut-ram"><span class="d-val mono" id="donut-ram-val">—</span></div><span class="d-label">RAM</span></div>
           <div class="donut-wrap"><div class="donut" id="donut-gpu"><span class="d-val mono" id="donut-gpu-val">—</span></div><span class="d-label">GPU</span></div>
-          <div class="donut-wrap"><div class="donut" id="donut-temp"><span class="d-val mono" id="donut-temp-val">—</span></div><span class="d-label">TEMP</span></div>
+          <div class="donut-wrap"><div class="donut" id="donut-temp"><span class="d-val mono" id="donut-temp-val">—</span></div><span class="d-label">TEMP CHIP</span></div>
+          <div class="donut-wrap" title="Tarjeta WiFi/Bluetooth: AP, cliente y BT en una sola radio. Se apaga sola hacia 100 °C."><div class="donut" id="donut-temp-wifi"><span class="d-val mono" id="donut-temp-wifi-val">—</span></div><span class="d-label">TEMP WIFI</span></div>
         </div>
         <div class="row-kv" style="margin-top:16px; border-top:1px solid var(--line); padding-top:14px;">
           <span class="k" style="color:var(--ink-soft);">Pose estimada (fusión IMU + comando, sin encoders)</span>
@@ -1383,7 +1435,7 @@ input[type="text"], select { font-family: inherit; }
 </main>
 
 <div class="toast-container" id="toast-container"></div>
-<button class="estop" id="estop-btn"><span class="ic">✋</span><span>STOP</span></button>
+<button class="estop" id="estop-btn" aria-label="Parada de emergencia"><span class="ic" aria-hidden="true">✋</span><span>STOP</span></button>
 
 <script>
 (() => {
@@ -1490,6 +1542,13 @@ input[type="text"], select { font-family: inherit; }
   // ---------------------------------------------------------------
   // WebSocket
   // ---------------------------------------------------------------
+  // Registro de eventos en la consola del navegador. Lo llamaban el aviso
+  // "toast" del backend y el arranque sin que existiera: cada aviso lanzaba
+  // un ReferenceError.
+  function log(texto, esError) {
+    (esError ? console.warn : console.info)("[agrobot]", texto);
+  }
+
   function setPill(id, state) {
     const el = $(id);
     el.classList.remove("ok", "warn", "crit");
@@ -1616,7 +1675,17 @@ input[type="text"], select { font-family: inherit; }
   // ---------------------------------------------------------------
   // Sistema — salud, pose, radar, donuts
   // ---------------------------------------------------------------
-  const PILDORA_POR_TOPICO = { esp32c3: "pill-actuator", lora_v3: "pill-lora" };
+  const PILDORA_POR_TOPICO = { esp32c3: "pill-actuator", lora_v3: "pill-lora", lidar: "pill-lidar" };
+
+  // Texto corto de la píldora de la C3 según las vías vivas (BLE / WiFi),
+  // sacado del detalle de /api/health: "C3 · BLE+WiFi", "C3 · solo WiFi"…
+  function textoPildoraC3(detalle) {
+    const ble = /BLE ✓/.test(detalle || ""), wifi = /WiFi ✓/.test(detalle || "");
+    if (ble && wifi) return "C3 · BLE+WiFi";
+    if (ble) return "C3 · BLE";
+    if (wifi) return "C3 · WiFi";
+    return "ESP32-C3";
+  }
 
   // Texto del backend dentro de innerHTML: siempre escapado.
   function escapeHtml(txt) {
@@ -1626,7 +1695,11 @@ input[type="text"], select { font-family: inherit; }
   function renderHealth(list) {
     list.forEach((t) => {
       const pid = PILDORA_POR_TOPICO[t.key];
-      if (pid) setPill(pid, t.status === "ok" ? "ok" : t.status === "warn" ? "warn" : "crit");
+      if (!pid) return;
+      setPill(pid, t.status === "ok" ? "ok" : t.status === "warn" ? "warn" : "crit");
+      const el = $(pid);
+      el.title = t.detail || "";
+      if (t.key === "esp32c3") el.querySelector(".pill-txt").textContent = textoPildoraC3(t.detail);
     });
     const wrap = $("health-list");
     if (!wrap) return;
@@ -2621,6 +2694,7 @@ input[type="text"], select { font-family: inherit; }
     setDonut("donut-ram", "donut-ram-val", s.ram_pct, "%");
     setDonut("donut-gpu", "donut-gpu-val", s.gpu_pct, "%");
     setDonut("donut-temp", "donut-temp-val", s.temp_c, "°");
+    setDonut("donut-temp-wifi", "donut-temp-wifi-val", s.temp_wifi_c, "°");
   }
 
   // ---------------------------------------------------------------
@@ -2874,11 +2948,10 @@ input[type="text"], select { font-family: inherit; }
     }
   });
 
-  // Iniciar mapeo y Nav2 automáticamente al cargar
-  window.addEventListener("load", async () => {
-    log("Iniciando mapeo y Nav2...");
-    await fetch("/api/nav/mode", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ mode: "localization" }) });
-  });
+  // (Aquí había un POST a /api/nav/mode "localization" en cada carga de la
+  // página. Nunca llegó a ejecutarse: `log` no existía y la excepción lo
+  // cortaba. Se quitó en vez de arreglarlo: abrir el dashboard no debe
+  // cambiar la configuración del robot. 2026-09-30.)
 
   // ---------------------------------------------------------------
   // Misión
@@ -2918,6 +2991,7 @@ input[type="text"], select { font-family: inherit; }
     }
     if (cfg.detection) {
       $("p-conf").value = cfg.detection.confidence_threshold; $("p-conf-val").textContent = cfg.detection.confidence_threshold.toFixed(2);
+      $("p-escanear").value = cfg.detection.escanear_al_detectar || "siempre";
       $("p-clip").value = cfg.detection.clip_record_threshold; $("p-clip-val").textContent = cfg.detection.clip_record_threshold.toFixed(2);
     }
     if (cfg.safety) {
@@ -3045,6 +3119,7 @@ input[type="text"], select { font-family: inherit; }
   $("p-detection-save").addEventListener("click", () => saveParams("detection", {
     confidence_threshold: parseFloat($("p-conf").value),
     clip_record_threshold: parseFloat($("p-clip").value),
+    escanear_al_detectar: $("p-escanear").value,
   }));
   $("p-safety-save").addEventListener("click", () => saveParams("safety", {
     heartbeat_stale_warn_s: parseFloat($("p-warn").value),
@@ -3106,7 +3181,7 @@ input[type="text"], select { font-family: inherit; }
     await fetch("/api/calibration", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
   });
 
-  log("Dashboard iniciado.");
+  log("Dashboard iniciado.");   // definido junto a setPill
 })();
 </script>
 </body>

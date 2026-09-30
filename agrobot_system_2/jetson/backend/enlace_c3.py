@@ -47,6 +47,8 @@ class EnlaceC3:
         ble._on_status = self._estado
         if wifi is not None:
             wifi._on_trama = self._trama_wifi
+            # Con el WiFi vivo, el BLE reintenta con calma (ver ble_link).
+            ble.otra_via_viva = lambda: wifi.conectado
 
     # ----- lo que usa jetson_server (misma API que BleActuatorLink) -----
     @property

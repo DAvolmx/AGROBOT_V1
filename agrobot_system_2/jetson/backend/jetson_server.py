@@ -277,6 +277,46 @@ def normalize_env(payload: dict) -> dict:
 enlace_lora = health.ContadorSecuencia()
 
 
+class SesgoGiroscopio:
+    """Sesgo del giroscopio estimado solo, con el robot quieto.
+
+    En la configuración estaba en 0 (nunca se calibró) y el MPU6050 marca
+    +0,92 °/s en Z estando quieto: la pose giraba 53° por minuto sin moverse
+    (2026-09-30). Cada vez que el robot lleva ZUPT_TRAS_S sin orden de
+    moverse, las lecturas son puro sesgo + ruido: se promedian (media simple
+    al principio, luego media móvil de TAU_S) y se restan. Así se corrige
+    también en marcha, y se sigue la deriva térmica del sensor."""
+
+    TAU_S = 30.0
+    MIN_MUESTRAS = 100          # ~5 s a 20 Hz antes de aplicarlo
+    SALTO_DPS = 20.0            # una lectura así en reposo es un golpe, no sesgo
+
+    def __init__(self):
+        self.sesgo = {"gyroX": 0.0, "gyroY": 0.0, "gyroZ": 0.0}
+        self.muestras = 0
+        self._t = None
+
+    @property
+    def listo(self) -> bool:
+        return self.muestras >= self.MIN_MUESTRAS
+
+    def actualizar(self, lectura: dict, quieto: bool, ahora: float):
+        if not quieto:
+            self._t = None
+            return
+        if any(abs(lectura.get(e, 0.0) - b) > self.SALTO_DPS for e, b in self.sesgo.items()) and self.listo:
+            return
+        dt = 0.05 if self._t is None else min(max(ahora - self._t, 0.0), 0.5)
+        self._t = ahora
+        self.muestras += 1
+        a = 1.0 / self.muestras if not self.listo else dt / self.TAU_S
+        for eje in self.sesgo:
+            self.sesgo[eje] += a * (lectura.get(eje, 0.0) - self.sesgo[eje])
+
+
+sesgo_giro = SesgoGiroscopio()
+
+
 class EnvTelemetryProtocol(asyncio.DatagramProtocol):
     def connection_made(self, transport):
         self.transport = transport
@@ -345,6 +385,14 @@ class EnvTelemetryProtocol(asyncio.DatagramProtocol):
                                ("gyroZ", "gyro_bias_z_dps")):
             if axis in payload:
                 payload[axis] = payload[axis] - cal[bias_key]
+        # Autocalibración en reposo (ver SesgoGiroscopio). Sin enlace con la
+        # C3 el robot no puede moverse: también cuenta como quieto.
+        quieto = actuator_proto is None or actuator_proto.segundos_quieto() > ZUPT_TRAS_S
+        sesgo_giro.actualizar(payload, quieto, time.monotonic())
+        if sesgo_giro.listo:
+            for axis, b in sesgo_giro.sesgo.items():
+                if axis in payload:
+                    payload[axis] = payload[axis] - b
 
         payload["_received_at"] = time.time()
         payload["_source"] = addr[0]
@@ -891,7 +939,13 @@ LIDAR_UART = Path("/dev/ttyTHS1")
 
 
 def _puerto_lidar() -> Path:
-    return LIDAR_USB if LIDAR_USB.exists() else LIDAR_UART
+    """El mismo criterio que scripts/elegir_puerto_lidar.sh: el adaptador
+    conocido, si no cualquier CP210x por by-id, si no la UART."""
+    if LIDAR_USB.exists():
+        return LIDAR_USB
+    for otro in sorted(Path("/dev/serial/by-id").glob("usb-Silicon_Labs_CP210*")):
+        return otro
+    return LIDAR_UART
 
 
 LIDAR_MUDO_S = 4.0          # sin scan este tiempo con el puerto presente = colgado
@@ -913,6 +967,7 @@ def _matar_sllidar() -> bool:
 async def _vigia_lidar():
     ultimo_reinicio = time.monotonic()
     fallidos = 0                  # reinicios seguidos que no trajeron scans
+    puerto_antes = _puerto_lidar()
     while True:
         await asyncio.sleep(1.0)
         try:
@@ -926,6 +981,16 @@ async def _vigia_lidar():
                 continue
             espera = min(LIDAR_ESPERA_MAX_S, LIDAR_ENTRE_REINICIOS_S * (2 ** min(fallidos, 4)))
             puerto = _puerto_lidar()
+            # Si cambió el puerto (se volvió a enchufar el USB tras caer a la
+            # UART) se relanza YA: con la espera acumulada, el 2026-09-30 el
+            # LIDAR podía tardar hasta 5 min en volver después de enchufarlo.
+            if puerto != puerto_antes:
+                print(f"[lidar] el puerto cambió: {puerto_antes} -> {puerto}; relanzo el driver",
+                      flush=True)
+                puerto_antes = puerto
+                fallidos = 0
+                ultimo_reinicio = 0.0
+                espera = 0.0
             if not puerto.exists() or ahora - ultimo_reinicio < espera:
                 continue
             ultimo_reinicio = ahora
@@ -1338,7 +1403,8 @@ def _on_detection(detection: dict, frame=None):
     # detecta la misma planta varias veces por segundo y sin ese freno el
     # robot se quedaría barriendo delante del primer arbusto que viera.
     if patrol is not None:
-        patrol.solicitar_escaneo_por_deteccion()
+        patrol.solicitar_escaneo_por_deteccion(
+            state.config["detection"].get("escanear_al_detectar", "siempre"))
 
     if frame is not None:
         _lanzar(state.broadcast({"type": "toast", "data": {
@@ -1692,6 +1758,9 @@ async def local_map_delete_handler(request: web.Request):
 # Varianza de la velocidad de avance del EKF por encima de la cual ya no le
 # llega ninguna medida (rf2o ni /zupt): crece ~0,1 (m/s)² por segundo.
 EKF_VARIANZA_DISPARADA = 1.0
+# La Intel 8265 se protege sola hacia 100 °C (apaga la radio: sin AP, sin
+# dashboard y sin C3 por WiFi). Aviso con margen.
+TEMP_RADIO_AVISO_C = 75.0
 
 
 def _salud_completa() -> list[dict]:
@@ -1704,7 +1773,8 @@ def _salud_completa() -> list[dict]:
         try:
             if f["key"] == "lidar":
                 puerto = _puerto_lidar()
-                f["detail"] = "USB (CP2102N)" if puerto == LIDAR_USB else f"UART {puerto}"
+                f["detail"] = ("USB (CP2102N)" if puerto != LIDAR_UART
+                               else "sin adaptador USB: ¿cable suelto? (probando la UART)")
             elif f["key"] == "esp32c3" and enlace_c3 is not None:
                 r = enlace_c3.resumen()
                 wifi = r["wifi"] or {}
@@ -1741,6 +1811,17 @@ def _salud_completa() -> list[dict]:
         "age_s": None,
         "detail": "" if ros_bridge.available else ROS_UNAVAILABLE_REASON,
     })
+    t_radio = _temperatura_zona("iwlwifi_1")
+    if t_radio is not None:
+        filas.append({
+            "key": "radio",
+            "label": "Tarjeta WiFi/Bluetooth",
+            "icon": "🌡️",
+            "status": "ok" if t_radio < TEMP_RADIO_AVISO_C else ("warn" if t_radio < 90 else "err"),
+            "age_s": None,
+            "detail": f"{t_radio:.0f} °C" + ("" if t_radio < TEMP_RADIO_AVISO_C
+                                            else " — caliente: ventilación o menos carga de radio"),
+        })
     if ros_fused_pose is not None:
         var = ros_fused_pose.get("var_vx") or 0.0
         disparada = var > EKF_VARIANZA_DISPARADA
@@ -1751,7 +1832,9 @@ def _salud_completa() -> list[dict]:
             "status": "err" if disparada else "ok",
             "age_s": None,
             "detail": ("sin medida de velocidad: extrapola (¿LIDAR y ZUPT caídos?)" if disparada
-                       else f"x={ros_fused_pose['x']:.1f} y={ros_fused_pose['y']:.1f} m"),
+                       else f"x={ros_fused_pose['x']:.1f} y={ros_fused_pose['y']:.1f} m · "
+                            f"sesgo del giro {sesgo_giro.sesgo['gyroZ']:+.2f} °/s"
+                            + ("" if sesgo_giro.listo else " (calibrando)")),
         })
     return filas
 
@@ -2034,6 +2117,40 @@ def _summarize_detections(detections: list[dict]) -> dict:
 # =============================================
 # ===== ESTADÍSTICAS DEL SISTEMA (CPU/RAM) =====
 # =============================================
+_GPU_CARGA = Path("/sys/devices/platform/bus@0/17000000.gpu/load")
+_muestras_gpu: list[float] = []
+
+
+def _carga_gpu_pct() -> float | None:
+    """Media de las últimas lecturas: el valor instantáneo salta de 0 a 90
+    entre dos inferencias de YOLO."""
+    try:
+        _muestras_gpu.append(int(_GPU_CARGA.read_text()) / 10.0)
+    except (OSError, ValueError):
+        return None
+    del _muestras_gpu[:-5]
+    return round(sum(_muestras_gpu) / len(_muestras_gpu), 1)
+
+
+def _temperatura_zona(tipo: str) -> float | None:
+    """Temperatura de la zona térmica del kernel de ese tipo (p. ej.
+    "tj-thermal", la unión del chip, o "iwlwifi_1", la tarjeta WiFi/BT)."""
+    for zona in Path("/sys/class/thermal").glob("thermal_zone*"):
+        try:
+            if (zona / "type").read_text().strip() == tipo:
+                t = int((zona / "temp").read_text()) / 1000.0
+                return round(t, 1) if 0 < t < 150 else None
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def _temperatura_c() -> float | None:
+    """La del chip (unión, "tj"). NO la zona más caliente: esa era la tarjeta
+    WiFi a 79 °C y el dashboard la mostraba como la del sistema."""
+    return _temperatura_zona("tj-thermal") or _temperatura_zona("cpu-thermal")
+
+
 async def stats_loop():
     try:
         import psutil
@@ -2064,9 +2181,21 @@ async def stats_loop():
         if jtop_reader is not None:
             try:
                 stats["gpu_pct"] = jtop_reader.stats.get("GPU")
-                stats["temp_c"] = jtop_reader.stats.get("Temp CPU") or jtop_reader.stats.get("Temp thermal")
+                # jtop nombra las zonas en minúscula ("Temp tj", "Temp cpu"):
+                # con "Temp CPU" esto salía siempre vacío.
+                stats["temp_c"] = (jtop_reader.stats.get("Temp tj")
+                                   or jtop_reader.stats.get("Temp cpu"))
             except Exception:
                 pass
+        # jtop no da la carga de la GPU en esta Orin (salía siempre vacía):
+        # se lee del propio driver, en tantos por mil.
+        if stats["gpu_pct"] is None:
+            stats["gpu_pct"] = _carga_gpu_pct()
+        if stats["temp_c"] is None:
+            stats["temp_c"] = _temperatura_c()
+        # La tarjeta WiFi/BT va aparte: es la que se calienta (AP + cliente +
+        # Bluetooth en una sola radio) y la que se apaga sola si pasa de ~100.
+        stats["temp_wifi_c"] = _temperatura_zona("iwlwifi_1")
 
         state.system_stats = stats
         health_data = _salud_completa()

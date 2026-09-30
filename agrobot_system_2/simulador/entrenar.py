@@ -32,6 +32,7 @@ import asyncio
 import csv
 import json
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -56,7 +57,7 @@ DATASET = CARPETA / "dataset.csv"
 MODELO = CARPETA / "politica_candidata.pt"
 COLUMNAS = list(pol.ENTRADAS) + ["accion", "escenario", "origen"]
 RECORRIDO_MINIMO_M = 1.0
-ORIGENES = ("ideal_dr",)         # ver cargar_dataset; --todos-los-datos = None
+ORIGENES = ("ideal_dr", "ideal_dr2")   # ver cargar_dataset; --todos-los-datos = None
 
 
 # --------------------------------------------------------------- variaciones
@@ -64,7 +65,16 @@ def mundos_disponibles():
     """Escenarios incluidos (menos el aleatorio, que ya se usa aparte) y
     mapas dibujados en el editor del dashboard."""
     incluidos = [n for n in mundo_mod.ESCENARIOS if n != "aleatorio"]
-    dibujados = sorted(p.stem for p in MUNDOS_DIR.glob("*.json"))
+    dibujados = []
+    for p in sorted(MUNDOS_DIR.glob("*.json")):
+        # "entrenar": false = mapa para otra cosa (p. ej. habitacion_real,
+        # sacado del LIDAR para validar los sensores): no tiene sendero.
+        try:
+            if json.loads(p.read_text()).get("entrenar", True) is False:
+                continue
+        except (OSError, ValueError):
+            continue
+        dibujados.append(p.stem)
     return incluidos + dibujados
 
 
@@ -152,9 +162,28 @@ def aleatorizar(ep, rng) -> dict:
     r.escala_latencia = float(rng.uniform(0.6, 2.0))       # BLE más o menos cargado
     ep.slam.ruido = float(rng.uniform(0.5, 1.5))
     ep.fallos_lidar.cambiar(str(rng.choice(["usb", "usb", "uart", "ninguna"])))
+
+    # El mundo tal como lo ve la cámara: de qué es el camino, dónde está el
+    # sol y con qué cámara se mira. Misma geometría, otra imagen.
+    m = ep.mundo
+    m.superficie = str(rng.choice(mundo_mod.SUPERFICIES, p=[0.4, 0.15, 0.15, 0.15, 0.15]))
+    m.sol_acimut = float(rng.uniform(0, 360))
+    m.sol_altura = float(rng.uniform(18, 75))
+    m.sombra_oscuridad = float(rng.uniform(0.12, 0.6))       # nublado .. sol duro
+    m.camara_params = {
+        "ganancia": float(rng.uniform(0.7, 1.3)),
+        "balance": (float(rng.uniform(0.85, 1.15)), 1.0, float(rng.uniform(0.85, 1.15))),
+        "ruido": float(rng.uniform(0.6, 2.5)),
+        "vineta": float(rng.uniform(0.5, 1.5)),
+        "jpeg": int(rng.integers(60, 95)),
+    }
+    # El LIDAR se midió en interior (2026-09-30); fuera siempre es peor.
+    m.lidar_peor = float(rng.uniform(1.0, 3.0))
     return {"giro": round(r.rendimiento_giro, 2), "desliz": round(r.decel_inercia, 2),
             "latencia": round(r.escala_latencia, 2), "slam": round(ep.slam.ruido, 2),
-            "lidar": ep.fallos_lidar.conexion}
+            "lidar": ep.fallos_lidar.conexion, "suelo": m.superficie,
+            "sol": round(m.sol_altura), "cam": round(m.camara_params["ganancia"], 2),
+            "lidar_x": round(m.lidar_peor, 1)}
 
 
 # --------------------------------------------------------------- recolectar
@@ -227,7 +256,9 @@ def recolectar(episodios, cfg, segundos=120, semilla0=0, escenarios=None,
                 # "ideal_dr": recorrido ideal con aleatorización de dominio y
                 # el simulador realista (latencia, SLAM con fallos, cámara
                 # nueva). Se distingue de lo recolectado antes del 2026-09-30.
-                fila["origen"] = "ideal_dr" if ep.condiciones else "ideal"
+                # "ideal_dr2" (2026-09-30, tarde): sensores calibrados con el
+                # robot real, cámara a 640x480 con JPEG, superficies y sol.
+                fila["origen"] = "ideal_dr2" if ep.condiciones else "ideal"
                 w.writerow(fila)
                 filas += 1
             total += filas
@@ -262,7 +293,7 @@ def espejar(x, accion_idx):
     return x, pol.ACCIONES.index(accion)
 
 
-def cargar_dataset(espejo=True, origenes=("ideal_dr",)):
+def cargar_dataset(espejo=True, origenes=("ideal_dr", "ideal_dr2")):
     """`origenes`: de qué recolecciones se entrena. Por defecto solo las del
     simulador realista (2026-09-30 en adelante): las anteriores se hicieron
     con el explorador peleando el mando al piloto ideal, y tienen casi tantos
@@ -287,13 +318,34 @@ def cargar_dataset(espejo=True, origenes=("ideal_dr",)):
 
 
 # ------------------------------------------------------------------ entrenar
-def entrenar(epocas=60, lote=256, oculta=64, semilla=0):
+def _dispositivo():
+    """GPU si hay (AGROBOT_ENTRENAR_GPU=0 fuerza la CPU).
+
+    Antes se entrenaba en CPU "a propósito" porque la rueda de PyTorch
+    instalada (cu130) avisa de que no trae kernels para la Orin. El aviso
+    exagera: el 2026-09-30 se comprobó que funciona, y una época de 430 000
+    ejemplos baja de 23 s (CPU, lote 256) a 1,8 s (GPU, lote 1024)."""
+    import torch
+    import warnings
+    warnings.filterwarnings("ignore", category=UserWarning, module="torch.cuda")
+    if os.environ.get("AGROBOT_ENTRENAR_GPU", "1") != "0" and torch.cuda.is_available():
+        try:
+            torch.zeros(1, device="cuda").sum().item()
+            return torch.device("cuda")
+        except Exception as exc:
+            print(f"GPU no usable ({type(exc).__name__}: {exc}): entreno en CPU")
+    return torch.device("cpu")
+
+
+def entrenar(epocas=60, lote=None, oculta=64, semilla=0):
     import torch
     import torch.nn as nn
 
-    # En CPU a propósito: la rueda de PyTorch instalada (cu130) no trae
-    # kernels para la GPU de esta Jetson, y esta red es diminuta.
     torch.set_num_threads(4)
+    dev = _dispositivo()
+    # En GPU los lotes pequeños desperdician la tarjeta lanzando kernels
+    # diminutos: 1024 da 13x menos tiempo por época que 256 en CPU.
+    lote = lote or (1024 if dev.type == "cuda" else 256)
     X, y, escenarios = cargar_dataset(origenes=ORIGENES)
     if len(X) < 200:
         sys.exit(f"hacen falta más ejemplos ({len(X)}): correr --recolectar")
@@ -307,16 +359,18 @@ def entrenar(epocas=60, lote=256, oculta=64, semilla=0):
     idx = np.random.default_rng(semilla).permutation(len(Xn))
     corte = int(len(idx) * 0.8)
     ent, val = idx[:corte], idx[corte:]
-    Xe = torch.tensor(Xn[ent]); ye = torch.tensor(y[ent])
-    Xv = torch.tensor(Xn[val]); yv = torch.tensor(y[val])
+    Xe = torch.tensor(Xn[ent], device=dev); ye = torch.tensor(y[ent], device=dev)
+    Xv = torch.tensor(Xn[val], device=dev); yv = torch.tensor(y[val], device=dev)
+    del Xn
 
-    red = pol.crear_red(X.shape[1], len(pol.ACCIONES), oculta)
+    red = pol.crear_red(X.shape[1], len(pol.ACCIONES), oculta).to(dev)
     opt = torch.optim.Adam(red.parameters(), lr=2e-3)
     # Las clases están desbalanceadas (se avanza mucho más de lo que se gira):
     # sin pesos, la red aprendería a decir "adelante" siempre.
     # Exponente 0,75, no 0,5: con 0,5 el empuje se quedaba corto para las
     # clases muy raras ("atrás" es el 1 % de los ejemplos).
-    pesos = torch.tensor((cuenta.sum() / np.maximum(cuenta, 1)) ** 0.75, dtype=torch.float32)
+    pesos = torch.tensor((cuenta.sum() / np.maximum(cuenta, 1)) ** 0.75, dtype=torch.float32,
+                         device=dev)
     perdida = nn.CrossEntropyLoss(weight=pesos)
 
     def notas(salida, cierto):
@@ -341,12 +395,17 @@ def entrenar(epocas=60, lote=256, oculta=64, semilla=0):
         return llano, (sum(recalls) / len(recalls) if recalls else 0.0)
 
     mejor, mejor_llano, mejores_pesos = 0.0, 0.0, None
+    print(f"  entrenando en {dev.type.upper()} con lotes de {lote}")
     for e in range(epocas):
         red.train()
+        # Orden nuevo en cada época: siempre el mismo orden sesga el final
+        # de cada época hacia los mismos ejemplos.
+        orden = torch.randperm(len(Xe), device=dev)
         for i in range(0, len(Xe), lote):
+            sel = orden[i:i + lote]
             opt.zero_grad()
-            salida = red(Xe[i:i + lote])
-            p = perdida(salida, ye[i:i + lote])
+            salida = red(Xe[sel])
+            p = perdida(salida, ye[sel])
             p.backward()
             opt.step()
         red.eval()
@@ -362,14 +421,16 @@ def entrenar(epocas=60, lote=256, oculta=64, semilla=0):
     # Última barrera: una red que responde casi siempre lo mismo no sirve, y
     # es mejor enterarse aquí que en el campo.
     with torch.no_grad():
-        reparto = np.bincount(red(Xv).argmax(1).numpy(), minlength=len(pol.ACCIONES))
+        reparto = np.bincount(red(Xv).argmax(1).cpu().numpy(), minlength=len(pol.ACCIONES))
     dominante = reparto.max() / max(reparto.sum(), 1)
     if dominante > 0.92:
         print(f"  ¡CUIDADO! el modelo responde '{pol.ACCIONES[int(reparto.argmax())]}' "
               f"en el {dominante*100:.0f} % de los casos: ha colapsado a una sola acción. "
               f"Hacen falta más ejemplos de giro (--recolectar con más escenarios).")
     MODELO.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"pesos": red.state_dict(), "medias": medias.tolist(),
+    # Pesos en CPU: el robot (politica.py) los carga sin GPU.
+    torch.save({"pesos": {k: v.cpu() for k, v in red.state_dict().items()},
+                "medias": medias.tolist(),
                 "desviaciones": desv.tolist(), "entradas": list(pol.ENTRADAS),
                 "acciones": list(pol.ACCIONES), "oculta": oculta,
                 "version_entradas": pol.VERSION_ENTRADAS,
@@ -422,6 +483,59 @@ def evaluar(episodios=4, cfg=None, segundos=90, semilla0=1000):
     return resumen
 
 
+# ----------------------------------------------------------------- memoria
+# El 2026-09-30, a las 8 h y 85 tandas, el entrenamiento llegó a 4,7 GB y el
+# OOM-killer lo mató (a las 14:43, con 20 minutos por delante). Medido por
+# partes, ni los episodios ni entrenar() ni evaluar() acumulan de por sí: el
+# crecimiento es lento (~50 MB por tanda) y cuadra con la fragmentación de
+# glibc con muchos hilos (PyTorch, OpenCV, asyncio), que no devuelve lo
+# liberado. Tres defensas, que no dependen de acertar la causa:
+#   1. MALLOC_ARENA_MAX=2 y malloc_trim(0) tras cada tanda;
+#   2. si aun así pasa de MEMORIA_MAX_MB, el proceso se relanza a sí mismo
+#      con las horas que le quedan (datos y modelo ya están en disco);
+#   3. oom_score_adj alto: si falta memoria, el kernel mata ESTO y no el
+#      backend ni ROS, que comparten los 7,5 GB de la Jetson.
+MEMORIA_MAX_MB = 2500
+TANDA_INICIAL = 1        # al relanzarse sigue la numeración (--tanda-inicial)
+INICIO_ENTRENAMIENTO = time.strftime("%Y%m%d_%H%M")   # se hereda al relanzarse
+
+
+def memoria_mb() -> int:
+    try:
+        return int(open("/proc/self/status").read().split("VmRSS:")[1].split()[0]) // 1024
+    except (OSError, IndexError, ValueError):
+        return 0
+
+
+def liberar_memoria():
+    import gc
+    gc.collect()
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except OSError:
+        pass
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
+def preparar_proceso():
+    """Arenas de malloc acotadas (hay que ponerlas ANTES de arrancar: se
+    relanza el proceso una vez) y prioridad de víctima ante un OOM."""
+    if os.environ.get("MALLOC_ARENA_MAX") is None:
+        os.environ["MALLOC_ARENA_MAX"] = "2"
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    try:
+        with open("/proc/self/oom_score_adj", "w") as f:
+            f.write("600")
+    except OSError:
+        pass
+
+
 def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epocas=80,
                   mundos=None):
     """Entrena sin parar durante `horas`, guardando por el camino.
@@ -433,7 +547,7 @@ def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epoca
     fin = time.time() + horas * 3600
     registro = CARPETA / "entrenamiento.log"
     CARPETA.mkdir(parents=True, exist_ok=True)
-    tanda, historial = 0, []
+    tanda, historial = TANDA_INICIAL - 1, []
 
     def anotar(texto):
         linea = f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {texto}"
@@ -458,7 +572,10 @@ def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epoca
                 historial.append({"tanda": tanda, **r})
                 # Copia de seguridad del modelo de cada tanda: si una tanda
                 # posterior empeora, se puede volver a esta.
-                copia = CARPETA / f"politica_tanda{tanda:03d}.pt"
+                # Con la fecha de inicio en el nombre: cada entrenamiento empieza
+                # en la tanda 1 y el nombre sin fecha pisaba los de noches
+                # anteriores (así se perdió la tanda 027 del 2026-09-21).
+                copia = CARPETA / f"politica_{INICIO_ENTRENAMIENTO}_t{tanda:03d}.pt"
                 copia.write_bytes(MODELO.read_bytes())
                 # Ficha en el historial: con varias noches de tandas, el .pt
                 # más nuevo NO es el mejor, y sin registro no hay manera de
@@ -479,6 +596,22 @@ def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epoca
             except Exception as exc:
                 anotar(f"tanda {tanda} falló: {type(exc).__name__}: {exc}")
                 time.sleep(5)
+            liberar_memoria()
+            mem = memoria_mb()
+            anotar(f"memoria tras la tanda {tanda}: {mem} MB")
+            if mem > MEMORIA_MAX_MB and time.time() < fin - 600:
+                quedan = (fin - time.time()) / 3600
+                anotar(f"memoria por encima de {MEMORIA_MAX_MB} MB: me relanzo con "
+                       f"{quedan:.2f} h por delante (datos y modelo ya están en disco)")
+                argv = list(sys.argv)
+                i = argv.index("--horas")
+                argv[i + 1] = f"{quedan:.3f}"
+                if "--tanda-inicial" in argv:
+                    j = argv.index("--tanda-inicial")
+                    argv[j + 1] = str(tanda + 1)
+                else:
+                    argv += ["--tanda-inicial", str(tanda + 1)]
+                os.execv(sys.executable, [sys.executable] + argv)
     except KeyboardInterrupt:
         anotar("cortado a mano")
     anotar(f"=== fin: {tanda} tandas | registro en {registro} ===")
@@ -509,7 +642,13 @@ def main():
     p.add_argument("--segundos", type=float, default=120)
     p.add_argument("--epocas", type=int, default=60)
     p.add_argument("--config", default=str(AQUI.parent / "jetson" / "backend" / "agrobot_config.json"))
+    p.add_argument("--tanda-inicial", type=int, default=1, help=argparse.SUPPRESS)
     a = p.parse_args()
+    preparar_proceso()
+    global TANDA_INICIAL, INICIO_ENTRENAMIENTO
+    TANDA_INICIAL = a.tanda_inicial
+    INICIO_ENTRENAMIENTO = os.environ.setdefault("AGROBOT_INICIO_ENTRENAMIENTO",
+                                                 INICIO_ENTRENAMIENTO)
 
     cfg = json.loads(Path(a.config).read_text())
     cfg["autonomia"].update(sendero_activo=True, sendero_paja=True)

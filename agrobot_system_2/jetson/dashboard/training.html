@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AgroBot — Entrenamiento</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2300bd4f'/%3E%3Cpath d='M9 21c0-6 4-10 13-11-1 8-5 12-11 12m-2-1 5-5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 :root {
   --bg: #1a1f2e;
@@ -93,7 +94,9 @@ header .pill.ok .dot { background: var(--accent); }
 }
 #tool-hint {
   position: absolute; top: 8px; right: 8px;
-  background: rgba(0,189,79,0.12);
+  /* Fondo opaco: con el verde translúcido el texto se perdía sobre las
+     celdas claras (libres) del mapa. */
+  background: rgba(16,19,29,0.9);
   border: 1px solid var(--accent);
   padding: 4px 10px; border-radius: 6px;
   font-size: 11px; color: var(--accent-ink);
@@ -209,9 +212,29 @@ header .pill.ok .dot { background: var(--accent); }
 #toast.show { opacity: 1; pointer-events: auto; }
 
 /* --- Mobile --- */
+/* Foco visible para teclado. */
+:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+
 @media (max-width: 768px) {
-  body { grid-template-columns: 1fr; grid-template-rows: 48px 50vh 1fr; }
-  #sidebar { border-left: none; border-top: 1px solid var(--line); }
+  /* minmax(0, 1fr) y no 1fr: con 1fr la columna no bajaba del ancho de la
+     barra de herramientas (~800 px) y en el teléfono la página entera
+     quedaba más ancha que la pantalla, recortada: herramientas, cruceta y
+     medio panel fuera de vista (2026-09-30). */
+  body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 48dvh minmax(0, 1fr);
+    height: 100dvh;
+  }
+  header { flex-wrap: wrap; row-gap: 6px; padding: 8px 12px; min-height: 48px; }
+  header h1 { font-size: 15px; }
+  .toolbar {
+    order: 3; width: 100%; margin-left: 0;
+    overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;
+  }
+  .toolbar::-webkit-scrollbar { display: none; }
+  .toolbar button { flex: none; min-height: 40px; padding: 6px 12px; font-size: 13px; }
+  #sidebar { border-left: none; border-top: 1px solid var(--line); min-height: 0; }
+  .drive-btn { min-height: 52px; }
   #toast { right: 8px; }
 }
 </style>

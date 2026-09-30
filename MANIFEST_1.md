@@ -4193,3 +4193,13 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   robot,entrenar,slam_sim,dashboard.html}`, `simulador/mundos/habitacion_real.json`;
   `ros2_ws/.../config/ekf.yaml`.
 
+
+  **Política desplegada para terreno (2026-09-30, 19:xx)**: `politica_tanda048.pt`
+  (entrenada 2026-09-30 10:36, 161 118 ejemplos). Validada con el simulador
+  calibrado, banco huerta_real/bucle/hileras/pasillo/callejón, semillas 7 y
+  23, 60 s: 8,08 puntos (menos es mejor). En huerta_real 100 % en sendero y 2
+  pisadas; la anterior (`politica.pt` del 2026-09-21) 15,57 puntos, 74 % y 4
+  pisadas en huerta_real. Casi empatada: tanda027 (7,43; más pisadas en
+  hileras). Copia de la anterior: `politica_desplegada_hasta_20260930.pt`.
+  El sesgo del giroscopio se autocalibra con el robot quieto: dejarlo parado
+  ~30 s al arrancar en el terreno.

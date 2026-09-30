@@ -77,14 +77,11 @@ FRENTE_CALLEJON_M = 0.45
 class ExploradorReactivo:
     def __init__(self, *, distancias, get_pose, conducir, parar,
                  escanear, on_event, grabar_recorrido, edad_scan, get_config,
-                 seguidor=None, aprendizaje=None, sensores=None, politica=None):
+                 seguidor=None, aprendizaje=None, sensores=None, politica=None,
+                 get_costmap=None, rumbo_objetivo=None):
         self._seguidor = seguidor          # SeguidorSendero | None
-        # Lo que enseñó el operador corrigiendo en vivo (aprendizaje.py).
         self._aprendizaje = aprendizaje
         self._sensores = sensores          # () -> dict con lo que percibe el robot
-        # Política aprendida en el simulador (politica.py). Propone el pulso
-        # en marcha normal; el freno por LIDAR y las reglas de atasco siguen
-        # mandando por encima.
         self._politica = politica
         self.pulsos_politica = 0
         self._get_config = get_config      # () -> sección `autonomia` de la config
@@ -96,6 +93,10 @@ class ExploradorReactivo:
         self._escanear = escanear          # corutina(motivo)
         self._on_event = on_event          # (dict)
         self._grabar_recorrido = grabar_recorrido   # (bool) -> (ok, msg)
+        self._get_costmap = get_costmap or (lambda: None)
+        # () -> (angulo_deg, dist_m) | None — si se quiere navegar HACIA un
+        # punto concreto (modo patrulla reactiva).
+        self._rumbo_objetivo = rumbo_objetivo
 
         self.activo = False
         self.estado = "detenido"
@@ -222,6 +223,44 @@ class ExploradorReactivo:
         return (self._hueco(d, "adelante") >= MARGEN_MANIOBRA_M
                 and self._hueco(d, "atras") >= MARGEN_MANIOBRA_M)
 
+    def _lado_costmap(self) -> str | None:
+        """Hacia dónde girar según el costmap: el centro del hueco libre."""
+        costmap = self._get_costmap()
+        if costmap is None or costmap._scan_count < 3:
+            return None
+        centro, ancho = costmap.hueco_libre()
+        if centro is None or ancho is None:
+            return None
+        if abs(centro) < 0.05:
+            return None
+        return "izquierda" if centro > 0 else "derecha"
+
+    def _lado_objetivo(self) -> str | None:
+        """Hacia dónde girar para acercarse al waypoint objetivo."""
+        if self._rumbo_objetivo is None:
+            return None
+        info = self._rumbo_objetivo()
+        if info is None:
+            return None
+        ang, dist = info
+        if dist < 0.3 or abs(ang) < 15:
+            return None
+        return "izquierda" if ang > 0 else "derecha"
+
+    def _mejor_lado(self, d) -> str:
+        """Elige el lado de giro combinando: objetivo > costmap > distancias."""
+        lado = self._forzar_lado
+        if lado:
+            return lado
+        lado = self._lado_objetivo()
+        if lado and self._hueco(d, lado) >= self._get_config()["lado_libre_cm"] / 100.0:
+            return lado
+        lado = self._lado_costmap()
+        if lado and self._hueco(d, lado) >= self._get_config()["lado_libre_cm"] / 100.0:
+            return lado
+        izq, der = self._hueco(d, "izquierda"), self._hueco(d, "derecha")
+        return "izquierda" if izq >= der else "derecha"
+
     def _registrar_celda(self):
         """Marca dónde está y avisa si YA había estado ahí hace rato.
 
@@ -259,8 +298,7 @@ class ExploradorReactivo:
         """Sin salida: pivotar hasta encontrarla, SIN volver a decidir en cada
         tick. Antes oscilaba entre girar y retroceder y se quedaba rozando."""
         self.callejones += 1
-        lado = self._forzar_lado or ("izquierda" if self._hueco(d, "izquierda")
-                                     >= self._hueco(d, "derecha") else "derecha")
+        lado = self._mejor_lado(d)
         self._ultimo_lado = lado
         avance_libre = self._get_config()["avance_libre_cm"] / 100.0
         self.estado = f"callejón: girando a la {lado} hasta encontrar salida"
@@ -377,9 +415,7 @@ class ExploradorReactivo:
                         await self._salir_callejon(d)
                     continue
 
-                # Girar hacia donde más hueco haya. Tras detectar un bucle se
-                # insiste en el lado menos pisado, aunque no sea el más ancho.
-                lado = self._forzar_lado or ("izquierda" if izq >= der else "derecha")
+                lado = self._mejor_lado(d)
                 if self._hueco(d, lado) < lado_libre:
                     lado = "izquierda" if izq >= der else "derecha"
                 if self._hueco(d, lado) >= lado_libre:
@@ -426,7 +462,10 @@ class ExploradorReactivo:
     async def _desatascar(self):
         """El robot cree que se mueve pero la pose no cambia: rueda patinando,
         enganchado en una planta o contra algo que el LIDAR no ve (hueco bajo,
-        rama fina). Se retrocede y se gira al lado contrario del último."""
+        rama fina). Se retrocede y se gira al lado contrario del último.
+
+        Si el costmap tiene un hueco libre claro, se gira hacia él en vez de
+        alternar a ciegas."""
         self.desatascos += 1
         self.estado = "desatascando"
         self._emitir(evento="desatasco", total=self.desatascos)
@@ -434,7 +473,11 @@ class ExploradorReactivo:
         if self._hueco(d, "atras") >= self._get_config()["retroceso_libre_cm"] / 100.0:
             self._conducir("atras")
             await asyncio.sleep(1.5)
-        contrario = "derecha" if self._ultimo_lado == "izquierda" else "izquierda"
+        lado_cm = self._lado_costmap()
+        if lado_cm is not None:
+            contrario = lado_cm
+        else:
+            contrario = "derecha" if self._ultimo_lado == "izquierda" else "izquierda"
         self._ultimo_lado = contrario
         for _ in range(DESATASCO_GIROS):
             if not self.activo:

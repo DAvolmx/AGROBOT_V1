@@ -5,7 +5,7 @@ Mundo 2D del simulador: qué hay en el terreno y qué ve cada sensor.
 La distinción que da sentido a todo el simulador (y que es el problema real
 del robot, medido el 2026-09-19):
 
-  · ALTO (paredes, cercas, taludes, cajas): lo ve el LIDAR, que va a ~30 cm
+  · ALTO (paredes, cercas, taludes, cajas): lo ve el LIDAR, que va a ~40 cm
     del suelo, y frena por él.
   · BAJO (sendero, paja del mulch, plantas chicas): el LIDAR pasa por
     ENCIMA y no lo ve. Solo existe para la cámara.
@@ -16,6 +16,7 @@ el campo, y el LIDAR sirve para no chocar.
 Ejes del mundo en metros: x a la derecha, y hacia arriba, ángulos en radianes
 con 0 = +x (igual que el mapa del SLAM).
 """
+import functools
 import json
 import math
 
@@ -33,6 +34,11 @@ COLOR_PIEDRA = (120, 125, 130)
 COLOR_HIERBA = (55, 120, 75)
 COLOR_PARED = (120, 120, 125)
 COLOR_CIELO = (205, 195, 185)
+COLOR_CIELO_ZENITH = (170, 148, 105)       # cenit azul-gris (BGR)
+COLOR_CIELO_HORIZ = (225, 218, 212)        # horizonte cálido
+COLOR_BRUMA = (215, 208, 198)              # neblina de distancia
+COLOR_PARED_BASE = (95, 100, 112)          # base de pared (oscura, tinte azul)
+COLOR_PARED_TOPE = (148, 148, 155)         # tope de pared (más claro)
 
 # Clases del suelo (las devuelve `clases_suelo`).
 TIERRA, PAJA, PLANTA, PIEDRA, HIERBA, BORDE_TIERRA, PLANTA_ALTA = 0, 1, 2, 3, 4, 5, 6
@@ -47,10 +53,19 @@ COLOR_RAMA = (60, 125, 85)
 # imágenes movidas al avanzar, viñeteo del gran angular, ruido en sombra, y
 # un LIDAR que pierde rayos sobre tierra suelta y hierba.
 DESENFOQUE_POR_VELOCIDAD = 26.0    # px de arrastre por (m/s) a 320 px de ancho
+# Exposición de la NexiGo N60 en la huerta: 156 × 100 µs = 15,6 ms por
+# defecto en el robot (v4l2 exposure_time_absolute), más en poca luz.
+EXPOSICION_CAMARA_S = 0.02
 VIÑETEO = 0.35                     # cuánto cae la luz en las esquinas
 RUIDO_BASE, RUIDO_EN_SOMBRA = 4.0, 14.0
 SOL_ACIMUT_DEG, SOL_ALTURA_DEG = 135.0, 42.0
 SOMBRA_OSCURIDAD = 0.45
+# Terreno pintado una vez (ver Mundo.raster_suelo): resolución, tope de
+# píxeles para mapas grandes y cuánto se pinta más allá de los límites.
+RASTER_M_POR_PX = 0.008
+RASTER_MAX_PX = 6_000_000
+RASTER_MARGEN_M = 2.0
+GROSOR_PARED_M = 0.07             # el mismo que pinta el visor 3D
 
 # LIDAR. El C1 no devuelve un rayo limpio por ángulo: sobre tierra suelta,
 # hierba o superficies oscuras pierde retornos, el error crece con la
@@ -110,6 +125,30 @@ def ruido(px, py, escala=1.0, octavas=2):
         peso += amplitud
         amplitud *= 0.5
     return total / peso
+
+
+@functools.lru_cache(maxsize=8)
+def _base_camara(ancho, alto, hfov_deg):
+    """Lo de la cámara que no depende ni del robot ni de la inclinación:
+    la rejilla de píxeles, el cielo con sus nubes y el degradado de las
+    paredes. El servo barre ángulos todo el rato (búsqueda del sendero,
+    escaneos) y recalcular esto en cada ángulo costaba más que la imagen."""
+    fx = (ancho / 2) / math.tan(math.radians(hfov_deg) / 2)
+    u, v = np.meshgrid(np.arange(ancho, dtype=np.float32), np.arange(alto, dtype=np.float32))
+    xn, yn = (u - ancho / 2) / fx, (v - alto / 2) / fx
+    fila = np.clip((v / alto - 0.05) / 0.42, 0, 1)[..., None]
+    cielo = (np.array(COLOR_CIELO_ZENITH, np.float32) * (1 - fila)
+             + np.array(COLOR_CIELO_HORIZ, np.float32) * fila)
+    cielo += 14 * (ruido(u * 0.004, v * 0.009, 2.0, 2) - 0.5)[..., None]
+    filas = np.arange(alto, dtype=np.float32)
+    mezcla_p = np.clip((filas / alto - 0.15) / 0.5, 0, 1)[:, None]
+    pared_fila = (np.array(COLOR_PARED_TOPE, np.float32) * (1 - mezcla_p)
+                  + np.array(COLOR_PARED_BASE, np.float32) * mezcla_p)
+    pared_fila *= (1.0 + 0.03 * np.sin(filas * 3.5 + 0.7))[:, None]
+    return {"fx": fx, "xn": xn, "yn": yn,
+            "cielo": np.clip(cielo, 0, 255).astype(np.float32),
+            "pared_fila": pared_fila.astype(np.float32),
+            "angulos": np.arctan2(-xn[0], 1.0)}
 
 
 class Mundo:
@@ -178,6 +217,27 @@ class Mundo:
         self._cache_dibujo = None
 
     @property
+    def remates_paredes(self):
+        """Los extremos de cada pared, como círculos del grosor de la pared.
+
+        Las paredes son segmentos sin grosor: un rayo que llega de canto no
+        las corta, así que el LIDAR simulado no veía la PUNTA de un bancal
+        mirándola de frente. En el invernadero el robot se estrellaba contra
+        ella una y otra vez (81 choques en 114 s el 2026-09-30); el C1 real
+        sí la ve, porque la pared tiene 7 cm de grosor."""
+        cache = getattr(self, "_remates", None)
+        if cache is not None and cache[0] == len(self.paredes):
+            return cache[1]
+        if not len(self.paredes):
+            remates = np.zeros((0, 5), np.float32)
+        else:
+            puntos = np.unique(np.round(np.vstack([self.paredes[:, :2], self.paredes[:, 2:]]), 3), axis=0)
+            remates = np.column_stack([puntos, np.full(len(puntos), GROSOR_PARED_M / 2),
+                                       np.full(len(puntos), 0.6), np.ones(len(puntos))]).astype(np.float32)
+        self._remates = (len(self.paredes), remates)
+        return remates
+
+    @property
     def objetos_visibles_lidar(self):
         """Los que llegan a la altura del LIDAR: los ve, sean o no sólidos."""
         if not len(self.objetos):
@@ -185,7 +245,7 @@ class Mundo:
         return self.objetos[self.objetos[:, 3] >= ALTURA_LIDAR_M]
 
     # ---------------------------------------------------------------- LIDAR
-    def rayos(self, x, y, theta, angulos, alcance=8.0):
+    def rayos(self, x, y, theta, angulos, alcance=8.0, solo_paredes=False):
         """Distancia a la primera pared para cada ángulo (relativo a theta).
 
         Vectorizado: todos los rayos contra todas las paredes de una vez.
@@ -208,14 +268,19 @@ class Mundo:
 
         # Objetos redondos que llegan a la altura del LIDAR. Aquí es donde una
         # rama sin nada sólido detrás produce un eco igual que una pared.
-        obj = self.objetos_visibles_lidar
-        altas = self.plantas_altas
+        # La cámara solo se tapa con paredes: con plantas altas y objetos
+        # dentro, se pintaban como losas grises de pared en la imagen.
+        obj = self.objetos_visibles_lidar if not solo_paredes else np.zeros((0, 5), np.float32)
+        altas = self.plantas_altas if not solo_paredes else np.zeros((0, 5), np.float32)
         if len(altas):
             obj = (np.vstack([obj, np.column_stack(
                 [altas[:, 0], altas[:, 1], altas[:, 2], altas[:, 4],
                  np.zeros(len(altas), np.float32)])]) if len(obj)
                 else np.column_stack([altas[:, 0], altas[:, 1], altas[:, 2], altas[:, 4],
                                       np.zeros(len(altas), np.float32)]))
+        remates = self.remates_paredes
+        if len(remates):
+            obj = np.vstack([obj, remates]) if len(obj) else remates
         if len(obj):
             cx, cy, r = obj[:, 0] - x, obj[:, 1] - y, obj[:, 2]
             proy = dx[:, None] * cx[None, :] + dy[:, None] * cy[None, :]
@@ -226,15 +291,24 @@ class Mundo:
             d = np.minimum(d, t_obj.min(axis=1))
         return np.minimum(d, alcance).astype(np.float32)
 
-    def scan(self, x, y, theta, n=720, alcance=8.0, rng=None, realismo=1.0):
+    def scan(self, x, y, theta, n=720, alcance=8.0, rng=None, realismo=1.0,
+             omega=0.0, periodo=0.1):
         """Scan de 360° como el del RPLIDAR C1.
 
         Con `realismo` se añaden los defectos del sensor de verdad: rayos
         perdidos (más cuanto más lejos), ruido que crece con la distancia y
         píxeles mezclados en los bordes. Un scan perfecto le pone las cosas
-        demasiado fáciles al casamiento de scans y al freno."""
+        demasiado fáciles al casamiento de scans y al freno.
+
+        Y la distorsión por giro: el C1 tarda `periodo` en dar la vuelta y
+        cada haz sale desde el rumbo que tenía el robot EN ESE INSTANTE, pero
+        el scan llega como si todo se hubiera medido a la vez. Girando a
+        2 rad/s el principio y el final de la vuelta difieren 11°: las
+        paredes salen curvadas, y eso es parte de por qué el casamiento de
+        scans falla en los giros."""
         ang = np.linspace(-math.pi, math.pi, n, endpoint=False, dtype=np.float32)
-        d = self.rayos(x, y, theta, ang, alcance)
+        retraso = periodo * (1.0 - np.arange(n, dtype=np.float32) / n) * realismo
+        d = self.rayos(x, y, theta, ang - omega * retraso, alcance)
         visible = d < alcance - 1e-3
 
         if rng is not None and realismo > 0:
@@ -272,7 +346,7 @@ class Mundo:
         dy = ap_y - t * ab[:, 1]
         return np.sqrt(dx * dx + dy * dy).min(axis=-1)
 
-    def clases_suelo(self, px, py, rng=None):
+    def clases_suelo(self, px, py, rng=None, con_plantas=True):
         """Clasifica cada punto del suelo (ver TIERRA, PAJA, PLANTA…).
 
         Las texturas imitan lo que se ve en las fotos de la huerta: paja
@@ -320,6 +394,8 @@ class Mundo:
         fuera = d >= media + self.ancho_paja
         clase = np.where(fuera & (fibra > 0.55), PAJA, clase)
         clase = np.where(fuera & (mata > 0.62), HIERBA, clase)
+        if not con_plantas:
+            return clase
         for cx, cy, r, _, altura in self.plantas:
             dentro = (px - cx) ** 2 + (py - cy) ** 2 < r * r
             # Las altas tapan más suelo visto desde arriba (la copa) y se
@@ -328,24 +404,144 @@ class Mundo:
         return clase
 
     def sombras(self, px, py):
-        """Máscara de sombra en el suelo, proyectada por lo que sobresale.
-
-        Importa más de lo que parece: una sombra dura sobre el sendero cambia
-        el color del camino, y el detector tiene que seguir funcionando. En
-        las fotos reales del usuario hay sombras de las matas y del talud."""
-        import numpy as np
-
-        sombra = np.zeros(np.shape(px), bool)
+        """Sombras suaves con penumbra en el suelo."""
+        sombra = np.zeros(np.shape(px), np.float32)
         acimut = math.radians(SOL_ACIMUT_DEG)
         largo = 1.0 / max(math.tan(math.radians(SOL_ALTURA_DEG)), 0.2)
         dx, dy = math.cos(acimut) * largo, math.sin(acimut) * largo
         altas = self.plantas_altas
-        piezas = [(o[0], o[1], o[2], o[3]) for o in self.objetos] +                  [(p[0], p[1], p[2], p[4]) for p in altas]
+        piezas = [(o[0], o[1], o[2], o[3]) for o in self.objetos] + \
+                 [(p[0], p[1], p[2], p[4]) for p in altas]
         for cx, cy, r, altura in piezas:
-            # La sombra es el objeto desplazado según el sol y su altura.
             sx, sy = cx + dx * altura, cy + dy * altura
-            sombra |= ((px - sx) ** 2 + (py - sy) ** 2) < (r * 1.15) ** 2
+            r_ext = r * 1.45
+            d2 = (px - sx) ** 2 + (py - sy) ** 2
+            nucleo = np.clip(1.0 - np.sqrt(d2) / r_ext, 0, 1)
+            sombra = np.maximum(sombra, nucleo)
         return sombra
+
+    # ------------------------------------------------------- terreno pintado
+    def raster_suelo(self):
+        """El terreno visto desde arriba, pintado UNA vez (BGR + sombra en A).
+
+        La cámara antes clasificaba y pintaba cada píxel en cada fotograma,
+        con un recorrido de la imagen entera por cada planta y cada sombra:
+        640-840 ms por imagen. El suelo no cambia durante el episodio, así
+        que se pinta aquí a unos milímetros por píxel y cada fotograma solo
+        lo proyecta. Devuelve ([(textura, m_por_px), ...], (x0, y1)): tres
+        niveles de detalle para que lo lejano no parpadee."""
+        clave = (tuple(round(float(v), 3) for v in self.limites), round(self.seco, 3),
+                 self.borde, round(float(self.ancho_sendero), 3),
+                 round(float(self.ancho_paja), 3), hash(self.sendero.tobytes()),
+                 hash(self.plantas.tobytes()), hash(self.objetos.tobytes()))
+        cache = getattr(self, "_cache_raster", None)
+        if cache is not None and cache[0] == clave:
+            return cache[1]
+        import cv2
+
+        x0, y0, x1, y1 = self.limites
+        x0, y0 = x0 - RASTER_MARGEN_M, y0 - RASTER_MARGEN_M
+        x1, y1 = x1 + RASTER_MARGEN_M, y1 + RASTER_MARGEN_M
+        res = max(RASTER_M_POR_PX, math.sqrt((x1 - x0) * (y1 - y0) / RASTER_MAX_PX))
+        ancho, alto = int(math.ceil((x1 - x0) / res)), int(math.ceil((y1 - y0) / res))
+        xs = x0 + (np.arange(ancho, dtype=np.float32) + 0.5) * res
+        ys = y1 - (np.arange(alto, dtype=np.float32) + 0.5) * res
+        paso = max(1, 300_000 // ancho)
+
+        def recuadro(cx, cy, r):
+            c0, c1 = max(0, int((cx - r - x0) / res)), min(ancho, int((cx + r - x0) / res) + 2)
+            f0, f1 = max(0, int((y1 - cy - r) / res)), min(alto, int((y1 - cy + r) / res) + 2)
+            if c0 >= c1 or f0 >= f1:
+                return None
+            gx, gy = np.meshgrid(xs[c0:c1], ys[f0:f1])
+            return (slice(f0, f1), slice(c0, c1)), gx, gy
+
+        clase = np.empty((alto, ancho), np.int8)
+        for f in range(0, alto, paso):
+            gx, gy = np.meshgrid(xs, ys[f:f + paso])
+            clase[f:f + paso] = self.clases_suelo(gx, gy, con_plantas=False)
+        for cx, cy, r, _, altura in self.plantas:
+            rq = recuadro(cx, cy, r)
+            if rq is not None:
+                sl, gx, gy = rq
+                clase[sl][(gx - cx) ** 2 + (gy - cy) ** 2 < r * r] = (
+                    PLANTA_ALTA if altura >= ALTURA_LIDAR_M else PLANTA)
+
+        img = np.empty((alto, ancho, 4), np.uint8)
+        for f in range(0, alto, paso):
+            gx, gy = np.meshgrid(xs, ys[f:f + paso])
+            img[f:f + paso, :, :3] = self.pintar(clase[f:f + paso], gx, gy, seco=self.seco)
+        for (ox, oy, r, _, _), tipo in zip(self.objetos, self.tipos):
+            rq = recuadro(ox, oy, r)
+            if rq is not None:
+                sl, gx, gy = rq
+                color = TIPOS_OBJETO.get(tipo, TIPOS_OBJETO["maceta"])["color"]
+                img[sl][(gx - ox) ** 2 + (gy - oy) ** 2 < r * r, :3] = color
+
+        # Sombras en el canal alfa: la cámara decide cuánto oscurecer según
+        # el realismo pedido, sin tener que volver a pintar el terreno.
+        sombra = np.zeros((alto, ancho), np.float32)
+        acimut = math.radians(SOL_ACIMUT_DEG)
+        largo = 1.0 / max(math.tan(math.radians(SOL_ALTURA_DEG)), 0.2)
+        dx, dy = math.cos(acimut) * largo, math.sin(acimut) * largo
+        piezas = [(o[0], o[1], o[2], o[3]) for o in self.objetos] + \
+                 [(p[0], p[1], p[2], p[4]) for p in self.plantas_altas]
+        for cx, cy, r, altura in piezas:
+            sx, sy, r_ext = cx + dx * altura, cy + dy * altura, r * 1.45
+            rq = recuadro(sx, sy, r_ext)
+            if rq is not None:
+                sl, gx, gy = rq
+                vista = sombra[sl]
+                np.maximum(vista, np.clip(1.0 - np.hypot(gx - sx, gy - sy) / r_ext, 0, 1),
+                           out=vista)
+        img[..., 3] = (sombra * 255).astype(np.uint8)
+
+        niveles = [(img, res)]
+        for _ in range(2):
+            niveles.append((cv2.pyrDown(niveles[-1][0]), niveles[-1][1] * 2))
+        resultado = (niveles, (x0, y1))
+        self._cache_raster = (clave, resultado)
+        return resultado
+
+    def _suelo_proyectado(self, px, py, g, realismo):
+        """Muestrea el terreno pintado en los puntos de suelo (px, py).
+
+        El nivel de detalle se elige por la huella de cada píxel en el suelo,
+        como el mipmapping de una GPU: a lo lejos un píxel cubre decenas de
+        centímetros y muestrear el nivel fino daría un parpadeo que el
+        detector de senderos se tomaría por textura."""
+        import cv2
+
+        niveles, (x0, y1) = self.raster_suelo()
+        res0 = niveles[0][1]
+        pesos = g.get("pesos_lod")
+        if pesos is None or pesos[0] != res0:
+            huella = g["dist"] ** 1.5 / (g["fx"] * math.sqrt(max(g["h"], 0.05)))
+            lod = np.clip(np.log2(np.maximum(huella / res0, 1.0)), 0, len(niveles) - 1)
+            # Mezcla en dos pasos (0 con 1, y el resultado con 2), cada uno
+            # con cv2.blendLinear, que lo hace en C sobre uint8.
+            w_a = np.clip(1.0 - lod, 0, 1).astype(np.float32)
+            w_b = np.clip(2.0 - lod, 0, 1).astype(np.float32)
+            pesos = (res0, w_a, 1 - w_a, w_b, 1 - w_b, bool((w_a < 1).any()), bool((w_b < 1).any()))
+            g["pesos_lod"] = pesos
+        _, w_a, w_a1, w_b, w_b1, usa_1, usa_2 = pesos
+
+        def muestra(k):
+            tex, res = niveles[k]
+            mx = (px - x0) * (1.0 / res) - 0.5
+            my = (y1 - py) * (1.0 / res) - 0.5
+            return cv2.remap(tex, mx.astype(np.float32), my.astype(np.float32),
+                             cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+
+        mezcla = muestra(0)
+        if usa_1:
+            mezcla = cv2.blendLinear(mezcla, muestra(1), w_a, w_a1)
+            if usa_2:
+                mezcla = cv2.blendLinear(mezcla, muestra(2), w_b, w_b1)
+        img = mezcla[..., :3].astype(np.float32)
+        if realismo > 0:
+            img *= (1 - mezcla[..., 3:].astype(np.float32) * (SOMBRA_OSCURIDAD * realismo / 255.0))
+        return img
 
     def pintar_objetos(self, img, px, py):
         """Macetas, ramas y demás sobre una imagen ya pintada del suelo."""
@@ -373,63 +569,110 @@ class Mundo:
         img[clase == HIERBA] = COLOR_HIERBA
         img[clase == BORDE_TIERRA] = COLOR_BORDE_TIERRA
         if px is not None:
-            # Manchas grandes de humedad y de luz: sin esto el suelo parece papel.
             manchas = ruido(px, py, 0.8, 3) - 0.5
-            surcos = ruido(px, py, 14.0, 1) - 0.5          # relieve fino, huellas
-            img *= (1 + 0.22 * manchas + 0.10 * surcos)[..., None]
+            surcos = ruido(px, py, 14.0, 1) - 0.5
+            micro = ruido(px, py, 42.0, 1) - 0.5
+            img *= (1 + 0.22 * manchas + 0.10 * surcos + 0.06 * micro)[..., None]
+            if seco < 0.5:
+                charcos = ruido(px * 0.6, py * 0.6, 1.2, 2)
+                mojado = charcos > 0.72
+                img[mojado] *= 0.78
         if rng is not None:
             img += rng.normal(0, 7, img.shape)
         return np.clip(img, 0, 255)
 
     # ---------------------------------------------------------------- cámara
+    def _geometria_camara(self, geo, ancho, alto, cabeceo_deg):
+        """Todo lo que depende solo de la cámara, no de dónde está el robot:
+        a qué punto del suelo (en ejes del robot) mira cada píxel, la niebla,
+        el cielo y el degradado de las paredes. Se guarda por geometría; la
+        inclinación total se redondea a 0,25° (su efecto a 1 m es < 5 mm).
+        Tiene que ser la TOTAL: la que llega ya trae el cabeceo compensado
+        por el IMU con decimales, y redondeando solo el cabeceo la caché no
+        acertaba nunca."""
+        incl = round((float(geo["camara_inclinacion_deg"]) + cabeceo_deg) * 4) / 4
+        clave = (ancho, alto, round(float(geo["camara_altura_m"]), 4), incl,
+                 round(float(geo["camara_hfov_deg"]), 2), round(float(geo["camara_adelante_m"]), 4))
+        caches = self.__dict__.setdefault("_cache_geo", {})
+        g = caches.get(clave)
+        if g is not None:
+            return g
+        h = float(geo["camara_altura_m"])
+        # El cabeceo del chasis (baches, suspensión) mueve la cámara: con 2°
+        # de más, lo que la cámara cree que está a 1 m está en realidad a 1,2.
+        phi = math.radians(incl)
+        base = _base_camara(ancho, alto, round(float(geo["camara_hfov_deg"]), 2))
+        fx, xn, yn = base["fx"], base["xn"], base["yn"]
+        baja = yn * math.cos(phi) + math.sin(phi)
+        suelo = baja > 1e-3
+        t = np.where(suelo, h / np.where(suelo, baja, 1.0), 0.0).astype(np.float32)
+        xr = (t * (math.cos(phi) - yn * math.sin(phi)) + geo["camara_adelante_m"]).astype(np.float32)
+        yr = (-t * xn).astype(np.float32)
+        dist = np.hypot(xr, yr).astype(np.float32)
+        dist_seg = np.maximum(dist, 0.1)
+        niebla = np.clip(1.0 - np.exp(-0.065 * np.maximum(dist - 1.0, 0)), 0, 0.42)[..., None]
+
+        g = {"h": h, "fx": fx, "suelo": suelo, "xr": xr, "yr": yr, "dist": dist,
+             "inv_dist": (1.0 / dist_seg).astype(np.float32),
+             "altura_sol": (math.sin(math.radians(SOL_ALTURA_DEG)) * h / dist_seg).astype(np.float32),
+             "niebla": niebla.astype(np.float32),
+             "bruma_niebla": (np.array(COLOR_BRUMA, np.float32) * niebla).astype(np.float32),
+             "cielo": base["cielo"], "no_suelo": ~suelo, "pared_fila": base["pared_fila"],
+             "angulos": base["angulos"]}
+        if len(caches) > 32:
+            caches.pop(next(iter(caches)))
+        caches[clave] = g
+        return g
+
     def camara(self, x, y, theta, geo, ancho=640, alto=480, rng=None,
-               velocidad=0.0, realismo=1.0, cabeceo_deg=0.0):
+               velocidad=0.0, realismo=1.0, cabeceo_deg=0.0, omega=0.0):
         """Imagen BGR sintética desde la cámara del robot.
 
         Cada píxel se proyecta al suelo con la misma geometría que usa
         `sendero.py` (altura, inclinación, campo y adelantamiento de la
         cámara). Lo que cae por encima del horizonte, o más allá de la
         primera pared en ese rumbo, se pinta como pared o cielo."""
-        h = geo["camara_altura_m"]
-        # El cabeceo del chasis (baches, suspensión) mueve la cámara: con 2°
-        # de más, lo que la cámara cree que está a 1 m está en realidad a 1,2.
-        phi = math.radians(geo["camara_inclinacion_deg"] + cabeceo_deg)
-        fx = (ancho / 2) / math.tan(math.radians(geo["camara_hfov_deg"]) / 2)
-        u, v = np.meshgrid(np.arange(ancho, dtype=np.float32),
-                           np.arange(alto, dtype=np.float32))
-        xn, yn = (u - ancho / 2) / fx, (v - alto / 2) / fx
-        baja = yn * math.cos(phi) + math.sin(phi)
-        suelo = baja > 1e-3
-        t = np.where(suelo, h / np.where(suelo, baja, 1.0), 0.0)
-        # En ejes del robot y luego al mundo.
-        xr = t * (math.cos(phi) - yn * math.sin(phi)) + geo["camara_adelante_m"]
-        yr = -t * xn
-        px = x + xr * math.cos(theta) - yr * math.sin(theta)
-        py = y + xr * math.sin(theta) + yr * math.cos(theta)
+        g = self._geometria_camara(geo, ancho, alto, cabeceo_deg)
+        c, s = math.cos(theta), math.sin(theta)
+        xr, yr = g["xr"], g["yr"]
+        px = x + xr * c - yr * s
+        py = y + xr * s + yr * c
 
-        clase = self.clases_suelo(px, py, rng)
-        img = self.pintar(clase, px, py, rng, self.seco)
-        img = self.pintar_objetos(img, px, py)
-        if realismo > 0:
-            oscuro = self.sombras(px, py)
-            img[oscuro] *= (1 - SOMBRA_OSCURIDAD * realismo)
-        # Lo lejano se ve más claro y con menos contraste (neblina).
-        dist = np.hypot(px - x, py - y)
-        niebla = np.clip((dist - 1.5) / 8.0, 0, 0.35)[..., None]
-        img = img * (1 - niebla) + np.array(COLOR_CIELO, np.float32) * niebla
+        img = self._suelo_proyectado(px, py, g, realismo)
+        # Niebla exponencial con color cálido de distancia.
+        img *= (1 - g["niebla"])
+        img += g["bruma_niebla"]
 
-        # Paredes: un rayo por columna; el suelo más lejano que la pared queda tapado.
+        # Especular del sol sobre el suelo (más en húmedo). La dirección de
+        # la vista en el mundo es la del robot girada theta: basta girar el
+        # sol al revés y usar los ejes del robot, que están en la caché.
+        if realismo > 0 and self.seco < 0.8:
+            rel = math.radians(SOL_ACIMUT_DEG) - theta
+            d = np.clip((xr * math.cos(rel) + yr * math.sin(rel)) * g["inv_dist"]
+                        + g["altura_sol"], 0, 1)
+            d2 = d * d; d4 = d2 * d2; d8 = d4 * d4; d16 = d8 * d8
+            img *= (1 + (d16 * d8 * ((1 - self.seco) * 0.18))[..., None])
+
+        # Paredes: gradiente vertical + niebla de distancia.
         if len(self.paredes):
-            ang = np.arctan2(-xn[0], 1.0)          # rumbo relativo de cada columna
-            dist_pared = self.rayos(x, y, theta, ang, alcance=30.0)
-            dist_suelo = np.hypot(px - x, py - y)
-            tapado = dist_suelo > dist_pared[None, :]
-            img[tapado] = COLOR_PARED
-        img[~suelo] = COLOR_CIELO
-        img = np.clip(img, 0, 255).astype(np.uint8)
-        return self._degradar(img, rng, velocidad, realismo) if realismo > 0 else img
+            dist_pared = self.rayos(x, y, theta, g["angulos"], alcance=30.0,
+                                    solo_paredes=True).astype(np.float32)
+            tapado = g["dist"] > dist_pared[None, :]
+            if tapado.any():
+                filas, cols = np.nonzero(tapado)
+                nf = np.clip(1.0 - np.exp(-0.04 * np.maximum(dist_pared - 2, 0)), 0, 0.5)[cols, None]
+                img[filas, cols] = (g["pared_fila"][filas] * (1 - nf)
+                                    + np.array(COLOR_BRUMA, np.float32) * nf)
 
-    def _degradar(self, img, rng, velocidad, realismo):
+        # Cielo con gradiente de cenit a horizonte y bandas de nubes.
+        np.copyto(img, g["cielo"], where=g["no_suelo"][..., None])
+        np.clip(img, 0, 255, out=img)
+        img = img.astype(np.uint8)
+        if realismo > 0:
+            img = self._degradar(img, rng, velocidad, realismo, omega, g["fx"])
+        return img
+
+    def _degradar(self, img, rng, velocidad, realismo, omega=0.0, fx=None):
         """Le quita a la imagen lo que una cámara real no puede dar.
 
         Sin esto el detector se entrena contra una imagen perfecta y en el
@@ -438,31 +681,39 @@ class Mundo:
         import cv2
 
         alto, ancho = img.shape[:2]
-        # 1. Movida: el arrastre es proporcional a la velocidad.
-        px_arrastre = DESENFOQUE_POR_VELOCIDAD * abs(velocidad) * realismo * (ancho / 320)
-        if px_arrastre > 1.2:
-            k = int(min(21, px_arrastre)) | 1
-            nucleo = np.zeros((k, k), np.float32)
-            nucleo[k // 2, :] = 1.0 / k                # arrastre horizontal
-            img = cv2.filter2D(img, -1, nucleo)
+        # 1. Movida. Al AVANZAR el suelo corre hacia abajo en la imagen
+        #    (arrastre vertical); al GIRAR toda la escena barre de lado
+        #    (horizontal, omega × exposición × focal). Antes era solo
+        #    horizontal y proporcional a v: justo al revés de lo que pasa.
+        px_avance = DESENFOQUE_POR_VELOCIDAD * abs(velocidad) * realismo * (ancho / 320)
+        if px_avance > 1.2:
+            img = cv2.blur(img, (1, int(min(21, px_avance)) | 1))
+        if fx is not None:
+            px_giro = abs(omega) * EXPOSICION_CAMARA_S * fx * realismo
+            if px_giro > 1.2:
+                img = cv2.blur(img, (int(min(31, px_giro)) | 1, 1))
         # 2. Viñeteo del gran angular.
         if VIÑETEO > 0:
-            if getattr(self, "_vineta", (None,))[0] != (alto, ancho):
+            clave = (alto, ancho, round(realismo, 3))
+            if getattr(self, "_vineta", (None,))[0] != clave:
                 yy, xx = np.mgrid[0:alto, 0:ancho]
                 r = np.hypot((xx - ancho / 2) / (ancho / 2), (yy - alto / 2) / (alto / 2))
-                self._vineta = ((alto, ancho), (1 - VIÑETEO * np.clip(r, 0, 1.4) ** 2)[..., None])
-            img = (img * (1 - realismo + realismo * self._vineta[1])).astype(np.uint8)
+                factor = 1 - realismo * VIÑETEO * np.clip(r, 0, 1.4) ** 2
+                self._vineta = (clave, cv2.merge([np.clip(factor * 255, 0, 255).astype(np.uint8)] * 3))
+            img = cv2.multiply(img, self._vineta[1], scale=1 / 255)
         # 3. Ruido: mucho más visible en lo oscuro, como en cualquier sensor.
         #    Se genera a media resolución y se amplía: el grano queda algo más
         #    grueso (que es lo que hace una cámara con ganancia alta) y cuesta
         #    la cuarta parte, que importa en tandas de miles de episodios.
         if rng is not None:
             medio = (alto // 2, ancho // 2)
-            grano = cv2.resize(rng.normal(0, 1, medio + (3,)).astype(np.float32),
+            grano = cv2.resize(rng.standard_normal(medio + (3,), dtype=np.float32),
                                (ancho, alto), interpolation=cv2.INTER_LINEAR)
-            luz = img.mean(axis=2, keepdims=True) / 255.0
-            sigma = (RUIDO_EN_SOMBRA - (RUIDO_EN_SOMBRA - RUIDO_BASE) * luz) * realismo
-            img = np.clip(img + grano * sigma, 0, 255).astype(np.uint8)
+            luz = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)[..., None]
+            sigma = (RUIDO_EN_SOMBRA - (RUIDO_EN_SOMBRA - RUIDO_BASE) / 255.0 * luz) * realismo
+            grano *= sigma
+            grano += img
+            img = np.clip(grano, 0, 255).astype(np.uint8)
         return img
 
     # ------------------------------------------------------------ vista cenital
@@ -574,7 +825,7 @@ def endurecer(datos: dict, nivel=1.0, semilla=None) -> dict:
         que obliga a afinar el seguimiento en vez de ir a ojo.
       · Más PUNTOS DE ESCANEO, repartidos por el recorrido: el robot tiene
         que llegar a ellos, no solo pasear.
-      · Algunas plantas del borde crecen por encima de los 30 cm del LIDAR:
+      · Algunas plantas del borde crecen por encima de los 40 cm del LIDAR:
         aparecen en el scan como obstáculos aunque no lo sean.
       · Ramas, macetas y piedras junto al camino, y algún estrechamiento con
         dos paredes cortas enfrentadas (un paso angosto de verdad).
@@ -766,6 +1017,149 @@ def trampa_bucle():
     return Mundo("trampa_bucle", paredes, ruta, 0.8, 0.3, [], (-4, -4, 4, 4)), (-2.5, -2.5, 0.0)
 
 
+def validar(m: "Mundo") -> list[dict]:
+    """Problemas de un mapa que hacen inútil entrenar en él.
+
+    Es la comprobación que encontró el invernadero roto (el sendero
+    atravesaba 4 paredes y el robot daba vueltas en la entrada) y las
+    plantas pisadas por el recorrido ideal en serpentina y campo abierto."""
+    problemas = []
+    ruta = [tuple(map(float, p)) for p in m.sendero]
+    paredes = [tuple(map(float, w)) for w in m.paredes]
+    if len(ruta) < 2:
+        return [{"nivel": "error", "texto": "el sendero necesita al menos dos puntos"}]
+
+    def cruza(p1, p2, p3, p4):
+        d = lambda a, b, c: (c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])
+        return d(p3, p4, p1) * d(p3, p4, p2) < 0 and d(p1, p2, p3) * d(p1, p2, p4) < 0
+
+    def dist_seg(p, a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        l2 = dx * dx + dy * dy
+        t = 0.0 if l2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2))
+        return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+
+    for i, (a, b) in enumerate(zip(ruta, ruta[1:])):
+        for w in paredes:
+            if cruza(a, b, w[:2], w[2:]):
+                x = (a[0] + b[0]) / 2; y = (a[1] + b[1]) / 2
+                problemas.append({"nivel": "error", "x": round(x, 2), "y": round(y, 2),
+                                  "texto": f"el tramo {i + 1} del sendero atraviesa una pared"})
+    radio = 0.20                     # medio ancho del chasis (35 cm) + margen
+    for i, (a, b) in enumerate(zip(ruta, ruta[1:])):
+        for k in range(11):
+            p = (a[0] + (b[0] - a[0]) * k / 10, a[1] + (b[1] - a[1]) * k / 10)
+            cerca = min((dist_seg(p, w[:2], w[2:]) for w in paredes), default=9)
+            if cerca < radio:
+                problemas.append({"nivel": "aviso", "x": round(p[0], 2), "y": round(p[1], 2),
+                                  "texto": f"el sendero pasa a {cerca * 100:.0f} cm de una pared: "
+                                           f"el robot (35 cm de ancho) no cabe"})
+                break
+    tramos = list(zip(ruta, ruta[1:]))
+    pisadas = [p for p in m.plantas
+               if min(dist_seg((p[0], p[1]), a, b) for a, b in tramos) < m.ancho_sendero / 2]
+    if pisadas:
+        problemas.append({"nivel": "aviso", "texto": f"{len(pisadas)} plantas caen sobre el "
+                          "sendero: el recorrido ideal las pisaría", "plantas_sobre_sendero": len(pisadas)})
+    x0, y0, x1, y1 = m.limites
+    fuera = [p for p in ruta if not (x0 <= p[0] <= x1 and y0 <= p[1] <= y1)]
+    if fuera:
+        problemas.append({"nivel": "error", "texto": f"{len(fuera)} puntos del sendero fuera de los límites"})
+    return problemas
+
+
+def _fuera_del_sendero(plantas, ruta, ancho, margen=0.12):
+    """Quita las plantas que caen sobre el sendero.
+
+    Las hileras se trazan paralelas a cada tramo, y en las curvas la hilera
+    de un tramo invade el siguiente: el recorrido ideal las pisaba y el
+    entrenamiento aprendía que pisar plantas es normal."""
+    limite = ancho / 2 + margen
+    tramos = list(zip(ruta, ruta[1:]))
+
+    def dist(p, a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        l2 = dx * dx + dy * dy
+        t = 0.0 if l2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2))
+        return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+
+    return [p for p in plantas if min(dist(p, a, b) for a, b in tramos) > limite]
+
+
+def invernadero():
+    """Invernadero con pasillos estrechos entre bancales: entrena navegación
+    precisa en espacio confinado con muchas plantas a los lados.
+
+    Los bancales terminan a 0,8 m de los giros: con las paredes hasta el
+    borde, el sendero las atravesaba en cada vuelta y el robot se quedaba
+    dando vueltas en la entrada del pasillo."""
+    paredes = _rect(-6, -4, 6, 4)
+    for yc in (-1.5, 0.3, 2.1):
+        paredes += [(-3.8, yc - 0.33, 3.8, yc - 0.33), (-3.8, yc + 0.33, 3.8, yc + 0.33)]
+    ruta = [(-5.2, -1.5), (3.8, -1.5), (4.6, -1.1), (4.6, -0.1), (3.8, 0.3),
+            (-3.8, 0.3), (-4.6, 0.7), (-4.6, 1.7), (-3.8, 2.1), (5.2, 2.1)]
+    plantas = []
+    for yy in (-2.6, -0.6, 1.2, 3.0):
+        plantas += _plantas_en_linea((-3.6, yy), (3.6, yy), paso=0.28, semilla=int(abs(yy * 100)))
+    plantas = _fuera_del_sendero(plantas, ruta, 0.50)
+    return Mundo("invernadero", paredes, ruta, 0.50, 0.20, plantas,
+                 (-6.5, -4.5, 6.5, 4.5), seco=0.15, borde="vegetacion"), (-5.2, -1.5, 0.0)
+
+
+def serpentina():
+    """Sendero sinuoso entre vegetación densa: entrena anticipar curvas y
+    corregir rumbo sin perder el sendero."""
+    paredes = _rect(-7, -5, 7, 5)
+    ruta = [(-5.5, -3), (-3, -3.5), (-0.5, -2), (1.5, 0.5),
+            (0, 2.5), (-2.5, 3), (-4.5, 1.5), (-3.5, -0.5),
+            (-1, -1.5), (2, -3), (4, -2), (5.5, 0),
+            (4.5, 2.5), (2, 3.5), (0, 2)]
+    plantas = []
+    for k in range(len(ruta) - 1):
+        ax, ay = ruta[k]
+        bx, by = ruta[k + 1]
+        largo = math.hypot(bx - ax, by - ay)
+        if largo < 0.3:
+            continue
+        nx, ny = -(by - ay) / largo, (bx - ax) / largo
+        for lado in (1, -1):
+            plantas += _plantas_en_linea(
+                (ax + lado * 0.7 * nx, ay + lado * 0.7 * ny),
+                (bx + lado * 0.7 * nx, by + lado * 0.7 * ny),
+                paso=0.35, semilla=int(abs(ax * 100 + lado * 50)))
+    plantas = _fuera_del_sendero(plantas, ruta, 0.55)
+    return Mundo("serpentina", paredes, ruta, 0.55, 0.40, plantas,
+                 (-7.5, -5.5, 7.5, 5.5), seco=0.45, borde="mixto"), (-5.5, -3.0, 0.3)
+
+
+def campo_abierto():
+    """Campo sin paredes: solo hileras de plantas marcan el camino. Entrena
+    navegar donde el LIDAR ve poco y la cámara es la guía principal."""
+    ruta = [(-6, -2), (6, -2), (6.5, -0.5), (6, 1), (-6, 1),
+            (-6.5, 2.5), (-6, 4), (6, 4)]
+    plantas = []
+    for k in range(len(ruta) - 1):
+        ax, ay = ruta[k]
+        bx, by = ruta[k + 1]
+        largo = math.hypot(bx - ax, by - ay)
+        if largo < 0.3:
+            continue
+        nx, ny = -(by - ay) / largo, (bx - ax) / largo
+        for lado in (1, -1):
+            off = 0.55
+            plantas += _plantas_en_linea(
+                (ax + lado * off * nx, ay + lado * off * ny),
+                (bx + lado * off * nx, by + lado * off * ny),
+                paso=0.30, semilla=int(abs(ax * 77 + ay * 33 + lado * 11)))
+    plantas = _fuera_del_sendero(plantas, ruta, 0.60)
+    objetos = [{"tipo": "piedra", "x": 2.0, "y": -1.5},
+               {"tipo": "rama", "x": -1.5, "y": 1.3},
+               {"tipo": "piedra", "x": 4.0, "y": 4.2}]
+    return Mundo("campo_abierto", [], ruta, 0.60, 0.30, plantas,
+                 (-7.5, -3.5, 7.5, 5.5), seco=0.60, objetos=objetos,
+                 borde="paja"), (-6.0, -2.0, 0.0)
+
+
 ESCENARIOS = {
     "aleatorio": aleatorio,
     "bucle": bucle,
@@ -773,4 +1167,7 @@ ESCENARIOS = {
     "pasillo": pasillo_estrecho,
     "callejon": callejon_sin_salida,
     "trampa_bucle": trampa_bucle,
+    "invernadero": invernadero,
+    "serpentina": serpentina,
+    "campo_abierto": campo_abierto,
 }

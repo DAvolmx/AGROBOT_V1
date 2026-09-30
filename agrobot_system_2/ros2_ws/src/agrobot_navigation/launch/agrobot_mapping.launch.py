@@ -44,10 +44,14 @@ LIDAR_XYZ = ("0.0", "0.0", "0.18")   # LIDAR 18 cm por encima del centro de base
 LIDAR_RPY = ("3.141592653589793", "0.0", "0.0")    # yaw pitch roll
 IMU_XYZ = ("0.0", "0.0", "0.05")
 
-# CP2102N del RPLIDAR C1 (10c4:ea60). Si se cambia el LIDAR, sacar el nuevo
-# nombre de `ls /dev/serial/by-id/`.
-LIDAR_PUERTO = ("/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_"
-                "Controller_5e723775cd73ef11b311cf8c8fcc3fa0-if00-port0")
+# Puerto del RPLIDAR C1: lo elige scripts/elegir_puerto_lidar.sh en CADA
+# arranque del driver (también en los respawn): el adaptador USB CP2102N si
+# está enchufado, si no la UART del conector (pines 8/10 -> /dev/ttyTHS1).
+# `lidar_puerto:=/dev/...` lo fuerza. La misma regla usa el vigía del
+# backend (jetson_server._puerto_lidar).
+LIDAR_PUERTO = "auto"
+ELEGIR_PUERTO = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                             "..", "scripts", "elegir_puerto_lidar.sh")
 IMU_RPY = ("0.0", "0.0", "0.0")
 
 
@@ -93,9 +97,10 @@ def generate_launch_description():
         package="sllidar_ros2",
         executable="sllidar_node",
         name="sllidar_node",
+        prefix=ELEGIR_PUERTO,
+        additional_env={"AGROBOT_LIDAR_PUERTO": LaunchConfiguration("lidar_puerto")},
         parameters=[{
             "channel_type": "serial",
-            "serial_port": LIDAR_PUERTO,
             "serial_baudrate": 460800,
             "frame_id": "laser",
             "inverted": False,
@@ -140,6 +145,9 @@ def generate_launch_description():
         executable="rf2o_laser_odometry_node",
         name="rf2o_laser_odometry",
         output="screen",
+        # Sin LIDAR escribe "Waiting for laser_scans" 10 veces por segundo:
+        # el 2026-09-28 eso llevó logs/ros.log a 539 MB. Solo errores.
+        ros_arguments=["--log-level", "rf2o_laser_odometry:=error"],
         parameters=[{
             "laser_scan_topic": "/scan_odom",
             "odom_topic": "/odom_rf2o",
@@ -169,8 +177,11 @@ def generate_launch_description():
             "filter1.name": "rango",
             "filter1.type": "laser_filters/LaserScanRangeFilter",
             "filter1.params.use_message_range_limits": False,
-            # 0.15 m descarta los retornos del propio chasis y de los cables.
-            "filter1.params.lower_threshold": 0.15,
+            # 0.18 m descarta los retornos del propio chasis y de los cables.
+            # Con 0.15 se colaba uno a 15,5 cm (mástil de la cámara, medido
+            # en 100 scans el 2026-09-30); 0.175 m es el radio inscrito de la
+            # carcasa, así que nada real puede estar más cerca del LIDAR.
+            "filter1.params.lower_threshold": 0.18,
             "filter1.params.upper_threshold": 6.0,
             # Lo que cae fuera se marca como infinito, no como NaN: infinito
             # significa "no hay nada ahi", que es la lectura correcta para un
@@ -194,7 +205,7 @@ def generate_launch_description():
             "filter1.name": "rango_slam",
             "filter1.type": "laser_filters/LaserScanRangeFilter",
             "filter1.params.use_message_range_limits": False,
-            "filter1.params.lower_threshold": 0.15,
+            "filter1.params.lower_threshold": 0.18,
             "filter1.params.upper_threshold": 8.0,
             "filter1.params.lower_replacement_value": float("-inf"),
             "filter1.params.upper_replacement_value": float("inf"),
@@ -301,6 +312,9 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "odometria_visual.launch.py")))
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            "lidar_puerto", default_value=LIDAR_PUERTO,
+            description="Puerto serie del RPLIDAR C1; 'auto' = USB si está, si no la UART."),
         DeclareLaunchArgument(
             "odom_estatico", default_value="false",
             description="true = publica un odom->base_link fijo para probar el "

@@ -542,7 +542,8 @@ input[type="text"], select { font-family: inherit; }
 
 /* ---------- matriz de salud ---------- */
 .health-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
-.health-row .h-name { font-size: 17px; display: flex; align-items: center; gap: 8px; }
+.health-row .h-name { font-size: 17px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.health-row .h-detail { font-size: 13px; color: var(--ink-soft); font-weight: 400; overflow-wrap: anywhere; }
 .health-row .h-right { display: flex; align-items: center; gap: 10px; }
 .health-badge { font-size: 13px; font-weight: 700; padding: 3px 9px; border-radius: 5px; letter-spacing: 0.05em; }
 .health-badge.ok { background: var(--accent-soft); color: var(--accent-ink); }
@@ -1617,6 +1618,11 @@ input[type="text"], select { font-family: inherit; }
   // ---------------------------------------------------------------
   const PILDORA_POR_TOPICO = { esp32c3: "pill-actuator", lora_v3: "pill-lora" };
 
+  // Texto del backend dentro de innerHTML: siempre escapado.
+  function escapeHtml(txt) {
+    return String(txt).replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+  }
+
   function renderHealth(list) {
     list.forEach((t) => {
       const pid = PILDORA_POR_TOPICO[t.key];
@@ -1628,8 +1634,11 @@ input[type="text"], select { font-family: inherit; }
     list.forEach((t) => {
       const row = document.createElement("div");
       row.className = "health-row";
-      const ageText = t.age_s == null ? "nunca" : (t.age_s < 60 ? `hace ${t.age_s.toFixed(1)}s` : `hace ${Math.round(t.age_s/60)}min`);
-      row.innerHTML = `<span class="h-name">${t.icon} ${t.label}</span><span class="h-right"><span class="health-badge ${t.status}">${t.status.toUpperCase()}</span><span class="h-age mono">${ageText}</span></span>`;
+      // Filas sin latido (ROS, EKF) no tienen edad: "nunca" confundía con un fallo.
+      const sinLatido = t.age_s == null && t.status === "ok";
+      const ageText = sinLatido ? "" : t.age_s == null ? "nunca" : (t.age_s < 60 ? `hace ${t.age_s.toFixed(1)}s` : `hace ${Math.round(t.age_s/60)}min`);
+      const detalle = t.detail ? `<span class="h-detail">${escapeHtml(t.detail)}</span>` : "";
+      row.innerHTML = `<span class="h-name"><span>${t.icon} ${t.label}</span>${detalle}</span><span class="h-right"><span class="health-badge ${t.status}">${t.status.toUpperCase()}</span><span class="h-age mono">${ageText}</span></span>`;
       wrap.appendChild(row);
     });
   }

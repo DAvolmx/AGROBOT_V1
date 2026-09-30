@@ -265,11 +265,12 @@ class CameraWorker:
                 continue
 
             t0 = time.perf_counter()
+            imgsz = int(self._get_config()["detection"].get("imgsz", 640))
             try:
                 if self._device is None:
-                    resultados = modelo(frame, verbose=False)[0]
+                    resultados = modelo(frame, imgsz=imgsz, verbose=False)[0]
                 else:
-                    resultados = modelo(frame, device=self._device, verbose=False)[0]
+                    resultados = modelo(frame, device=self._device, imgsz=imgsz, verbose=False)[0]
                 self.infer_ms = (time.perf_counter() - t0) * 1000
                 self._fallos_seguidos = 0
             except Exception as exc:

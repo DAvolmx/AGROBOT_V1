@@ -49,6 +49,10 @@ DEFAULTS = {
     "detection": {
         "confidence_threshold": 0.45,
         "clip_record_threshold": 0.60,
+        # Lado de la imagen que entra a YOLO. Medido en la Jetson el
+        # 2026-09-29 (yolo11s, GPU): 640 px = 72-96 ms, 480 px = 44 ms. El
+        # robot va lento y en los barridos la plaga ocupa mucha imagen.
+        "imgsz": 480,
     },
     "slam": {
         # TODO EN CENTÍMETROS Y GRADOS, que es como se mide en el robot.
@@ -140,7 +144,7 @@ DEFAULTS = {
         "publicar_ros": False,
         # SIN MEDIR. Altura del centro del lente sobre el suelo y cuánto mira
         # hacia abajo. La escala del avance es proporcional a la altura.
-        "camara_altura_m": 0.30,
+        "camara_altura_m": 0.40,
         "camara_inclinacion_deg": 15.0,
         # Campo de visión HORIZONTAL. Medirlo: poner la cámara a una distancia
         # D de una pared y medir el ancho visible A: hfov = 2·atan(A / 2D).

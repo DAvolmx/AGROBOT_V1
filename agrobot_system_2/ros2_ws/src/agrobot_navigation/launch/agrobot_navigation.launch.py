@@ -85,9 +85,12 @@ def generate_launch_description():
         package="sllidar_ros2",
         executable="sllidar_node",
         name="sllidar_node",
+        # El puerto (USB si está, si no la UART) lo elige este script en
+        # cada arranque: ver agrobot_mapping.launch.py.
+        prefix=os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            "..", "scripts", "elegir_puerto_lidar.sh"),
         parameters=[{
             "channel_type": "serial",
-            "serial_port": "/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_5e723775cd73ef11b311cf8c8fcc3fa0-if00-port0",
             "serial_baudrate": 460800,
             "frame_id": "laser",
             "inverted": False,
@@ -153,7 +156,7 @@ def generate_launch_description():
             "filter1.name": "rango",
             "filter1.type": "laser_filters/LaserScanRangeFilter",
             "filter1.params.use_message_range_limits": False,
-            "filter1.params.lower_threshold": 0.15,
+            "filter1.params.lower_threshold": 0.18,
             "filter1.params.upper_threshold": 6.0,
             "filter1.params.lower_replacement_value": float("-inf"),
             "filter1.params.upper_replacement_value": float("inf"),

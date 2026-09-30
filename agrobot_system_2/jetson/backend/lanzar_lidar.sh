@@ -15,7 +15,8 @@ DISTRO=$(ls /opt/ros 2>/dev/null | while read -r d; do
 source "/opt/ros/$DISTRO/setup.bash"
 source "$(cd ../../ros2_ws && pwd)/install/setup.bash"
 
-PUERTO=${1:-/dev/ttyUSB0}
+# UART del conector de 40 pines desde el 2026-09-29 (antes /dev/ttyUSB0).
+PUERTO=${1:-/dev/ttyTHS1}
 [ -c "$PUERTO" ] || { echo "No existe $PUERTO — ¿está enchufado el LIDAR?"; exit 1; }
 
 # El puerto es root:dialout 660. Caso frecuente y confuso: el usuario YA fue

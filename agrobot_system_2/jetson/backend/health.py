@@ -45,3 +45,50 @@ def snapshot(warn_s: float, err_s: float) -> list[dict]:
             "age_s": age,
         })
     return out
+
+
+class ContadorSecuencia:
+    """Calidad de un enlace por su número de secuencia (el `seq` del nodo
+    LoRa V3). Un hueco en la secuencia es un paquete perdido; un `seq` que
+    vuelve atrás de golpe es la placa que se reinició (el contador arranca
+    en cero). Así se ven los reinicios por caída de tensión sin tocar el
+    firmware, que es lo que el 2026-09-28 hubo que deducir a mano."""
+
+    VENTANA = 2000      # paquetes para el % de pérdida (~100 s a 20 Hz)
+
+    def __init__(self):
+        self.ultimo = None
+        self.recibidos = 0
+        self.perdidos = 0
+        self.reinicios = 0
+        self.ultimo_reinicio = None
+        self._ventana = []          # (recibidos, perdidos) por paquete
+
+    def registrar(self, seq: int) -> bool:
+        """Devuelve True si este paquete indica un reinicio de la placa."""
+        reinicio = False
+        perdidos = 0
+        if self.ultimo is not None:
+            salto = seq - self.ultimo
+            if salto <= 0:
+                # Duplicado o reinicio. Un reinicio vuelve a valores bajos.
+                if seq < 50 or salto < -1000:
+                    reinicio = True
+                    self.reinicios += 1
+                    self.ultimo_reinicio = time.time()
+            elif salto > 1:
+                perdidos = min(salto - 1, 1000)
+        self.ultimo = seq
+        self.recibidos += 1
+        self.perdidos += perdidos
+        self._ventana.append(perdidos)
+        if len(self._ventana) > self.VENTANA:
+            del self._ventana[:len(self._ventana) - self.VENTANA]
+        return reinicio
+
+    def resumen(self) -> dict:
+        perd = sum(self._ventana)
+        total = len(self._ventana) + perd
+        return {"perdida_pct": round(100.0 * perd / total, 1) if total else None,
+                "reinicios": self.reinicios,
+                "ultimo_reinicio": self.ultimo_reinicio}

@@ -40,6 +40,16 @@ import time
 #     que es asumible; sin tope, un mapa de 2000x2000 son 145 MB por copia.
 MAPA_PERIODO_S = 1.0
 MAPA_MAX_CELDAS = 250_000
+# Un mapa de una casa o una huerta no pasa de unas decenas de metros. El
+# 2026-09-30 salió uno de 9,7 km x 21 m (193868 x 426 celdas, 82 MB por
+# mensaje): el EKF había seguido integrando la última velocidad durante las
+# horas sin LIDAR. Por encima de esto el mapa se marca como corrupto.
+MAPA_EXTENSION_SOSPECHOSA_M = 500.0
+
+# Covarianza de la velocidad cero que se publica en /zupt con el robot
+# quieto. Firme (sigma 0,1 m/s) pero no absoluta: si alguien empuja el robot
+# a mano, rf2o todavía pesa.
+ZUPT_COVARIANZA = 0.01
 
 # Giro del LIDAR respecto al robot. Con el C1 montado según la flecha de la
 # carcasa, el 0° de sllidar_ros2 mira HACIA ATRÁS (2026-09-19: una persona a
@@ -198,6 +208,17 @@ class AgroBotROSBridge:
         if self.available:
             self._node.publish_odom_webcam(vx, vyaw, var_vx, var_vyaw)
 
+    def publish_zupt(self):
+        """Velocidad CERO medida -> /zupt (odom4 del EKF).
+
+        Solo se llama con el robot quieto de verdad (ver `_bucle_zupt` en
+        jetson_server.py). Sin esto, cuando el LIDAR callaba, el EKF no
+        recibía ninguna velocidad lineal y extrapolaba la última durante
+        horas: el 2026-09-30 la pose llegó a x = 1771 m y el mapa a 9,7 km.
+        """
+        if self.available:
+            self._node.publish_zupt()
+
     def publish_initial_pose(self, x: float, y: float, theta_deg: float):
         """Publica /initialpose para corregir la pose del robot en SLAM."""
         if self.available:
@@ -245,13 +266,16 @@ if ROS_AVAILABLE:
 
             # ---- slam_toolbox -> mini-mapa del dashboard ----
             self._ultimo_mapa = 0.0
+            # Cola de UNO: con 10, un mapa corrupto de 82 MB dejaba hasta
+            # 800 MB retenidos en la cola del suscriptor (2026-09-30).
             self.create_subscription(
-                OccupancyGrid, "/map", lambda m: self._seguro("map", self._map_cb, m), 10)
+                OccupancyGrid, "/map", lambda m: self._seguro("map", self._map_cb, m), 1)
 
             # ---- publicadores hacia robot_localization ----
             self.imu_pub = self.create_publisher(Imu, "/imu/data_raw", 10)
             self.wheel_odom_pub = self.create_publisher(Odometry, "/wheel_odom", 10)
             self.odom_webcam_pub = self.create_publisher(Odometry, "/odom_webcam", 10)
+            self.zupt_pub = self.create_publisher(Odometry, "/zupt", 10)
 
             # ---- publicador /initialpose para corregir la pose en SLAM ----
             self.initial_pose_pub = self.create_publisher(
@@ -316,6 +340,12 @@ if ROS_AVAILABLE:
                 # la webcam para poder calibrarla antes de fusionarla
                 "vx": msg.twist.twist.linear.x,
                 "vyaw": msg.twist.twist.angular.z,
+                # Varianza de la velocidad de avance: acotada mientras llegue
+                # alguna medida (rf2o o /zupt). Si crece sin freno el EKF está
+                # extrapolando la última velocidad: así se estiró el mapa a
+                # 9,7 km el 2026-09-30. (La de posición NO sirve: crece
+                # siempre, nadie mide la velocidad lateral.)
+                "var_vx": msg.twist.covariance[0],
             })
 
         def _map_cb(self, msg: "OccupancyGrid"):
@@ -347,6 +377,7 @@ if ROS_AVAILABLE:
 
             w, h, datos = msg.info.width, msg.info.height, msg.data
             res = msg.info.resolution
+            extension_m = max(w, h) * res
 
             # Paso de submuestreo: el menor que deje el mapa bajo el tope.
             paso = 1
@@ -370,6 +401,8 @@ if ROS_AVAILABLE:
                 "origin_y": msg.info.origin.position.y,
                 "data": datos,
                 "received_at": ahora,
+                "extension_m": extension_m,
+                "corrupto": extension_m > MAPA_EXTENSION_SOSPECHOSA_M,
             })
 
         def publish_imu(self, accel: dict, gyro: dict):
@@ -460,6 +493,19 @@ if ROS_AVAILABLE:
                 GoalStatus.STATUS_SUCCEEDED: "exito",
                 GoalStatus.STATUS_CANCELED: "cancelada",
             }.get(status, "abortada")
+
+        def publish_zupt(self):
+            msg = Odometry()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = "odom"
+            msg.child_frame_id = "base_link"
+            # vx y vyaw en cero; el resto de la matriz con varianza alta
+            for i in range(6):
+                msg.twist.covariance[i * 7] = 1e3
+            msg.twist.covariance[0] = ZUPT_COVARIANZA     # vx
+            msg.twist.covariance[7] = ZUPT_COVARIANZA     # vy
+            msg.twist.covariance[35] = ZUPT_COVARIANZA    # vyaw
+            self.zupt_pub.publish(msg)
 
         def publish_odom_webcam(self, vx, vyaw, var_vx, var_vyaw):
             msg = Odometry()

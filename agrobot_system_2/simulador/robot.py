@@ -15,6 +15,7 @@ del software real (medido en el robot, ver MANIFEST):
     backend real aplica antes de mandar la trama al ESP32-C3.
 """
 import math
+from collections import deque
 
 import numpy as np
 
@@ -36,6 +37,15 @@ SERVO_VEL_DEG_S = 120.0
 SERVO_ASENTADO_S = 0.35
 SERVO_GRADOS_POR_GRADO = 0.8
 INCLINACION_EN_HOME = 15.5
+
+# Latencia del mando Jetson -> C3 por BLE, medida con btmon el 2026-09-28:
+# el backend manda a 20 Hz (una orden nueva espera 0-50 ms al siguiente
+# envío) y la radio tarda 28 ms de mediana, 75 ms en el p95 y 173 ms en el
+# peor caso visto (intervalo de conexión de ~48,75 ms).
+PERIODO_ENVIO_S = 0.05
+LATENCIA_MEDIANA_S = 0.028
+LATENCIA_SIGMA = 0.6           # lognormal: p95 ≈ 75 ms con esa mediana
+LATENCIA_MAX_S = 0.2
 
 
 class RobotSim:
@@ -68,9 +78,35 @@ class RobotSim:
         self.t = 0.0
         self._imu = None             # cabeceo.CabeceoIMU, el del robot real
         self._cabeceo_anterior = 0.0
+        self.latencia_mando = True
+        self._mandos = deque()       # (instante en que llega a la C3, v, omega)
+        self._ultimo_mando_t = 0.0
+        # Lo que cambia de un día (o de un suelo) a otro. Por defecto, lo
+        # medido; el entrenador los sortea por episodio para que la red no
+        # aprenda UN chasis ideal (aleatorización de dominio).
+        self.rendimiento_giro = RENDIMIENTO_GIRO
+        self.decel_inercia = DECEL_INERCIA
+        self.escala_latencia = 1.0
 
     def ordenar(self, v, omega):
-        self.v_obj, self.omega_obj = float(v), float(omega)
+        """La orden llega a los motores con el retraso del enlace real.
+
+        Sin esto el simulador reaccionaba al instante y lo aprendido en él
+        frenaba tarde en el robot: 55 ms típicos a 0,55 m/s son 3 cm más."""
+        if self.realismo <= 0 or not self.latencia_mando:
+            self.v_obj, self.omega_obj = float(v), float(omega)
+            return
+        retraso = (self.rng.uniform(0, PERIODO_ENVIO_S)
+                   + min(LATENCIA_MAX_S, self.rng.lognormal(math.log(LATENCIA_MEDIANA_S * self.escala_latencia),
+                                                            LATENCIA_SIGMA)))
+        # Las escrituras BLE llegan en orden: una orden no adelanta a otra.
+        cuando = max(self.t + retraso * self.realismo, self._ultimo_mando_t)
+        self._ultimo_mando_t = cuando
+        self._mandos.append((cuando, float(v), float(omega)))
+
+    def _aplicar_mandos(self):
+        while self._mandos and self._mandos[0][0] <= self.t:
+            _, self.v_obj, self.omega_obj = self._mandos.popleft()
 
     # Orden mínima que el firmware considera "moverse". Muy baja a propósito:
     # el ESP32-C3 mapea CUALQUIER velocidad distinta de cero a PWM 200..255.
@@ -170,6 +206,7 @@ class RobotSim:
         self._servo_quieto_desde = self.t
 
     def paso(self, dt):
+        self._aplicar_mandos()
         self._paso_servo(dt)
         self._paso_cabeceo(dt)
         seg = self.cfg["safety"]
@@ -180,13 +217,13 @@ class RobotSim:
         if abs(self.v_obj) >= abs(self.v_rampa):
             dv = seg["max_linear_accel_mps2"] * dt
         else:
-            dv = DECEL_INERCIA * dt
+            dv = self.decel_inercia * dt
         self.v_rampa += max(-dv, min(dv, self.v_obj - self.v_rampa))
         dom = (seg["max_angular_accel_rps2"] if abs(self.omega_obj) >= abs(self.omega_rampa) else 3.0) * dt
         self.omega_rampa += max(-dom, min(dom, self.omega_obj - self.omega_rampa))
 
         self.v = self._efectiva(self.v_rampa, V_MIN_EFECTIVA)
-        self.omega = self._efectiva(self.omega_rampa, OMEGA_MIN_EFECTIVA) * RENDIMIENTO_GIRO
+        self.omega = self._efectiva(self.omega_rampa, OMEGA_MIN_EFECTIVA) * self.rendimiento_giro
 
         # Patinaje: un skid-steer nunca va exactamente recto.
         v = self.v * (1 + self.rng.normal(0, 0.03))
@@ -214,17 +251,16 @@ class RobotSim:
     def _pisar(self, x, y):
         """Plantas aplastadas: las que quedan bajo la huella del robot.
 
-        Es EL daño que no se ve venir: el LIDAR barre a 30 cm y una plantita
+        Es EL daño que no se ve venir: el LIDAR barre a 40 cm y una plantita
         de 10 no existe para él, así que el robot cree el camino libre, se
         sale del sendero y la pisa. Aquí se cuenta."""
         m = self.mundo
         candidatas = []
         if len(m.plantas):
-            # Solo se pisan las bajas: una mata alta el robot la ve y frena.
-            bajas = m.plantas[m.plantas[:, 4] < 0.30] if m.plantas.shape[1] > 4 else m.plantas
+            bajas = m.plantas[m.plantas[:, 4] < 0.40] if m.plantas.shape[1] > 4 else m.plantas
             if len(bajas):
                 candidatas.append((bajas[:, 0], bajas[:, 1], "c"))
-        bajas = m.objetos[m.objetos[:, 3] < 0.30] if len(m.objetos) else None
+        bajas = m.objetos[m.objetos[:, 3] < 0.40] if len(m.objetos) else None
         if bajas is not None and len(bajas):
             candidatas.append((bajas[:, 0], bajas[:, 1], "o"))
         for px, py, marca in candidatas:
@@ -263,7 +299,7 @@ class RobotSim:
         obj = self.mundo.objetos
         if not len(obj):
             return False
-        follaje = obj[(obj[:, 4] < 0.5) & (obj[:, 3] >= 0.30)]
+        follaje = obj[(obj[:, 4] < 0.5) & (obj[:, 3] >= 0.40)]
         if not len(follaje):
             return False
         dx, dy = follaje[:, 0] - self.x, follaje[:, 1] - self.y
@@ -291,12 +327,12 @@ class RobotSim:
 
     def scan(self):
         return self.mundo.scan(self.x, self.y, self.theta, rng=self.rng,
-                               realismo=self.realismo)
+                               realismo=self.realismo, omega=self.omega)
 
     def frame(self, geo, ancho=320, alto=240):
         return self.mundo.camara(self.x, self.y, self.theta, geo, ancho, alto, rng=self.rng,
                                  velocidad=self.v, realismo=self.realismo,
-                                 cabeceo_deg=self.cabeceo_deg)
+                                 cabeceo_deg=self.cabeceo_deg, omega=self.omega)
 
     def desvio_del_sendero(self) -> float:
         return float(self.mundo.distancia_al_sendero(np.array(self.x), np.array(self.y)))

@@ -119,6 +119,8 @@ local_costmap:
           data_type: "LaserScan"
           inf_is_valid: true
           max_obstacle_height: 2.0
+          # Retornos del propio robot (mástil a 15 cm, cable a 8 cm).
+          obstacle_min_range: 0.18
           obstacle_max_range: 3.0
           raytrace_max_range: 4.0
           clearing: true
@@ -150,6 +152,8 @@ global_costmap:
           data_type: "LaserScan"
           inf_is_valid: true
           max_obstacle_height: 2.0
+          # Retornos del propio robot (mástil a 15 cm, cable a 8 cm).
+          obstacle_min_range: 0.18
           obstacle_max_range: 3.0
           raytrace_max_range: 4.0
           clearing: true

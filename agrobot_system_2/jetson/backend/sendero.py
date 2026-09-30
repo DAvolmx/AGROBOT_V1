@@ -8,7 +8,7 @@ metros y con el mismo signo (+ = corregir a la izquierda).
 
   1. LIDAR. Si hay hilera o pared a los dos lados, el robot va centrado
      cuando la distancia izquierda y la derecha son iguales. Con cultivo
-     joven NO sirve: el LIDAR va a ~30 cm del suelo y pasa por encima de las
+     joven NO sirve: el LIDAR va a ~40 cm del suelo y pasa por encima de las
      plantas. Queda para pasillos, invernaderos y cultivo alto.
 
   2. Cámara. En la huerta de pruebas (fotos del usuario, 2026-09-19) el
@@ -112,6 +112,23 @@ def error_lidar(distancias: dict, cfg: dict) -> float | None:
     if izq > limite or der > limite:
         return None            # un lado está lejísimos: no es un pasillo
     return izq - der
+
+
+def error_costmap(costmap, cfg: dict) -> tuple[float | None, float | None]:
+    """Centro y ancho del hueco libre detectado por el costmap.
+
+    Devuelve (error_m, ancho_m). error_m con el mismo signo que error_lidar:
+    positivo = corregir a la izquierda.
+    """
+    if costmap is None or costmap._scan_count < 3:
+        return None, None
+    centro, ancho = costmap.hueco_libre(x_min=0.15, x_max=1.5)
+    if centro is None:
+        return None, None
+    limite = cfg.get("sendero_pared_max_cm", 150) / 100.0
+    if ancho is not None and ancho > 2 * limite:
+        return None, None
+    return centro, ancho
 
 
 def mascara_vegetacion(cv2, img, cfg):
@@ -292,6 +309,38 @@ class Cenital:
                          borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
 
+_TRIG_ANG = []
+
+
+def _perfiles_por_angulo(X, Y, peso, nbins, rango, kernel):
+    """El perfil lateral de bordes para CADA ángulo de hilera, de una vez.
+
+    Es lo mismo que un np.histogram + np.convolve por ángulo, pero en una
+    sola pasada: los 41 histogramas en bucle eran lo más caro del detector
+    (42 llamadas por imagen, ~13 ms en la Jetson)."""
+    import numpy as np
+
+    if not _TRIG_ANG:
+        rad = np.radians(ANGULOS_DEG)
+        _TRIG_ANG.extend([np.sin(rad), np.cos(rad)])
+    sen, cos = _TRIG_ANG
+    lo, hi = rango
+    ancho = (hi - lo) / nbins
+    proy = -np.outer(sen, X) + np.outer(cos, Y)                     # (A, N)
+    idx = np.floor((proy - lo) / ancho).astype(np.int64)
+    idx[proy == hi] = nbins - 1          # como np.histogram: el borde derecho entra
+    valido = (idx >= 0) & (idx < nbins)
+    fila = np.broadcast_to(np.arange(len(ANGULOS_DEG))[:, None], idx.shape)
+    plano = np.bincount((fila * nbins + idx)[valido],
+                        weights=np.broadcast_to(peso, idx.shape)[valido],
+                        minlength=len(ANGULOS_DEG) * nbins)
+    hist = plano.reshape(len(ANGULOS_DEG), nbins)
+    # np.convolve(..., mode="same") con el núcleo simétrico de 5, por filas.
+    r = len(kernel) // 2
+    pad = np.pad(hist, ((0, 0), (r, r)))
+    return sum(pad[:, j:j + nbins] * kernel[j] for j in range(len(kernel)))
+
+
 def _hueco(libre, inicio: int, max_salto: int):
     """Tramo libre que contiene `inicio` (o el más cercano a él), como
     (desde, hasta) en índices, o None."""
@@ -350,16 +399,10 @@ def detectar(cv2, frame, cfg, geo: dict, cenital: "Cenital",
     rango = (2 * CENITAL_Y[0], 2 * CENITAL_Y[1])
     kernel = np.array([1, 2, 3, 2, 1], np.float32) / 9
 
-    mejor = None
-    for a in ANGULOS_DEG:
-        t = math.radians(a)
-        hist, bins = np.histogram(-X * math.sin(t) + Y * math.cos(t),
-                                  bins=nbins, range=rango, weights=peso)
-        hist = np.convolve(hist, kernel, mode="same")
-        nitidez = float((hist ** 2).sum())
-        if mejor is None or nitidez > mejor[0]:
-            mejor = (nitidez, a, hist, bins)
-    _, angulo, hist, bins = mejor
+    perfiles = _perfiles_por_angulo(X, Y, peso, nbins, rango, kernel)
+    k = int(np.argmax((perfiles ** 2).sum(axis=1)))     # el primero de los mejores
+    angulo, hist = ANGULOS_DEG[k], perfiles[k]
+    bins = np.linspace(rango[0], rango[1], nbins + 1)
     t = math.radians(angulo)
     cobertura, _ = np.histogram(-cenital.Xv * math.sin(t) + cenital.Yv * math.cos(t),
                                 bins=nbins, range=rango, weights=peso_v)
@@ -497,21 +540,30 @@ class VisionSendero:
 
 
 class SeguidorSendero:
-    """Junta las dos medidas y dice qué hacer: avanzar o corregir el rumbo."""
+    """Junta tres medidas y dice qué hacer: avanzar o corregir el rumbo.
 
-    def __init__(self, get_config, obtener_frame, camara_al_frente=None, get_geometria=None):
+    Fuentes (todas miden desvío del centro en metros, + = corregir a la izq):
+      1. LIDAR sectores: izquierda - derecha (pasillos, hileras altas)
+      2. Costmap local: hueco libre más ancho delante del robot (scan acumulado)
+      3. Cámara: ExG/paja/adaptativo proyectado al suelo (sendero a ras)
+
+    Si el costmap tiene un hueco claro, lo prefiere sobre los sectores simples.
+    """
+
+    def __init__(self, get_config, obtener_frame, camara_al_frente=None,
+                 get_geometria=None, get_costmap=None):
         self._get_config = get_config
         self._obtener_frame = obtener_frame
-        # () -> (bool, motivo). Con la cámara girada o escaneando, lo que ve
-        # no es lo que hay delante del robot.
         self._camara_al_frente = camara_al_frente or (lambda: (True, ""))
-        # Geometría de la cámara (sección `odometria_webcam` de la config).
         self._get_geometria = get_geometria or (lambda: {
-            "camara_altura_m": 0.30, "camara_inclinacion_deg": 15.5,
+            "camara_altura_m": 0.40, "camara_inclinacion_deg": 15.5,
             "camara_hfov_deg": 71, "camara_adelante_m": 0.0})
+        self._get_costmap = get_costmap or (lambda: None)
         self.vision = VisionSendero()
         self.error_lidar = None
         self.error_vision = None
+        self.error_costmap_val = None
+        self.ancho_costmap = None
         self.estado = "inactivo"
 
     def correccion(self, cv2, distancias: dict) -> str | None:
@@ -519,10 +571,13 @@ class SeguidorSendero:
         cfg = self._get_config()
         if not cfg["sendero_activo"]:
             self.estado = "inactivo"
-            self.error_lidar = self.error_vision = None
+            self.error_lidar = self.error_vision = self.error_costmap_val = None
             return None
 
         self.error_lidar = error_lidar(distancias, cfg)
+
+        costmap = self._get_costmap()
+        self.error_costmap_val, self.ancho_costmap = error_costmap(costmap, cfg)
 
         self.error_vision = None
         if cfg["sendero_vision"]:
@@ -538,20 +593,22 @@ class SeguidorSendero:
                     self.vision.estado = f"error: {type(exc).__name__}"
 
         tol_m = max(cfg["sendero_tolerancia_cm"] / 100.0, 1e-3)
-        peso = cfg["sendero_vision_peso"]
+        peso_vision = cfg["sendero_vision_peso"]
 
         terminos = []
-        if self.error_lidar is not None:
-            terminos.append(((1.0 - peso), self.error_lidar / tol_m))
+        if self.error_costmap_val is not None:
+            terminos.append((1.0 - peso_vision, self.error_costmap_val / tol_m))
+        elif self.error_lidar is not None:
+            terminos.append(((1.0 - peso_vision), self.error_lidar / tol_m))
         if self.error_vision is not None:
-            terminos.append((peso, self.error_vision / tol_m))
+            terminos.append((peso_vision, self.error_vision / tol_m))
 
         if not terminos:
             self.estado = "sin referencia (ni hileras ni sendero visible)"
             return None
 
         total_peso = sum(w for w, _ in terminos) or 1.0
-        error = sum(w * e for w, e in terminos) / total_peso   # 1.0 = una tolerancia
+        error = sum(w * e for w, e in terminos) / total_peso
 
         if abs(error) < 1.0:
             self.estado = f"centrado (error {error:+.2f})"
@@ -564,6 +621,8 @@ class SeguidorSendero:
         return {
             "estado": self.estado,
             "error_lidar_cm": None if self.error_lidar is None else round(self.error_lidar * 100),
+            "error_costmap_cm": None if self.error_costmap_val is None else round(self.error_costmap_val * 100),
+            "ancho_costmap_cm": None if self.ancho_costmap is None else round(self.ancho_costmap * 100),
             "error_vision_cm": None if v.error_m is None else round(v.error_m * 100),
             "sendero_lateral_cm": None if v.lateral_m is None else round(v.lateral_m * 100),
             "sendero_rumbo_deg": None if v.angulo_deg is None else round(v.angulo_deg),

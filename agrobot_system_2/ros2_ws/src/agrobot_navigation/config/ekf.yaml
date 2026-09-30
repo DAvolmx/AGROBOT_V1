@@ -102,6 +102,21 @@ ekf_filter_node:
     odom3_differential: false
     odom3_relative: false
 
+    # Velocidad CERO con el robot quieto (ZUPT), la publica el backend 3 s
+    # después de la última orden de moverse (jetson_server._bucle_zupt).
+    # Sin ella, con el LIDAR caído el EKF no tenía ninguna velocidad lineal
+    # y extrapolaba la última durante horas: el 2026-09-30 la pose llegó a
+    # x = 1771 m y slam_toolbox estiró el mapa hasta 9,7 km.
+    # vx, vy y vyaw = 0 (quieto también es sin deriva lateral).
+    odom4: /zupt
+    odom4_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  false,
+                   false, false, true,
+                   false, false, false]
+    odom4_differential: false
+    odom4_relative: false
+
     imu0: /imu/data_raw
     # Del IMU se toma SOLO la velocidad angular en yaw (indice 11).
     #

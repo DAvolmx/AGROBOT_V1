@@ -264,7 +264,10 @@ class UartActuatorLink:
             "scanning": bool(flags & ST_SCANNING),
             "failsafe": bool(flags & ST_FAILSAFE),
             "servo_angle": servo,
-            "led_state": bool(flags & ST_LED),
+            # Mismo desfase que en pack(): el firmware cree "encendido" lo
+            # que en este foco es apagado. Sin invertir, el dashboard decía
+            # ON con el foco apagado.
+            "led_state": not bool(flags & ST_LED),
             "seq_echo": seq_echo,
             "_received_at": time.time(),
         }

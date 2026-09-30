@@ -15,11 +15,25 @@
 > Cualquier LLM o persona que retome este proyecto debe poder reconstruir
 > el estado completo del sistema leyendo solo este archivo.
 
-Última actualización: 2026-09-19
+Última actualización: 2026-09-30
 
 ---
 
 ## 0. ESTADO ACTUAL — 2026-09-17 (leer esto primero)
+
+> **Cambios vigentes del 2026-09-30** (detalle en el Historial, al final):
+> - **Enlace con la C3 REDUNDANTE: BLE + WiFi UDP a la vez** (`enlace_c3.py`,
+>   `udp_actuator_link.py`, firmware con `ENLACE_WIFI 1`). La C3 aplica la
+>   trama más nueva por número de secuencia venga por donde venga. Reemplaza
+>   la "UNA SOLA VIA DE MANDO: BLE" de la sección 3. Sigue sin cables entre
+>   la batería de motores y la Jetson.
+> - **ZUPT**: el backend publica velocidad cero en `/zupt` (odom4 del EKF)
+>   tras 3 s sin órdenes de moverse. Sin él el EKF extrapoló durante horas
+>   sin LIDAR y el mapa llegó a 9,7 km.
+> - LIDAR: puerto elegido en cada arranque (USB CP210x si está, si no
+>   `/dev/ttyTHS1` tras esperar 30 s). Autoimpactos filtrados a 0,18 m.
+> - `/api/health` trae `detail` por fila y dos filas nuevas: `ros` y `ekf`;
+>   la de SLAM marca el mapa corrupto (>500 m).
 
 Resumen de lo que es verdad HOY. Donde una sección de más abajo diga otra
 cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
@@ -4023,3 +4037,81 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   `jetson_server.py`, `sendero.py`, `config_store.py`, `robot.py`, `correr.py`,
   `dashboard.html`, `entrenar.py`, `servidor.py`, `vista3d.py`, `mundo.py`,
   `probar_sendero.py`, `README.md`, `agrobot_config.json`.
+
+
+### 2026-09-29/30 — Enlace redundante con la C3, ZUPT, mapa corrupto, simulador realista
+
+  **Enlace C3 redundante (BLE + WiFi UDP).** La placa C3 nueva
+  (E0:72:A1:72:7D:EA) llega a la Jetson a -94/-96 dBm estando a ~50 cm (la
+  LoRa V3 llega a -64 por WiFi): en 90 s, 5 conexiones que no se
+  establecen (HCI 0x3e) y 2 cortes por supervisión (0x08). El BLE era además
+  único punto de fallo (anuncio perdido, bluetoothd caído, adaptador sordo).
+  - Firmware (`esp32c3_actuator.ino`): `aplicarComando()` común a las dos
+    vías; solo aplica la trama más NUEVA por `seq` (int16, con vuelta), salvo
+    tras failsafe. WiFi STA a `JETSON_AP`, UDP 5002 en los dos lados, IP de
+    la Jetson = puerta de enlace. Potencia WiFi adaptativa (8,5 -> 19,5 dBm
+    si no asocia). Pide a la Jetson intervalo BLE 15-30 ms y supervisión 4 s
+    (`requestConnParams`). Banderas nuevas de estado: `ST_VIA_WIFI` 0x20,
+    `ST_WIFI_OK` 0x40, `ST_BLE_OK` 0x80. Compilar con "Huge APP".
+    Verificado compilando contra el core ESP32 3.3.11 real (sin enlazar) y
+    con `tests/verificar.sh` (stubs actualizados). **Falta flashearlo.**
+  - Jetson: `udp_actuator_link.py` (aprende la IP de la C3 de su estado,
+    solo acepta la red 192.168.12.0/24), `enlace_c3.py` (misma API que
+    `BleActuatorLink`; cada 50 ms una trama por WiFi, la parada de
+    emergencia sale al instante por las dos). `tests/test_enlace_c3.py`: 6
+    pruebas con una C3 simulada. `tests/test_sensores_y_serie.py` compara ya
+    el firmware con `ble_link.py`/`udp_actuator_link.py` (el UART se retiró).
+  - `ble_link.py`: búsqueda que cuenta los dispositivos BLE oídos; si pasan 6
+    escaneos sin oír NINGUNO, reinicia el adaptador (`bluetoothctl power`,
+    cada 10 min como mucho). Log: un resumen por minuto en vez de 2 líneas
+    por búsqueda (10 500 al día); "desconectado" solo si estaba conectado.
+
+  **Mapa de 9,7 km y OOM.** Con el LIDAR caído ~8 h (pruebas por UART) el EKF
+  no tenía ninguna velocidad lineal medida y extrapoló la última: pose en
+  x = 1771 m, `/map` de 193868 x 426 celdas (82 MB por mensaje). El
+  suscriptor del backend con cola 10 retenía hasta 800 MB y un hilo DDS
+  disparó el OOM-killer (mató el entrenamiento a las 14:43).
+  - `/zupt` (Odometry, vx=vy=vyaw=0, cov 0,01) desde `jetson_server._bucle_zupt`
+    a 10 Hz tras `ZUPT_TRAS_S`=3 s sin orden de moverse; `ekf.yaml` odom4.
+  - `ros_bridge`: cola de 1 en `/map`, `extension_m`/`corrupto` en el mapa,
+    `var_vx` del EKF. `_salud_completa()` alimenta `/api/health`, el WS y el
+    estado inicial.
+  - Se reinició `agrobot-ros` (mapa corrupto, sin nada aprovechable): mapa
+    nuevo de la habitación 3,2 x 5,6 m. Los waypoints del mapa roto no valen.
+
+  **LIDAR.** Datos reales (100 scans, robot quieto en la habitación): ruido
+  ~2 mm hasta 2 m, 4-7 % de haces perdidos, y el propio robot a 7,8 cm
+  (base -133..-122°) y 15,5 cm (base 20..26°, mástil de la cámara). El filtro
+  de 0,15 m dejaba pasar el de 15,5: ahora 0,18 m en `/scan_odom` y
+  `/scan_slam`, y `obstacle_min_range: 0.18` en los costmaps.
+  `scripts/elegir_puerto_lidar.sh` (prefix del launch): USB CP210x por
+  by-id si está; si no, espera hasta 30 s antes de probar la UART (5400
+  arranques fallidos en un día llenaron `ros.log` hasta 641 MB; comprimido a
+  `logs/ros_hasta_20260930.log.gz`). La UART (pines 8/10) se probó en los
+  dos sentidos de TX/RX y el C1 no respondió: se sigue por USB.
+
+  **Otros arreglos del robot.** `_cargar_modelo_si_falta` usaba `YOLO` sin
+  importarlo (el modo autónomo arrancaba sin modelo de plagas). YOLO a
+  `imgsz` 480 (44 ms en vez de 72-96). `aprendizaje.py`: maniobras de más de
+  40 pasos apartadas (había sesiones manuales de 1009 pulsos guardadas como
+  corrección). El entrenamiento escribe `politica_candidata.pt`; el robot
+  solo cambia de política con "Desplegar". Enlace LoRa: pérdida y reinicios
+  deducidos del `seq` (`health.ContadorSecuencia`). Eco del foco invertido
+  corregido en `ble_link`/`uart_link`.
+
+  **Simulador.** Dashboard rediseñado (4 pestañas, barra de estado, 3D como
+  principal), editor de mapas con validación, cámara ~17x más rápida
+  (raster + LOD), latencia BLE real, fallos de SLAM (casamiento en giros,
+  caídas de LIDAR USB/UART, cierres de bucle), paredes con remates visibles
+  para el LIDAR, entrenamiento con aleatorización de dominio en 12 mapas.
+
+  Archivos: `firmware/esp32c3_actuator/esp32c3_actuator.ino` y
+  `tests/stubs_arduino/*`, `jetson/backend/{enlace_c3,udp_actuator_link,
+  ble_link,costmap_local}.py` (nuevos o sin versionar hasta hoy),
+  `jetson_server.py`, `ros_bridge.py`, `health.py`, `aprendizaje.py`,
+  `camera.py`, `config_store.py`, `sendero.py`, `uart_link.py`,
+  `tests/test_enlace_c3.py`, `tests/test_sensores_y_serie.py`,
+  `jetson/dashboard/index.html`, `ros2_ws/src/agrobot_navigation/{config/ekf.yaml,
+  config/nav2_params.yaml, launch/*.py, scripts/elegir_puerto_lidar.sh}`,
+  `simulador/*`.
+

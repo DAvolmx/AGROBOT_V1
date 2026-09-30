@@ -85,14 +85,17 @@ class CabeceoIMU:
             return None
         return max(-self.tope, min(self.tope, self._filtrado - self.cero_deg))
 
-    def actualizar(self, ax, ay, az, giro_y_dps=0.0, t=None):
+    def actualizar(self, ax, ay, az, giro_pitch_dps=0.0, t=None):
         """Una muestra del IMU: acelerómetro en g y cabeceo en °/s.
+
+        `giro_pitch_dps` es la velocidad angular alrededor del eje lateral
+        (pitch). Con el IMU montado con Y adelante y X a los lados, es gyroX.
 
         `t` es el instante (monotónico). Si no se da, se asume el periodo
         nominal de 20 Hz del nodo."""
         try:
             ax, ay, az = float(ax), float(ay), float(az)
-            giro = self.signo * float(giro_y_dps or 0.0)
+            giro = self.signo * float(giro_pitch_dps or 0.0)
         except (TypeError, ValueError):
             return self.grados
 
@@ -107,8 +110,8 @@ class CabeceoIMU:
         fiable = VENTANA_G[0] <= magnitud <= VENTANA_G[1]
         crudo = None
         if fiable:
-            # Morro abajo inclina el eje X hacia la gravedad.
-            crudo = self.signo * math.degrees(math.atan2(ax, az if az else 1e-6))
+            # IMU montado con Y adelante: morro abajo inclina ay hacia la gravedad.
+            crudo = self.signo * math.degrees(math.atan2(ay, az if az else 1e-6))
             self._ultimo_crudo = crudo
             self.aceptadas += 1
         else:

@@ -35,10 +35,13 @@ except ImportError:
     cv2 = None
 
 from protocol import SERVO_HOME_DEG, clamp_servo
-from uart_link import UartActuatorLink
+from ble_link import BleActuatorLink
+from enlace_c3 import EnlaceC3
+import udp_actuator_link
 import config_store
 import health
-from slam import PoseEstimator, LidarReactive
+from slam import PoseEstimator, LidarReactive, MapManager
+from costmap_local import CostmapLocal
 from ros_bridge import AgroBotROSBridge, ROS_UNAVAILABLE_REASON
 from camera import CameraWorker
 from obstacle_avoidance import ControladorEvasion, LecturasSensoresLIDAR
@@ -142,9 +145,9 @@ pose_estimator = PoseEstimator()
 # cargar la configuración.
 cabeceo_imu = CabeceoIMU()
 lidar_reactive = LidarReactive()
+costmap = CostmapLocal()
+map_manager = MapManager()
 
-# Última pose/mapa que llegaron de ROS (robot_localization / slam_toolbox),
-# si el puente está disponible. None hasta el primer mensaje.
 ros_fused_pose: dict | None = None
 ros_last_map: dict | None = None
 
@@ -270,6 +273,10 @@ def normalize_env(payload: dict) -> dict:
     return payload
 
 
+# Pérdidas y reinicios del nodo LoRa V3, deducidos de su `seq`.
+enlace_lora = health.ContadorSecuencia()
+
+
 class EnvTelemetryProtocol(asyncio.DatagramProtocol):
     def connection_made(self, transport):
         self.transport = transport
@@ -322,6 +329,10 @@ class EnvTelemetryProtocol(asyncio.DatagramProtocol):
                 }))
             return
 
+        seq = payload.get("seq")
+        if isinstance(seq, (int, float)) and enlace_lora.registrar(int(seq)):
+            print(f"[lora] el nodo LoRa V3 se reinició (#{enlace_lora.reinicios} desde que "
+                  f"arrancó el backend): si se repite, revisa su alimentación", flush=True)
         payload = normalize_env(payload)
         # Corrección de bias del giroscopio (calibración). Se aplica ACÁ, lo
         # más cerca posible de la entrada, para que todo lo de aguas abajo
@@ -347,11 +358,13 @@ class EnvTelemetryProtocol(asyncio.DatagramProtocol):
         # El mismo paquete sirve para saber cuánto cabecea el chasis, que es
         # lo que descuadra la vista del sendero (ver cabeceo.py).
         cabeceo_imu.actualizar(payload.get("accelX", 0.0), payload.get("accelY", 0.0),
-                               payload.get("accelZ", 0.0), payload.get("gyroY", 0.0),
+                               payload.get("accelZ", 0.0), payload.get("gyroX", 0.0),
                                time.monotonic())
+        # IMU montado con Y adelante, X a los lados. ROS quiere X adelante,
+        # Y izquierda, Z arriba. Remap: ROS_x=sensor_y, ROS_y=-sensor_x.
         ros_bridge.publish_imu(
-            {"x": payload.get("accelX", 0.0), "y": payload.get("accelY", 0.0), "z": payload.get("accelZ", 0.0)},
-            {"x": payload.get("gyroX", 0.0), "y": payload.get("gyroY", 0.0), "z": payload.get("gyroZ", 0.0)},
+            {"x": payload.get("accelY", 0.0), "y": -payload.get("accelX", 0.0), "z": payload.get("accelZ", 0.0)},
+            {"x": payload.get("gyroY", 0.0), "y": -payload.get("gyroX", 0.0), "z": payload.get("gyroZ", 0.0)},
         )
 
         # --- CAMINO LENTO: lo que solo mira una persona ---
@@ -379,7 +392,7 @@ class EnvTelemetryProtocol(asyncio.DatagramProtocol):
 # transporte por debajo: en vez de un datagrama al 192.168.12.50 escribe en
 # un puerto serie. Ver uart_link.py para por que se dejaron el WiFi y el BLE.
 class ActuatorController:
-    def __init__(self, link: UartActuatorLink):
+    def __init__(self, link):
         self.link = link
         self._ramp_v = 0.0
         self._ramp_omega = 0.0
@@ -390,6 +403,8 @@ class ActuatorController:
         self._obj_omega = 0.0
         self._obj_t = 0.0
         self._ultimo_aviso_t = 0.0
+        # Último instante en que se mandó moverse (tras rampa y freno).
+        self._t_movimiento = 0.0
 
     def _apply_ramp(self, v_target: float, omega_target: float,
                     safety_cfg: dict) -> tuple[float, float]:
@@ -455,6 +470,10 @@ class ActuatorController:
     def en_reposo(self) -> bool:
         return self._ramp_v == 0.0 and self._ramp_omega == 0.0
 
+    def segundos_quieto(self) -> float:
+        """Tiempo desde la última orden de moverse que salió hacia la C3."""
+        return time.monotonic() - self._t_movimiento
+
     def velocidades(self) -> dict:
         """Lo que pidió el software y lo que salió tras la rampa. Sin esto el
         registro de calibración guardaba velocidades en cero (2026-09-19) y
@@ -488,6 +507,8 @@ class ActuatorController:
                 _schedule(state.broadcast({"type": "obstacle_warning", "data": aviso}))
             v_ref = v_seg
 
+        if abs(v_ref) > 1e-3 or abs(omega_ref) > 1e-3:
+            self._t_movimiento = time.monotonic()
         pose_estimator.on_command(v_ref, omega_ref)
         ros_bridge.publish_wheel_odom(v_ref, omega_ref)
         self.link.set_actuators(self._servo_angle_with_offset(), state.led_on)
@@ -584,6 +605,8 @@ def _decimar(points: list[dict], maximo: int) -> list[dict]:
 def _ros_on_scan_points(points: list[dict]):
     """sllidar_ros2 publicó /scan — alimenta la evasión reactiva + el radar."""
     lidar_reactive.ingest_scan(points)
+    cfg_slam = state.config["slam"]
+    costmap.update(points, cfg_slam["robot_largo_cm"], cfg_slam["robot_ancho_cm"])
     health.beat("lidar")
     # Al dashboard se manda a 4 Hz, no a 10: el scan decimado son ~10 kB por
     # mensaje y por WiFi compartido eso era ~100 kB/s solo de radar, que es
@@ -665,8 +688,7 @@ async def ws_handler(request: web.Request):
             "mission_active": state.mission_active,
             "config": state.config,
             "models": list_model_files(),
-            "health": health.snapshot(state.config["safety"]["heartbeat_stale_warn_s"],
-                                       state.config["safety"]["heartbeat_stale_err_s"]),
+            "health": _salud_completa(),
             "pose": current_pose(),
             "pose_source": "ros_ekf" if ros_fused_pose is not None else "dead_reckoning",
             "lidar_scan": _decimar(lidar_reactive.last_scan or [], RADAR_MAX_PUNTOS),
@@ -823,6 +845,26 @@ def _servo_al_frente() -> tuple[bool, str]:
     return True, ""
 
 
+# Con el robot quieto se le dice al EKF "velocidad cero" (ZUPT). Sin LIDAR el
+# EKF no recibía ninguna velocidad lineal y extrapolaba la última durante
+# horas: el 2026-09-30 la pose llegó a x = 1771 m y el mapa a 9,7 km. Sin
+# scan fresco el freno por LIDAR ya impide avanzar, así que en ese caso el
+# robot siempre está quieto. Se espera ZUPT_TRAS_S tras la última orden
+# porque el chasis desliza ~80 cm al soltar.
+ZUPT_TRAS_S = 3.0
+ZUPT_HZ = 10
+
+
+async def _bucle_zupt():
+    while True:
+        try:
+            if actuator_proto is not None and actuator_proto.segundos_quieto() > ZUPT_TRAS_S:
+                ros_bridge.publish_zupt()
+        except Exception as exc:
+            print(f"[zupt] falló: {type(exc).__name__}: {exc}")
+        await asyncio.sleep(1.0 / ZUPT_HZ)
+
+
 async def _bucle_rampa():
     """Hace avanzar la rampa del actuador a 20 Hz, llegue o no un comando."""
     while True:
@@ -834,15 +876,27 @@ async def _bucle_rampa():
         await asyncio.sleep(1.0 / CMD_SEND_HZ)
 
 
-# El CP2102N del LIDAR se cae del USB y vuelve al segundo (4 veces en 15 min
-# el 2026-09-19). sllidar_node NO muere: queda bloqueado sobre el puerto
-# viejo, así que el `respawn` del launch nunca actúa y /scan calla hasta
-# reiniciar ROS. Sin scans el freno por LIDAR bloquea adelante/atrás.
-# Matar el driver colgado deja que el respawn lo relance sobre el puerto nuevo.
-LIDAR_DISPOSITIVO = Path("/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_"
-                         "Bridge_Controller_5e723775cd73ef11b311cf8c8fcc3fa0-if00-port0")
-LIDAR_MUDO_S = 4.0          # sin scan este tiempo con el USB presente = colgado
+# Con el adaptador USB CP2102N el LIDAR se caía del bus (4 veces en 15 min el
+# 2026-09-19) y sllidar_node quedaba bloqueado sobre el puerto viejo: el
+# `respawn` nunca actuaba y /scan callaba hasta reiniciar ROS. Sin scans el
+# freno por LIDAR bloquea adelante/atrás. Matar el driver colgado deja que
+# el respawn lo relance.
+# El puerto se elige como en scripts/elegir_puerto_lidar.sh: el USB si está
+# enchufado, si no la UART del conector (pines 8/10). La UART existe siempre,
+# así que "puerto presente" no dice que el LIDAR esté conectado: por eso los
+# reinicios se espacian si no sirven.
+LIDAR_USB = Path("/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_"
+                 "Bridge_Controller_5e723775cd73ef11b311cf8c8fcc3fa0-if00-port0")
+LIDAR_UART = Path("/dev/ttyTHS1")
+
+
+def _puerto_lidar() -> Path:
+    return LIDAR_USB if LIDAR_USB.exists() else LIDAR_UART
+
+
+LIDAR_MUDO_S = 4.0          # sin scan este tiempo con el puerto presente = colgado
 LIDAR_ENTRE_REINICIOS_S = 20.0   # arranque del driver + respawn_delay, con holgura
+LIDAR_ESPERA_MAX_S = 300.0       # tope de la espera cuando reiniciar no lo trae
 _SLLIDAR_PATRON = "sllidar_ros2/lib/sllidar_ros2/sllidar_node"
 
 
@@ -858,23 +912,34 @@ def _matar_sllidar() -> bool:
 
 async def _vigia_lidar():
     ultimo_reinicio = time.monotonic()
+    fallidos = 0                  # reinicios seguidos que no trajeron scans
     while True:
         await asyncio.sleep(1.0)
         try:
             if not ros_bridge.available:
                 continue
             ahora = time.monotonic()
-            if (lidar_reactive.edad_scan_s() < LIDAR_MUDO_S
-                    or not LIDAR_DISPOSITIVO.exists()
-                    or ahora - ultimo_reinicio < LIDAR_ENTRE_REINICIOS_S):
+            if lidar_reactive.edad_scan_s() < LIDAR_MUDO_S:
+                if fallidos:
+                    print(f"[lidar] vuelven los scans tras {fallidos} reinicios", flush=True)
+                fallidos = 0
+                continue
+            espera = min(LIDAR_ESPERA_MAX_S, LIDAR_ENTRE_REINICIOS_S * (2 ** min(fallidos, 4)))
+            puerto = _puerto_lidar()
+            if not puerto.exists() or ahora - ultimo_reinicio < espera:
                 continue
             ultimo_reinicio = ahora
             if await asyncio.to_thread(_matar_sllidar):
-                print("[lidar] driver sin publicar con el USB presente — relanzado", flush=True)
-                await state.broadcast({"type": "toast", "data": {
-                    "kind": "warning", "title": "LIDAR reconectado",
-                    "message": "El LIDAR se cayó del USB; se relanzó el driver.",
-                }})
+                fallidos += 1
+                print(f"[lidar] sin scans con {puerto} presente — driver relanzado "
+                      f"(intento {fallidos}, siguiente en {espera:.0f} s)", flush=True)
+                if fallidos <= 2:
+                    via = "USB" if puerto == LIDAR_USB else "UART (pines 8/10)"
+                    await state.broadcast({"type": "toast", "data": {
+                        "kind": "warning", "title": "LIDAR sin datos",
+                        "message": (f"Se relanzó el driver del LIDAR ({via}). Si sigue sin "
+                                    f"datos, revisá cable y alimentación."),
+                    }})
         except Exception as exc:
             print(f"[lidar] vigía falló: {type(exc).__name__}: {exc}", flush=True)
 
@@ -1042,9 +1107,11 @@ def _percepcion_robot() -> dict:
     d = lidar_reactive.distancias(state.config["slam"])
     v = seguidor_sendero.vision if seguidor_sendero is not None else None
     pose = current_pose()
+    cm_centro, cm_ancho = costmap.hueco_libre()
     return {
         "lidar_adelante_m": d.get("adelante"), "lidar_atras_m": d.get("atras"),
         "lidar_izquierda_m": d.get("izquierda"), "lidar_derecha_m": d.get("derecha"),
+        "costmap_hueco_m": cm_centro, "costmap_ancho_m": cm_ancho,
         "sendero_lateral_m": getattr(v, "lateral_m", None),
         "sendero_rumbo_deg": getattr(v, "angulo_deg", None),
         "sendero_ancho_m": getattr(v, "ancho_m", None),
@@ -1087,6 +1154,9 @@ async def _cargar_modelo_si_falta(app: web.Application):
             return
         model_path = MODELS_DIR / active_model
         if model_path.exists():
+            # Import local, como en el cargador del dashboard: faltaba y cada
+            # arranque autónomo fallaba con NameError sin cargar el modelo.
+            from ultralytics import YOLO
             modelo = await asyncio.to_thread(YOLO, str(model_path))
             app["yolo_model"] = modelo
             camera.set_model(modelo)
@@ -1527,6 +1597,8 @@ async def lidar_scan_handler(request: web.Request):
     body = await request.json()
     points = body.get("points", [])
     lidar_reactive.ingest_scan(points)
+    cfg_slam = state.config["slam"]
+    costmap.update(points, cfg_slam["robot_largo_cm"], cfg_slam["robot_ancho_cm"])
     health.beat("lidar")
 
     # Procesar LIDAR para evasión de obstáculos (NUEVO 2026-09-13)
@@ -1553,11 +1625,111 @@ async def obstacle_status_handler(request: web.Request):
 
 
 # =============================================
+# ===== COSTMAP LOCAL =====
+# =============================================
+
+async def costmap_status_handler(request: web.Request):
+    """GET /api/costmap — resumen del costmap local."""
+    res = costmap.resumen()
+    centro, ancho = costmap.hueco_libre()
+    res["hueco_centro_cm"] = None if centro is None else round(centro * 100)
+    res["hueco_ancho_cm"] = None if ancho is None else round(ancho * 100)
+    return web.json_response(res)
+
+
+async def costmap_grid_handler(request: web.Request):
+    """GET /api/costmap/grid — rejilla como lista de listas (para debug/visor)."""
+    grid = costmap.as_occupancy_grid()
+    return web.json_response({"grid": grid.tolist(),
+                              "cells": costmap.cells, "res_m": costmap.res})
+
+
+async def costmap_reset_handler(request: web.Request):
+    """POST /api/costmap/reset"""
+    import numpy as np
+    costmap.grid = np.full((costmap.cells, costmap.cells), 0.5, dtype=np.float32)
+    costmap._scan_count = 0
+    return web.json_response({"ok": True})
+
+
+async def local_map_save_handler(request: web.Request):
+    """POST /api/costmap/save — guarda el costmap local con nombre."""
+    body = await request.json()
+    name = body.get("name", "costmap_auto")
+    pose = current_pose()
+    path = map_manager.save(name, costmap, pose)
+    return web.json_response({"ok": True, "path": str(path)})
+
+
+async def local_map_load_handler(request: web.Request):
+    """POST /api/costmap/load — restaura un costmap guardado."""
+    body = await request.json()
+    name = body.get("name", "costmap_auto")
+    meta = map_manager.load(name, costmap)
+    if meta is None:
+        return web.json_response({"error": f"mapa '{name}' no existe"}, status=404)
+    return web.json_response({"ok": True, "meta": meta})
+
+
+async def local_map_list_handler(request: web.Request):
+    """GET /api/costmap/maps — lista de mapas locales guardados."""
+    return web.json_response(map_manager.list_maps())
+
+
+async def local_map_delete_handler(request: web.Request):
+    """POST /api/costmap/delete — borra un mapa guardado."""
+    body = await request.json()
+    name = body.get("name", "")
+    ok = map_manager.delete(name)
+    if not ok:
+        return web.json_response({"error": f"mapa '{name}' no existe"}, status=404)
+    return web.json_response({"ok": True})
+
+
+# =============================================
 # ===== SALUD DE TÓPICOS =====
 # =============================================
-async def health_handler(request: web.Request):
+# Varianza de la velocidad de avance del EKF por encima de la cual ya no le
+# llega ninguna medida (rf2o ni /zupt): crece ~0,1 (m/s)² por segundo.
+EKF_VARIANZA_DISPARADA = 1.0
+
+
+def _salud_completa() -> list[dict]:
+    """Latidos de cada fuente + el MOTIVO cuando algo falla. El dashboard, el
+    WebSocket y /api/health usan esta misma lista."""
     cfg = state.config["safety"]
     filas = health.snapshot(cfg["heartbeat_stale_warn_s"], cfg["heartbeat_stale_err_s"])
+    for f in filas:
+        f["detail"] = ""
+        try:
+            if f["key"] == "lidar":
+                puerto = _puerto_lidar()
+                f["detail"] = "USB (CP2102N)" if puerto == LIDAR_USB else f"UART {puerto}"
+            elif f["key"] == "esp32c3" and enlace_c3 is not None:
+                r = enlace_c3.resumen()
+                wifi = r["wifi"] or {}
+                partes = ["BLE ✓" if r["ble"] else (
+                    f"BLE buscando hace {r['buscando_s'] // 60} min" if r["buscando_s"] is not None
+                    else "BLE ✗")]
+                partes.append(f"WiFi ✓ {wifi['ip']}" if wifi.get("conectado") else "WiFi ✗")
+                partes.append(f"{r['reconexiones']} conexiones BLE")
+                if r["reinicios_c3"]:
+                    partes.append(f"{r['reinicios_c3']} reinicios")
+                f["detail"] = " · ".join(partes)
+            elif f["key"] == "lora_v3":
+                r = enlace_lora.resumen()
+                if r["perdida_pct"] is not None:
+                    f["detail"] = f"UDP · pérdida {r['perdida_pct']}% · {r['reinicios']} reinicios"
+            elif f["key"] == "slam" and ros_last_map:
+                ext = ros_last_map.get("extension_m")
+                if ext is not None:
+                    f["detail"] = f"mapa de {ext:.0f} m"
+                if ros_last_map.get("corrupto"):
+                    f["status"] = "err"
+                    f["detail"] = (f"mapa corrupto ({ext / 1000:.1f} km): la pose saltó. "
+                                   "Reinicia el mapa")
+        except Exception as exc:
+            f["detail"] = f"({type(exc).__name__})"
     # ROS no tiene heartbeat (no es un nodo que mande datos periódicos), pero
     # sí es un servicio del que depende media pestaña de Navegación — así que
     # aparece en la misma lista, con el MOTIVO cuando no está.
@@ -1569,7 +1741,23 @@ async def health_handler(request: web.Request):
         "age_s": None,
         "detail": "" if ros_bridge.available else ROS_UNAVAILABLE_REASON,
     })
-    return web.json_response(filas)
+    if ros_fused_pose is not None:
+        var = ros_fused_pose.get("var_vx") or 0.0
+        disparada = var > EKF_VARIANZA_DISPARADA
+        filas.append({
+            "key": "ekf",
+            "label": "Odometría fusionada (EKF)",
+            "icon": "🧮",
+            "status": "err" if disparada else "ok",
+            "age_s": None,
+            "detail": ("sin medida de velocidad: extrapola (¿LIDAR y ZUPT caídos?)" if disparada
+                       else f"x={ros_fused_pose['x']:.1f} y={ros_fused_pose['y']:.1f} m"),
+        })
+    return filas
+
+
+async def health_handler(request: web.Request):
+    return web.json_response(_salud_completa())
 
 
 # =============================================
@@ -1881,8 +2069,7 @@ async def stats_loop():
                 pass
 
         state.system_stats = stats
-        cfg = state.config["safety"]
-        health_data = health.snapshot(cfg["heartbeat_stale_warn_s"], cfg["heartbeat_stale_err_s"])
+        health_data = _salud_completa()
 
         await state.broadcast({"type": "system_stats", "data": stats})
         if odom_webcam is not None:
@@ -1909,7 +2096,8 @@ async def stats_loop():
 # ===== APP =====
 # =============================================
 actuator_proto: ActuatorController | None = None
-uart_link: UartActuatorLink | None = None
+ble_link: BleActuatorLink | None = None
+enlace_c3: EnlaceC3 | None = None
 
 
 async def _bind_udp(loop, protocol_factory, port: int, label: str):
@@ -1958,15 +2146,17 @@ async def start_background(app: web.Application):
 
     await _bind_udp(loop, EnvTelemetryProtocol, LORA_UDP_PORT, "telemetría LoRa")
 
-    global actuator_proto, uart_link
+    global actuator_proto, ble_link, enlace_c3
     ctrl = state.config["control"]
-    hw = state.config["hardware"]
-    uart_link = UartActuatorLink(
-        v_max=ctrl["max_v_mps"], omega_max=ctrl["max_omega_rps"],
-        port=hw["actuator_port"], baud=hw["actuator_baud"])
-    actuator_proto = ActuatorController(uart_link)
-    uart_link._on_status = actuator_proto.on_status
-    uart_link.start()
+    ble_link = BleActuatorLink(
+        v_max=ctrl["max_v_mps"], omega_max=ctrl["max_omega_rps"])
+    # Vía de respaldo por WiFi (ver enlace_c3.py). Si el puerto no se puede
+    # abrir, queda solo el BLE, como antes.
+    wifi_c3 = await udp_actuator_link.abrir(lambda _trama: None)
+    enlace_c3 = EnlaceC3(ble_link, wifi_c3)
+    actuator_proto = ActuatorController(enlace_c3)
+    enlace_c3._on_status = actuator_proto.on_status
+    enlace_c3.start()
 
     # Inicializar sistema de evasión de obstáculos (NUEVO 2026-09-13)
     global obstacle_controller
@@ -1982,6 +2172,7 @@ async def start_background(app: web.Application):
                                 get_config=lambda: state.config["control"])
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
+    app["zupt_task"] = asyncio.create_task(_bucle_zupt())
 
     # Patrulla autónoma. Se crea acá y no arriba porque sus callbacks
     # necesitan el `actuator_proto` que se acaba de construir.
@@ -1990,12 +2181,20 @@ async def start_background(app: web.Application):
         send_nav_goal=ros_bridge.send_nav_goal,
         cancel_nav_goal=ros_bridge.cancel_nav_goal,
         estado_meta=ros_bridge.estado_meta,
-        # En `map`, el mismo marco en que Nav2 recibe las metas.
         get_pose=ros_bridge.pose_en_mapa,
         barrido=_barrido_camara,
         on_event=_patrol_event,
         ruta_waypoints=WAYPOINTS_PATH,
         distancia_puntos=lambda: state.config["autonomia"]["distancia_puntos_cm"],
+        conducir=lambda accion, maniobra=True: conductor.ordenar(
+            accion,
+            v_max=state.config["control"]["max_v_mps"] * state.config["autonomia"]["escala_velocidad"],
+            omega_max=state.config["control"]["max_omega_rps"],
+            maniobra=maniobra),
+        parar=lambda: conductor.parar(),
+        distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
+        edad_scan=lidar_reactive.edad_scan_s,
+        get_costmap=lambda: costmap,
     )
     print(f"[patrulla] lista — {len(patrol.waypoints)} waypoints grabados")
 
@@ -2012,11 +2211,10 @@ async def start_background(app: web.Application):
     global seguidor_sendero, explorador
     seguidor_sendero = SeguidorSendero(
         get_config=lambda: state.config["autonomia"],
-        # Enlace tardío: la cámara se crea DESPUÉS que esto. Resolverla aquí
-        # dejaba el seguidor sin cámara para siempre.
         obtener_frame=lambda: camera.ultimo_frame() if camera is not None else None,
         camara_al_frente=_servo_al_frente,
-        get_geometria=_geometria_camara)
+        get_geometria=_geometria_camara,
+        get_costmap=lambda: costmap)
     explorador = ExploradorReactivo(
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
         get_pose=ros_bridge.pose_en_mapa,
@@ -2031,6 +2229,7 @@ async def start_background(app: web.Application):
         aprendizaje=aprendizaje,
         sensores=_percepcion_robot,
         politica=politica if state.config["autonomia"].get("politica_activa") else None,
+        get_costmap=lambda: costmap,
     )
 
     pose_estimator.gyro_weight = state.config["slam"]["pose_gyro_trust"]
@@ -2383,6 +2582,13 @@ def create_app() -> web.Application:
     app.router.add_post("/api/params/{section}", params_update_handler)
     app.router.add_post("/api/lidar/scan", lidar_scan_handler)
     app.router.add_get("/api/obstacle_status", obstacle_status_handler)
+    app.router.add_get("/api/costmap", costmap_status_handler)
+    app.router.add_get("/api/costmap/grid", costmap_grid_handler)
+    app.router.add_post("/api/costmap/reset", costmap_reset_handler)
+    app.router.add_post("/api/costmap/save", local_map_save_handler)
+    app.router.add_post("/api/costmap/load", local_map_load_handler)
+    app.router.add_get("/api/costmap/maps", local_map_list_handler)
+    app.router.add_post("/api/costmap/delete", local_map_delete_handler)
     app.router.add_get("/api/health", health_handler)
     app.router.add_get("/api/captures", captures_list_handler)
     app.router.add_post("/api/captures/clear", captures_clear_handler)
@@ -2420,10 +2626,8 @@ def create_app() -> web.Application:
     async def on_cleanup(app):
         if camera is not None:
             camera.stop()
-        if uart_link is not None:
-            # Cerrar a proposito: si se deja el puerto abierto el C3 no ve
-            # nada raro y solo para cuando salta su watchdog 300 ms despues.
-            await uart_link.stop()
+        if ble_link is not None:
+            await (enlace_c3 or ble_link).stop()
         ros_bridge.shutdown()
         global _sesion_http
         if _sesion_http is not None and not _sesion_http.closed:

@@ -1,43 +1,28 @@
 """
-Estimador de pose por fusión de sensores + evasión reactiva de obstáculos.
+Estimador de pose, evasión reactiva y costmap local.
 
-Aviso honesto: esto NO es un SLAM completo (no construye un mapa de
-ocupación ni cierra loops). Es la pieza que sí tiene sentido correr en
-este backend con lo que hay disponible ahora mismo: sin encoders, sin
-robot_localization/nav2 todavía instalados. Lo que hace:
+  1. PoseEstimator — fusiona velocidad comandada + giroscopio MPU6050 en
+     un filtro complementario. Dead-reckoning con skid-steer: sirve para
+     el radar del dashboard, NO para navegación de precisión.
 
-  1. PoseEstimator — fusiona la velocidad COMANDADA (integración de
-     vx/omega, ya que no hay encoder que mida la real) con la velocidad
-     angular del giroscopio (MPU6050, vía telemetría LoRa) en un filtro
-     complementario. El robot es DIFERENCIAL (skid-steer): se mueve solo
-     sobre su eje longitudinal, no puede desplazarse de costado. Da una
-     estimación de (x, y, θ) razonable para distancias cortas, con el
-     error de deriva típico de dead-reckoning — sirve para el radar del
-     dashboard, NO para navegación de precisión.
+  2. LidarReactive — ingesta de un scan 2D y evasión por sectores: corta
+     la velocidad cuando hay obstáculo más cerca que el umbral. Capa de
+     seguridad que funciona con o sin nav2.
 
-     ⚠️ En un skid-steer el giro se hace PATINANDO las ruedas, así que la
-     omega comandada es peor predictor que en un robot con ruedas que
-     ruedan limpio. Por eso `pose_gyro_trust` está alto (0.8): conviene
-     creerle bastante más al giroscopio que al comando.
-  2. LidarReactive — ingesta de un scan 2D (lista de puntos ángulo/
-     distancia) y evasión reactiva simple: si hay un obstáculo en la
-     DIRECCIÓN DEL MOVIMIENTO y más cerca que el umbral, recorta la
-     velocidad comandada (frena antes de chocar) sin necesidad de un
-     costmap ni un planner. El RPLIDAR C1 barre 360°, así que se vigila
-     hacia adelante al avanzar y HACIA ATRÁS al retroceder — mirar siempre
-     al frente dejaba el retroceso sin ninguna protección.
+  3. CostmapLocal — rejilla de ocupación centrada en el robot, construida
+     scan a scan (costmap_local.py). Alimenta la detección de senderos
+     con un perfil lateral continuo y detecta huecos libres para navegar.
 
-Todos los umbrales son parámetros, no constantes — ver config_store.py
-sección "slam", editable desde la pestaña Parámetros del dashboard.
-
-Para SLAM real (mapa + loop closure + planeación global) esto se
-reemplaza por sllidar_ros2 + robot_localization (EKF) + nav2, tal como
-ya quedó anotado en el README. Esta pieza deja de ser necesaria en ese
-momento — o puede seguir usándose como fallback reactivo de bajo nivel
-incluso con nav2 corriendo (doble capa de seguridad).
+  4. MapManager — guardar/cargar la rejilla de ocupación a disco. Los
+     mapas se guardan con nombre junto al agrobot_config.json y se
+     restauran al reiniciar.
 """
+import json
 import math
 import time
+from pathlib import Path
+
+from costmap_local import CostmapLocal
 
 
 class PoseEstimator:
@@ -225,3 +210,62 @@ class LidarReactive:
 def _wrap180(angulo_deg: float) -> float:
     """Ángulo a (-180, 180]."""
     return (angulo_deg + 180.0) % 360.0 - 180.0
+
+
+MAP_DIR = Path(__file__).parent / "maps"
+
+
+class MapManager:
+    """Guardar y cargar mapas de ocupación local + metadatos."""
+
+    def __init__(self, directory: Path = MAP_DIR):
+        self.directory = directory
+        self.directory.mkdir(exist_ok=True)
+
+    def save(self, name: str, costmap: CostmapLocal, pose: dict | None = None) -> Path:
+        import numpy as np
+        path = self.directory / f"{name}.npz"
+        meta = {
+            "res_m": costmap.res,
+            "size_m": costmap.size,
+            "scans": costmap._scan_count,
+            "saved_at": time.time(),
+        }
+        if pose:
+            meta["pose"] = pose
+        np.savez_compressed(path, grid=costmap.grid, meta=json.dumps(meta))
+        return path
+
+    def load(self, name: str, costmap: CostmapLocal) -> dict | None:
+        import numpy as np
+        path = self.directory / f"{name}.npz"
+        if not path.exists():
+            return None
+        data = np.load(path, allow_pickle=False)
+        grid = data["grid"]
+        if grid.shape == (costmap.cells, costmap.cells):
+            costmap.grid = grid.astype(np.float32)
+        meta = json.loads(str(data["meta"]))
+        costmap._scan_count = meta.get("scans", 0)
+        return meta
+
+    def list_maps(self) -> list[dict]:
+        maps = []
+        for p in sorted(self.directory.glob("*.npz")):
+            try:
+                import numpy as np
+                data = np.load(p, allow_pickle=False)
+                meta = json.loads(str(data["meta"]))
+                meta["name"] = p.stem
+                meta["size_bytes"] = p.stat().st_size
+                maps.append(meta)
+            except Exception:
+                maps.append({"name": p.stem, "error": True})
+        return maps
+
+    def delete(self, name: str) -> bool:
+        path = self.directory / f"{name}.npz"
+        if path.exists():
+            path.unlink()
+            return True
+        return False

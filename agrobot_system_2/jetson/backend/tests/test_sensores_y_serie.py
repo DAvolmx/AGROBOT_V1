@@ -95,14 +95,16 @@ check("un campo no aparece en las dos listas a la vez",
 
 
 # =====================================================================
-print("\n[3] Protocolo serie - firmware vs. enlace de la Jetson")
+print("\n[3] Protocolo con la C3 - firmware vs. enlaces de la Jetson")
 # =====================================================================
-# Este bloque comparo antes el firmware contra el dashboard Web Bluetooth, y
-# luego contra el enlace BLE. Los dos transportes se retiraron el 2026-09-04
-# (ver la cabecera del .ino). El otro lado del protocolo vive ahora en
-# jetson/backend/uart_link.py.
+# Historia: este bloque comparó el firmware con el dashboard Web Bluetooth,
+# luego con el enlace BLE y luego con el UART (uart_link.py). Desde el
+# 2026-09-30 la C3 habla por DOS vías a la vez, BLE (ble_link.py) y WiFi UDP
+# (udp_actuator_link.py), con la misma trama de 8 bytes. El backend vivo usa
+# ble_link.pack() para las dos: es el que se compara.
 ino = (ROOT / "firmware" / "esp32c3_actuator" / "esp32c3_actuator.ino").read_text()
-py = (ROOT / "jetson" / "backend" / "uart_link.py").read_text()
+py = (ROOT / "jetson" / "backend" / "ble_link.py").read_text()
+py_udp = (ROOT / "jetson" / "backend" / "udp_actuator_link.py").read_text()
 
 TIPOS = {"uint8_t": "B", "int8_t": "b", "uint16_t": "H"}
 
@@ -120,79 +122,79 @@ check("CmdFrame son 8 bytes (7 de datos + CRC)", struct.calcsize(fmt), 8)
 # Comparar los FORMATOS y no solo los tamanos es lo que detecta dos campos
 # intercambiados: la trama mide igual y el robot obedece el valor equivocado.
 fmt_py = re.search(r'CMD_FORMAT\s*=\s*"([^"]+)"', py).group(1)
-check("CMD_FORMAT de uart_link.py coincide con struct CmdFrame", fmt_py, fmt)
-
+check("CMD_FORMAT de ble_link.py coincide con struct CmdFrame", fmt_py, fmt)
 fmt_st = formato_de("StatusFrame")
 fmt_st_py = re.search(r'STATUS_FORMAT\s*=\s*"([^"]+)"', py).group(1)
-check("STATUS_FORMAT de uart_link.py coincide con struct StatusFrame",
-      fmt_st_py, fmt_st)
+check("STATUS_FORMAT de ble_link.py coincide con struct StatusFrame", fmt_st_py, fmt_st)
 
-# magics y banderas iguales en ambos lados
-for macro, pyname in (("CMD_MAGIC", "CMD_MAGIC"), ("STATUS_MAGIC", "STATUS_MAGIC")):
+for macro in ("CMD_MAGIC", "STATUS_MAGIC"):
     fw = int(re.search(rf"const uint8_t {macro}\s*=\s*(0x[0-9A-Fa-f]+)", ino).group(1), 16)
-    jet = int(re.search(rf"^{pyname}\s*=\s*(0x[0-9A-Fa-f]+)", py, re.M).group(1), 16)
+    jet = int(re.search(rf"^{macro}\s*=\s*(0x[0-9A-Fa-f]+)", py, re.M).group(1), 16)
     check(f"magic {macro}", jet, fw)
 
-for macro in ("FLAG_LED", "FLAG_SCAN", "ST_LED", "ST_SCANNING", "ST_FAILSAFE"):
+# Todas las banderas, también las de reinicio y las de las dos vías.
+for macro in ("FLAG_LED", "FLAG_SCAN", "ST_LED", "ST_SCANNING", "ST_FAILSAFE",
+              "ST_BROWNOUT", "ST_RECIEN", "ST_VIA_WIFI", "ST_WIFI_OK", "ST_BLE_OK"):
     fw = int(re.search(rf"#define {macro}\s+(0x[0-9A-Fa-f]+)", ino).group(1), 16)
     jet = int(re.search(rf"^{macro}\s*=\s*(0x[0-9A-Fa-f]+)", py, re.M).group(1), 16)
     check(f"bandera {macro}", jet, fw)
 
-# Los pines del cableado, tomados del firmware, contra los que documenta el
-# modulo de la Jetson. Un desfase aqui es una tarde entera con el multimetro.
-for macro in ("MANDO_RX_PIN", "MANDO_TX_PIN"):
-    pin = int(re.search(rf"#define {macro}\s+(\d+)", ino).group(1))
-    check(f"{macro} documentado en uart_link.py", f"GPIO{pin}" in py, True)
+# UUIDs del GATT
+for macro in ("BLE_SERVICE_UUID", "BLE_CMD_CHAR_UUID", "BLE_STATUS_CHAR_UUID"):
+    fw = re.search(rf'#define {macro}\s+"([^"]+)"', ino).group(1)
+    jet = re.search(rf'^{macro}\s*=\s*"([^"]+)"', py, re.M).group(1)
+    check(f"UUID {macro}", jet, fw)
 
-baud_fw = int(re.search(r"MANDO_BAUD\s*=\s*(\d+)", ino).group(1))
-baud_py = int(re.search(r"^DEFAULT_BAUD\s*=\s*(\d+)", py, re.M).group(1))
-check("los baudios coinciden en los dos lados", baud_py, baud_fw)
-
-# El C3 ya NO debe traer radio: es la causa por la que los dos transportes
-# anteriores fallaron. Si alguien la reintroduce, esto avisa.
-check("el firmware del C3 no incluye WiFi", "WiFi.h" in ino, False)
-check("el firmware del C3 no incluye BLE", "BLEDevice.h" in ino, False)
+# Vía WiFi: mismo puerto en los dos lados.
+p_c3 = int(re.search(r"C3_UDP_PUERTO\s*=\s*(\d+)", ino).group(1))
+p_jet_fw = int(re.search(r"JETSON_UDP_PUERTO\s*=\s*(\d+)", ino).group(1))
+p_jet = int(re.search(r"^PUERTO\s*=\s*(\d+)", py_udp, re.M).group(1))
+check("la C3 escucha órdenes donde las manda la Jetson", p_c3, p_jet)
+check("la C3 manda el estado donde escucha la Jetson", p_jet_fw, p_jet)
+check("el firmware trae las dos vías", ("ENLACE_WIFI 1" in ino, "BLEDevice.h" in ino), (True, True))
+check("el firmware ordena las tramas por secuencia", "int16_t d = (int16_t)(c.seq - lastSeq)" in ino, True)
+# Sigue sin haber cable: el accidente del 2026-09-20 fue por el GND común.
+check("el firmware no abre un UART de mando", "HardwareSerial" in ino, False)
 
 # El CRC de las dos implementaciones tiene que dar lo mismo. Se usa el vector
 # de prueba estandar del CRC-8/ATM.
 sys.path.insert(0, str(ROOT / "jetson" / "backend"))
-import uart_link
-check("crc8 con el vector estandar '123456789'", uart_link.crc8(b"123456789"), 0xF4)
-check("uart_link empaqueta el tamano que espera el firmware",
-      uart_link.CMD_SIZE, struct.calcsize(fmt))
+import ble_link
+check("crc8 con el vector estandar '123456789'", ble_link.crc8(b"123456789"), 0xF4)
+check("ble_link empaqueta el tamano que espera el firmware",
+      ble_link.CMD_SIZE, struct.calcsize(fmt))
 
-# Round-trip por el MISMO empaquetador que usa el backend en vivo, no por una
-# copia del formato en el test: si uart_link.py se desincroniza, esto lo ve.
-enlace = uart_link.UartActuatorLink(v_max=0.55, omega_max=1.5)
+# Round-trip por el MISMO empaquetador que usa el backend en vivo.
+enlace = ble_link.BleActuatorLink(v_max=0.55, omega_max=1.5)
 enlace.send_command(-0.55, 1.5)
 enlace.set_actuators(servo_angle=105, led=True)
 trama = enlace.pack()
 check("la trama mide lo que dice el struct", len(trama), struct.calcsize(fmt))
-check("el CRC de la trama generada es valido",
-      uart_link.crc8(trama[:-1]), trama[-1])
+check("el CRC de la trama generada es valido", ble_link.crc8(trama[:-1]), trama[-1])
 magic, v_pct, om_pct, servo, flags, seq, crc = struct.unpack(fmt, trama)
 check("magic de la trama", magic, 0xA5)
 check("v a fondo atras -> -100", v_pct, -100)
 check("omega a fondo -> 100", om_pct, 100)
 check("servo dentro del recorrido pasa tal cual", servo, 105)
+check("cada trama lleva una secuencia nueva",
+      struct.unpack(fmt, enlace.pack())[5], (seq + 1) & 0xFFFF)
 
-# El recorte al recorrido util (25-110) se prueba aparte: un angulo fuera de
-# la ventana no debe salir nunca por el cable, porque el servo montado topa
-# mecanicamente y zumbaria contra el tope.
+# El recorte al recorrido util (25-110): un angulo fuera de la ventana no
+# debe salir nunca, porque el servo montado topa mecanicamente.
 enlace.set_actuators(servo_angle=180)
-check("servo por encima del maximo se recorta a 110",
-      struct.unpack(fmt, enlace.pack())[3], 110)
+check("servo por encima del maximo se recorta a 110", struct.unpack(fmt, enlace.pack())[3], 110)
 enlace.set_actuators(servo_angle=0)
-check("servo por debajo del minimo se recorta a 25",
-      struct.unpack(fmt, enlace.pack())[3], 25)
+check("servo por debajo del minimo se recorta a 25", struct.unpack(fmt, enlace.pack())[3], 25)
+# El bit del foco va INVERTIDO a propósito (etapa de lógica normal con el
+# firmware en LED_ACTIVO_EN_BAJO, ver ble_link.pack): encender = bit a 0.
 enlace.set_actuators(servo_angle=105, led=True)
-check("bandera LED encendida", flags & uart_link.FLAG_LED, uart_link.FLAG_LED)
+check("foco encendido -> bit LED a 0", struct.unpack(fmt, enlace.pack())[4] & ble_link.FLAG_LED, 0)
+enlace.set_actuators(led=False)
+check("foco apagado -> bit LED a 1", struct.unpack(fmt, enlace.pack())[4] & ble_link.FLAG_LED,
+      ble_link.FLAG_LED)
 
-# Un magic que aparezca DENTRO de los datos no debe poder hacerse pasar por
-# el principio de una trama. Es justo lo que el CRC esta ahi para evitar.
 falsa = bytes([0xA5, 0xA5, 0xA5, 0xA5, 0xA5, 0xA5, 0xA5, 0xA5])
-check("una trama de puro magic no pasa el CRC",
-      uart_link.crc8(falsa[:-1]) == falsa[-1], False)
+check("una trama de puro magic no pasa el CRC", ble_link.crc8(falsa[:-1]) == falsa[-1], False)
 
 
 print("\n" + "=" * 60)

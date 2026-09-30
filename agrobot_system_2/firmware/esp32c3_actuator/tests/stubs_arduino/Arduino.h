@@ -41,4 +41,5 @@ inline bool ledcWrite(uint8_t,uint32_t){return true;}
 inline bool ledcAttachChannel(uint8_t,uint32_t,uint8_t,uint8_t){return true;}
 inline bool ledcDetach(uint8_t){return true;}
 inline bool ledcWriteChannel(uint8_t,uint32_t){return true;}
-struct IPAddress{ IPAddress(){} IPAddress(int,int,int,int){} };
+struct IPAddress{ IPAddress(){} IPAddress(int,int,int,int){}
+  bool operator==(const IPAddress&) const {return true;} String toString() const {return String();} };

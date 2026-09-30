@@ -37,7 +37,7 @@ import mundo as mundo_mod                                   # noqa: E402
 from robot import RobotSim                                  # noqa: E402
 from aprendizaje import Aprendizaje                         # noqa: E402
 import ruta_ideal                                           # noqa: E402
-from slam_sim import SlamSimulado                           # noqa: E402
+from slam_sim import SlamSimulado, FallosLidar              # noqa: E402
 
 DT = 0.02                     # paso de física (s de simulación)
 # Tras una corrección del operador, la autonomía espera en silencio: si no,
@@ -60,6 +60,9 @@ BUSQUEDA_SERVO_S = 1.2        # cuánto mira en cada ángulo antes de juzgarlo
 SIN_SENDERO_PARA_BUSCAR_S = 6.0
 REVISITA_S = 15.0             # volver a una celda después de esto cuenta como revisita
 REVISITAS_BUCLE = 3           # tantas revisitas de la misma celda = está dando vueltas
+# El backend estima el giro comandado sin saber cuánto patina el chasis: la
+# odometría sin LIDAR se cree todo el giro pedido (el real rinde ~65 %).
+RENDIMIENTO_GIRO_ODOM = 1.0
 
 
 class RelojVirtual:
@@ -153,6 +156,11 @@ class Episodio:
                                  self.mundo.limites, semilla=semilla, ruido=ruido_slam)
         self.usar_slam = usar_slam        # si el software navega con la pose estimada
         self.traza_slam = []
+        # Cómo está conectado el LIDAR decide cada cuánto se cae (ver slam_sim).
+        # USB por defecto: el 2026-09-30 la UART no dio respuesta y el robot
+        # volvió al adaptador CP2102N.
+        self.fallos_lidar = FallosLidar(
+            cfg.get("simulacion", {}).get("lidar_conexion", "usb"), semilla=semilla)
         # --- Ruta ideal por el centro del sendero ---
         self.ruta = ruta_ideal.trazar(self.mundo.sendero)
         self.piloto = None                # activo durante el "recorrido ideal"
@@ -168,6 +176,8 @@ class Episodio:
         self.politica = None            # se le asigna una Politica para usarla
         self._sendero_visto_en = 0.0
         self._buscando_servo = None
+        self.ultimo_frame = None
+        self.frames_camara = 0
 
     # ------------------------------------------------------------- geometría
     def geometria(self):
@@ -245,13 +255,16 @@ class Episodio:
         from pulse_drive import ConductorPulsos
         from explorador import ExploradorReactivo
 
+        from costmap_local import CostmapLocal
         self.lidar = slam.LidarReactive()
+        self.costmap = CostmapLocal()
         self.seguidor = sendero.SeguidorSendero(
             get_config=lambda: self.cfg["autonomia"],
             obtener_frame=self._frame,
             camara_al_frente=lambda: ((True, "") if self.robot.servo_asentado
                                       else (False, "servo moviéndose")),
-            get_geometria=self.geometria)
+            get_geometria=self.geometria,
+            get_costmap=lambda: self.costmap)
 
         def mandar(v, omega, scan=0):
             # Mismo orden que el backend real: el freno por LIDAR se aplica
@@ -281,7 +294,8 @@ class Episodio:
             seguidor=self.seguidor,
             aprendizaje=self.aprendizaje if self.usar_aprendido else None,
             sensores=self.sensores,
-            politica=self.politica)
+            politica=self.politica,
+            get_costmap=lambda: self.costmap)
 
     def _conducir_filtrado(self, accion, maniobra=True):
         ctrl, escala = self.cfg["control"], self.cfg["autonomia"]["escala_velocidad"]
@@ -298,7 +312,12 @@ class Episodio:
 
     def _frame(self):
         self._seq += 1
-        return self.robot.frame(self.geometria()), self.reloj.t, self._seq
+        frame = self.robot.frame(self.geometria())
+        # El dashboard muestra ESTE fotograma, el que analizó el detector, y
+        # no uno renderizado aparte desde otro hilo.
+        self.ultimo_frame = frame
+        self.frames_camara += 1
+        return frame, self.reloj.t, self._seq
 
     async def _escanear(self, motivo):
         """Barrido de escaneo, como el del robot: parar, foco y barrer el servo.
@@ -395,16 +414,30 @@ class Episodio:
                     continue
             else:
                 dt = DT
+            x0, y0, th0 = self.robot.x, self.robot.y, self.robot.theta
             self.robot.paso(dt)
-            self.slam.paso(dt, self.robot.v, self.robot.omega,
-                           (self.robot.x, self.robot.y, self.robot.theta))
+            # Qué movimiento le llega al SLAM. Con LIDAR, la odometría sale
+            # del casamiento de scans (rf2o): mide lo que el robot se movió DE
+            # VERDAD, con ruido; empujando contra una pared no suma nada.
+            # Sin LIDAR solo queda /wheel_odom, que en este robot es la
+            # velocidad COMANDADA: ahí sí deriva al patinar o al chocar.
+            if self.slam.sin_lidar:
+                v_med = self.robot.v_obj
+                w_med = self.robot.omega_obj * RENDIMIENTO_GIRO_ODOM
+            else:
+                dxw, dyw = self.robot.x - x0, self.robot.y - y0
+                v_med = (dxw * math.cos(th0) + dyw * math.sin(th0)) / dt
+                w_med = ((self.robot.theta - th0 + math.pi) % (2 * math.pi) - math.pi) / dt
+            self.slam.paso(dt, v_med, w_med, (self.robot.x, self.robot.y, self.robot.theta))
             self.reloj.t += dt
             self.t_total += dt
             if len(self.ruta):
                 self.desvio_ruta_suma += ruta_ideal.desvio(self.ruta, (self.robot.x, self.robot.y))
                 self.desvio_ruta_n += 1
+            # `dt` y no DT: en tiempo real el paso varía y con DT el
+            # porcentaje en sendero pasaba del 100 %.
             if self.robot.desvio_del_sendero() <= self.mundo.ancho_sendero / 2:
-                self.t_en_sendero += DT
+                self.t_en_sendero += dt
 
             # Cerrar la lección si el operador dejó de tocar, y juzgar si lo
             # que se aplicó de lo aprendido funcionó.
@@ -452,9 +485,23 @@ class Episodio:
 
             if self.reloj.t - self._ultimo_lidar >= LIDAR_PERIODO_S:
                 self._ultimo_lidar = self.reloj.t
-                scan = self.robot.scan()
-                self.lidar.ingest_scan(scan)
-                self.slam.ingerir_scan(scan)
+                # Sin scan no se llama a nada: el freno por LIDAR ve el scan
+                # envejecer y bloquea el avance, como en el robot real.
+                caido = self.fallos_lidar.caido(self.reloj.t)
+                if caido != self.slam.sin_lidar:
+                    self.slam.sin_lidar = caido
+                    self.eventos.append({"t": round(self.reloj.t, 1),
+                                         "evento": "lidar_caido" if caido else "lidar_vuelve",
+                                         "conexion": self.fallos_lidar.conexion})
+                if not caido:
+                    scan = self.robot.scan()
+                    self.lidar.ingest_scan(scan)
+                    cfg_slam = self.cfg["slam"]
+                    self.costmap.update(scan, cfg_slam["robot_largo_cm"], cfg_slam["robot_ancho_cm"])
+                    self.slam.ingerir_scan(scan, omega=self.robot.omega)
+                for ev in self.slam.eventos:
+                    self.eventos.append({"t": round(self.reloj.t, 1), **ev})
+                self.slam.eventos.clear()
                 self.traza_slam.append((round(self.slam.x, 3), round(self.slam.y, 3)))
                 self._contar_visita()
 
@@ -560,6 +607,8 @@ class Episodio:
         self.robot.x, self.robot.y, self.robot.theta = self.pose_inicial
         self.robot.v = self.robot.omega = 0.0
         self.robot.v_rampa = self.robot.omega_rampa = 0.0
+        self.robot.v_obj = self.robot.omega_obj = 0.0
+        self.robot._mandos.clear()
         self.mundo.pisadas.clear()
         if reiniciar_slam:
             self.slam = SlamSimulado(self.pose_inicial, self.mundo.limites,
@@ -627,7 +676,10 @@ class Episodio:
         if modo == "manual":
             self.explorador.detener()
         else:
-            self.lidar.ingest_scan(self.robot.scan())
+            scan = self.robot.scan()
+            self.lidar.ingest_scan(scan)
+            cfg_slam = self.cfg["slam"]
+            self.costmap.update(scan, cfg_slam["robot_largo_cm"], cfg_slam["robot_ancho_cm"])
             self.explorador.iniciar()
         self.modo = modo
         self.eventos.append({"t": round(self.reloj.t, 1), "evento": "modo", "modo": modo})
@@ -638,9 +690,11 @@ class Episodio:
         modelo que se entrene con las decisiones del operador."""
         d = self.lidar.distancias(self.cfg["slam"])
         v = self.seguidor.vision
+        cm_centro, cm_ancho = self.costmap.hueco_libre()
         return {
             "lidar_adelante_m": d["adelante"], "lidar_atras_m": d["atras"],
             "lidar_izquierda_m": d["izquierda"], "lidar_derecha_m": d["derecha"],
+            "costmap_hueco_m": cm_centro, "costmap_ancho_m": cm_ancho,
             "sendero_lateral_m": v.lateral_m, "sendero_rumbo_deg": v.angulo_deg,
             "sendero_ancho_m": v.ancho_m, "sendero_confianza": v.confianza,
             "v_actual": round(self.robot.v, 3), "omega_actual": round(self.robot.omega, 3),
@@ -741,9 +795,10 @@ class Episodio:
         if not self.tiempo_real:
             self.reloj.instalar()
         try:
-            # El explorador exige un scan fresco para arrancar (sin LIDAR el
-            # robot iría a ciegas), así que se le da el primero a mano.
-            self.lidar.ingest_scan(self.robot.scan())
+            scan = self.robot.scan()
+            self.lidar.ingest_scan(scan)
+            cfg_slam = self.cfg["slam"]
+            self.costmap.update(scan, cfg_slam["robot_largo_cm"], cfg_slam["robot_ancho_cm"])
             # La física arranca YA: la calibración necesita que el tiempo
             # corra, y en modo rápido el reloj solo avanza dentro de ese bucle.
             fisica = asyncio.create_task(self._fisica())
@@ -752,10 +807,15 @@ class Episodio:
             # depende del suelo y de la luz, no es una constante.
             if self.cfg["autonomia"].get("sendero_activo") and self.calibrar_servo:
                 await self._buscar_inclinacion()
-            ok, msg = self.explorador.iniciar()
-            if not ok:
-                raise RuntimeError(f"no arrancó la exploración: {msg}")
-            self.eventos.append({"t": round(self.reloj.t, 1), "evento": "inicio", "detalle": msg})
+            # Si mientras se calibraba empezó el recorrido ideal, conduce el
+            # piloto y la autonomía se queda quieta. Antes arrancaba igual y
+            # los dos se peleaban el mando: los ejemplos de entrenamiento
+            # salían con órdenes que no eran las del piloto.
+            if self.piloto is None:
+                ok, msg = self.explorador.iniciar()
+                if not ok:
+                    raise RuntimeError(f"no arrancó la exploración: {msg}")
+                self.eventos.append({"t": round(self.reloj.t, 1), "evento": "inicio", "detalle": msg})
             await fisica
             self.explorador.detener()
             await self.reloj._sleep(0)
@@ -793,6 +853,8 @@ class Episodio:
             "correcciones_filtro": self.correcciones_filtro,
             "pulsos_politica": self.explorador.pulsos_politica,
             "slam": self.slam.resumen((self.robot.x, self.robot.y, self.robot.theta)),
+            "caidas_lidar": self.fallos_lidar.caidas,
+            "segundos_sin_lidar": round(self.fallos_lidar.t_caido, 1),
             "mapa": self.slam.calidad_mapa(self.mundo),
             "servo_final": round(self.robot.servo),
             "aprendidas": self.explorador.aprendidas,

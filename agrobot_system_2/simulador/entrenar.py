@@ -16,7 +16,9 @@ Tres pasos, que se pueden correr por separado:
      el escenario es lo que evita aprender un mapa en vez de a conducir.
 
   2. ENTRENAR. Una red pequeña (ver `politica.py`) aprende a imitar esos
-     ejemplos. Sale `politica.pt`, que el robot real puede cargar.
+     ejemplos. Sale `politica_candidata.pt` (y una copia por tanda); el
+     robot real carga `politica.pt`, que solo cambia al desplegar desde el
+     dashboard (pestaña Entrenamiento → "Desplegar el mejor").
 
   3. EVALUAR. Se corren los mismos escenarios con la política y sin ella, y
      se comparan desvío de la ruta, plantas pisadas y choques. Si no mejora,
@@ -47,13 +49,35 @@ import correr                      # noqa: E402
 MUNDOS_DIR = AQUI / "mundos"
 CARPETA = Path.home() / ".agrobot" / "aprendizaje"
 DATASET = CARPETA / "dataset.csv"
-MODELO = CARPETA / "politica.pt"
+# El entrenamiento escribe un CANDIDATO. `politica.pt` es el que carga el
+# robot real (politica.RUTA_POR_DEFECTO) y solo se cambia desplegando a
+# propósito (botón "Desplegar el mejor" del dashboard): antes cada tanda lo
+# sobrescribía sin validar y el robot usaba el último al reiniciar.
+MODELO = CARPETA / "politica_candidata.pt"
 COLUMNAS = list(pol.ENTRADAS) + ["accion", "escenario", "origen"]
+RECORRIDO_MINIMO_M = 1.0
+ORIGENES = ("ideal_dr",)         # ver cargar_dataset; --todos-los-datos = None
 
 
 # --------------------------------------------------------------- variaciones
+def mundos_disponibles():
+    """Escenarios incluidos (menos el aleatorio, que ya se usa aparte) y
+    mapas dibujados en el editor del dashboard."""
+    incluidos = [n for n in mundo_mod.ESCENARIOS if n != "aleatorio"]
+    dibujados = sorted(p.stem for p in MUNDOS_DIR.glob("*.json"))
+    return incluidos + dibujados
+
+
+def _dist_a_ruta(x, y, ruta) -> float:
+    a, b = ruta[:-1], ruta[1:]
+    ab = b - a
+    t = np.clip(((x - a[:, 0]) * ab[:, 0] + (y - a[:, 1]) * ab[:, 1])
+                / np.maximum((ab ** 2).sum(axis=1), 1e-9), 0, 1)
+    return float(np.hypot(x - a[:, 0] - t * ab[:, 0], y - a[:, 1] - t * ab[:, 1]).min())
+
+
 def mundo_variado(nombre, rng):
-    """Carga un mapa dibujado y lo varía un poco en cada episodio.
+    """Carga un escenario o un mapa dibujado y lo varía en cada episodio.
 
     Entrenar siempre con el mapa EXACTO enseña ese mapa, no a conducir. Se
     cambia lo que de verdad cambia en el campo de un día para otro: lo seco
@@ -61,8 +85,14 @@ def mundo_variado(nombre, rng):
     tirada, y desde qué punto del recorrido se empieza."""
     import mundo as M
 
-    datos = json.loads((MUNDOS_DIR / f"{nombre}.json").read_text())
-    m = M.Mundo.desde_dict(datos)
+    if nombre in M.ESCENARIOS:
+        m, _ = M.ESCENARIOS[nombre]()
+        datos = {"ancho_sendero": m.ancho_sendero, "ancho_paja": m.ancho_paja}
+        base = [{"tipo": t, "x": float(o[0]), "y": float(o[1])} for o, t in zip(m.objetos, m.tipos)]
+    else:
+        datos = json.loads((MUNDOS_DIR / f"{nombre}.json").read_text())
+        m = M.Mundo.desde_dict(datos)
+        base = list(datos.get("objetos", []))
     m.seco = float(rng.uniform(0.0, 1.0))
     m.borde = str(rng.choice(["paja", "vegetacion", "mixto", "tierra"]))
     m.ancho_sendero = max(0.35, datos.get("ancho_sendero", 0.65) * float(rng.uniform(0.85, 1.2)))
@@ -71,17 +101,23 @@ def mundo_variado(nombre, rng):
     # Estorbos sueltos: ramas que el LIDAR ve pero se atraviesan, y macetas
     # que sí son obstáculo. Se ponen cerca del sendero, que es donde molestan.
     ruta = np.asarray(m.sendero, np.float64)
-    objetos = []
+    objetos = base
     if len(ruta) > 2:
+        # Al lado del sendero, no encima: si cae en medio, el recorrido ideal
+        # se queda frenado y el episodio no enseña nada. Se mide contra TODO
+        # el sendero y no solo contra el punto de partida: en las curvas en U
+        # un objeto "al lado" de un tramo caía encima del de vuelta (el
+        # 2026-09-30 un episodio arrancó dentro de una maceta: 24 choques).
+        libre = m.ancho_sendero / 2 + 0.35
         for _ in range(int(rng.integers(0, 5))):
             i = int(rng.integers(0, len(ruta)))
             ang = float(rng.uniform(0, 2 * math.pi))
-            # Al lado del sendero, no encima: si cae en medio, el recorrido
-            # ideal se queda frenado y el episodio no enseña nada.
             r = m.ancho_sendero / 2 + 0.45 + float(rng.uniform(0, 0.7))
+            x, y = float(ruta[i][0] + r * math.cos(ang)), float(ruta[i][1] + r * math.sin(ang))
+            if _dist_a_ruta(x, y, ruta) < libre:
+                continue
             objetos.append({"tipo": str(rng.choice(["rama", "arbusto", "maceta", "piedra"])),
-                            "x": float(ruta[i][0] + r * math.cos(ang)),
-                            "y": float(ruta[i][1] + r * math.sin(ang))})
+                            "x": x, "y": y})
     m.poner_objetos(objetos)
 
     # Arrancar en un punto cualquiera del recorrido, mirando hacia donde sigue.
@@ -96,18 +132,37 @@ def mundo_variado(nombre, rng):
     return m, pose
 
 
-def escenario_para(k, mundo_nombre, mezcla, rng):
-    """Alterna entre el mapa del usuario (variado) y escenarios al azar."""
-    if mundo_nombre and rng.random() < mezcla:
-        return mundo_variado(mundo_nombre, rng)
+def escenario_para(k, mundos, mezcla, rng):
+    """Uno de los mapas pedidos (variado), o un escenario al azar."""
+    if mundos and rng.random() < mezcla:
+        return mundo_variado(str(rng.choice(mundos)), rng)
     return "aleatorio"
 
 
+def aleatorizar(ep, rng) -> dict:
+    """Sortea las condiciones del robot para este episodio.
+
+    Es la "aleatorización de dominio": en vez de UN chasis simulado ideal,
+    uno distinto cada vez dentro de lo que se midió o se puede esperar en el
+    campo. Así la red aprende a conducir con cualquiera de ellos, y el robot
+    real, que es uno más de esa familia, no la pilla por sorpresa."""
+    r = ep.robot
+    r.rendimiento_giro = float(rng.uniform(0.50, 0.80))    # patina más o menos al girar
+    r.decel_inercia = float(rng.uniform(0.15, 0.30))       # desliza 60-100 cm al soltar
+    r.escala_latencia = float(rng.uniform(0.6, 2.0))       # BLE más o menos cargado
+    ep.slam.ruido = float(rng.uniform(0.5, 1.5))
+    ep.fallos_lidar.cambiar(str(rng.choice(["usb", "usb", "uart", "ninguna"])))
+    return {"giro": round(r.rendimiento_giro, 2), "desliz": round(r.decel_inercia, 2),
+            "latencia": round(r.escala_latencia, 2), "slam": round(ep.slam.ruido, 2),
+            "lidar": ep.fallos_lidar.conexion}
+
+
 # --------------------------------------------------------------- recolectar
-async def _episodio_ideal(escenario, cfg, segundos, semilla):
+async def _episodio_ideal(escenario, cfg, segundos, semilla, rng=None):
     """Un recorrido ideal del que salen ejemplos de conducción buena."""
     ep = correr.Episodio(escenario, cfg, segundos + 5, semilla,
                          tiempo_real=False, usar_slam=False)
+    ep.condiciones = aleatorizar(ep, rng) if rng is not None else {}
     # Calibrar la inclinación al arrancar: si la cámara no ve el sendero, los
     # ejemplos salen sin datos de cámara y el modelo no aprende a corregir.
     ep.calibrar_servo = True
@@ -125,12 +180,14 @@ async def _episodio_ideal(escenario, cfg, segundos, semilla):
 
 
 def recolectar(episodios, cfg, segundos=120, semilla0=0, escenarios=None,
-               mundo_nombre=None, mezcla=0.7):
+               mundo_nombre=None, mezcla=0.7, mundos=None):
     """Genera ejemplos y los añade al dataset.
 
-    Con `mundo_nombre` se entrena sobre el mapa dibujado por el usuario (con
-    variaciones), mezclado con escenarios al azar para que lo aprendido no
-    valga solo ahí."""
+    Con `mundos` (o `mundo_nombre`, uno solo) se entrena sobre esos mapas
+    con variaciones, mezclados con escenarios al azar para que lo aprendido
+    no valga solo ahí. Cada episodio sortea además las condiciones del
+    robot (ver `aleatorizar`)."""
+    mundos = list(mundos or ([mundo_nombre] if mundo_nombre else []))
     CARPETA.mkdir(parents=True, exist_ok=True)
     nuevo = not DATASET.exists()
     total, resumen = 0, []
@@ -144,15 +201,22 @@ def recolectar(episodios, cfg, segundos=120, semilla0=0, escenarios=None,
             if escenarios:
                 esc = escenarios[k % len(escenarios)]
             else:
-                esc = escenario_para(k, mundo_nombre, mezcla, rng)
+                esc = escenario_para(k, mundos, mezcla, rng)
             t0 = time.perf_counter()
             try:
-                ep = asyncio.run(_episodio_ideal(esc, cfg, segundos, semilla))
+                ep = asyncio.run(_episodio_ideal(esc, cfg, segundos, semilla, rng))
             except Exception as exc:
                 # Una noche entera de entrenamiento no se puede caer por un
                 # episodio raro: se anota y se sigue.
                 print(f"  [{k+1}/{episodios}] episodio descartado: "
                       f"{type(exc).__name__}: {exc}", flush=True)
+                continue
+            if ep.robot.recorrido < RECORRIDO_MINIMO_M:
+                # Atascado desde el principio: sus ejemplos dirían "adelante"
+                # con el robot quieto contra algo, y enseñarían a empujar.
+                print(f"  [{k+1}/{episodios}] {ep.mundo.nombre:22s} descartado: solo "
+                      f"{ep.robot.recorrido:.1f} m recorridos ({ep.robot.colisiones} choques)",
+                      flush=True)
                 continue
             filas = 0
             for m in ep.registro_ideal:
@@ -160,14 +224,18 @@ def recolectar(episodios, cfg, segundos=120, semilla0=0, escenarios=None,
                                 pol.caracteristicas(m, m.get("desvio_cm", 0) / 100)))
                 fila["accion"] = m["accion"]
                 fila["escenario"] = ep.mundo.nombre
-                fila["origen"] = "ideal"
+                # "ideal_dr": recorrido ideal con aleatorización de dominio y
+                # el simulador realista (latencia, SLAM con fallos, cámara
+                # nueva). Se distingue de lo recolectado antes del 2026-09-30.
+                fila["origen"] = "ideal_dr" if ep.condiciones else "ideal"
                 w.writerow(fila)
                 filas += 1
             total += filas
             resumen.append({"escenario": ep.mundo.nombre, "ejemplos": filas,
                             "recorrido_m": round(ep.robot.recorrido, 1)})
             print(f"  [{k+1}/{episodios}] {ep.mundo.nombre:22s} {filas:4d} ejemplos "
-                  f"({ep.robot.recorrido:5.1f} m, {time.perf_counter()-t0:4.1f} s)", flush=True)
+                  f"({ep.robot.recorrido:5.1f} m, {time.perf_counter()-t0:4.1f} s) "
+                  f"{ep.condiciones}", flush=True)
     print(f"-> {total} ejemplos nuevos en {DATASET}")
     return resumen
 
@@ -194,13 +262,19 @@ def espejar(x, accion_idx):
     return x, pol.ACCIONES.index(accion)
 
 
-def cargar_dataset(espejo=True):
+def cargar_dataset(espejo=True, origenes=("ideal_dr",)):
+    """`origenes`: de qué recolecciones se entrena. Por defecto solo las del
+    simulador realista (2026-09-30 en adelante): las anteriores se hicieron
+    con el explorador peleando el mando al piloto ideal, y tienen casi tantos
+    giros como avances. None = todo."""
     if not DATASET.exists():
         sys.exit(f"no hay datos todavía: correr --recolectar (falta {DATASET})")
     X, y, escenarios = [], [], set()
     with DATASET.open() as f:
         for fila in csv.DictReader(f):
             if fila["accion"] not in pol.ACCIONES:
+                continue
+            if origenes is not None and fila.get("origen") not in origenes:
                 continue
             x = [float(fila[c]) for c in pol.ENTRADAS]
             a_idx = pol.ACCIONES.index(fila["accion"])
@@ -220,7 +294,7 @@ def entrenar(epocas=60, lote=256, oculta=64, semilla=0):
     # En CPU a propósito: la rueda de PyTorch instalada (cu130) no trae
     # kernels para la GPU de esta Jetson, y esta red es diminuta.
     torch.set_num_threads(4)
-    X, y, escenarios = cargar_dataset()
+    X, y, escenarios = cargar_dataset(origenes=ORIGENES)
     if len(X) < 200:
         sys.exit(f"hacen falta más ejemplos ({len(X)}): correr --recolectar")
     torch.manual_seed(semilla)
@@ -348,7 +422,8 @@ def evaluar(episodios=4, cfg=None, segundos=90, semilla0=1000):
     return resumen
 
 
-def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epocas=80):
+def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epocas=80,
+                  mundos=None):
     """Entrena sin parar durante `horas`, guardando por el camino.
 
     Pensado para dejarlo corriendo: cada tanda recolecta, reentrena con TODO
@@ -366,8 +441,9 @@ def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epoca
         with registro.open("a") as f:
             f.write(linea + "\n")
 
-    anotar(f"=== entrenamiento de {horas} h | mapa: {mundo_nombre or 'solo aleatorios'} "
-           f"| mezcla {mezcla:.0%} | {por_tanda} episodios por tanda ===")
+    mundos = list(mundos or ([mundo_nombre] if mundo_nombre else []))
+    anotar(f"=== entrenamiento de {horas} h | mapas: {', '.join(mundos) or 'solo aleatorios'} "
+           f"| mezcla {mezcla:.0%} | {por_tanda} episodios por tanda | aleatorización de dominio ===")
     try:
         while time.time() < fin:
             tanda += 1
@@ -375,7 +451,7 @@ def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epoca
             anotar(f"--- tanda {tanda} (quedan {queda:.1f} h) ---")
             try:
                 recolectar(por_tanda, cfg, segundos, semilla0=tanda * 1000,
-                           mundo_nombre=mundo_nombre, mezcla=mezcla)
+                           mezcla=mezcla, mundos=mundos)
                 r = entrenar(epocas)
                 anotar(f"tanda {tanda}: {r['ejemplos']} ejemplos acumulados, "
                        f"acierto {r['acierto']*100:.1f}%")
@@ -389,7 +465,7 @@ def toda_la_noche(horas, cfg, segundos, mundo_nombre, mezcla, por_tanda=8, epoca
                 # saber cuál elegir. Ver simulador/historial.py.
                 try:
                     import historial as hist
-                    hist.registrar_modelo(copia, tanda=tanda, mundo=mundo_nombre,
+                    hist.registrar_modelo(copia, tanda=tanda, mundo=",".join(mundos) or None,
                                           mezcla=mezcla, segundos=segundos, **r)
                 except Exception as exc:
                     anotar(f"no se pudo fichar el modelo: {type(exc).__name__}: {exc}")
@@ -421,6 +497,11 @@ def main():
                    help="entrenar sin parar durante H horas (para dejarlo toda la noche)")
     p.add_argument("--mundo", metavar="NOMBRE",
                    help="mapa dibujado en el dashboard (simulador/mundos/NOMBRE.json)")
+    p.add_argument("--mundos", metavar="A,B,C",
+                   help="varios mapas: escenarios incluidos y/o dibujados, separados por "
+                        "comas; 'todos' = todos los que haya")
+    p.add_argument("--todos-los-datos", action="store_true",
+                   help="entrenar también con lo recolectado antes del simulador realista")
     p.add_argument("--mezcla", type=float, default=0.7,
                    help="fracción de episodios en ese mapa; el resto, aleatorios")
     p.add_argument("--por-tanda", type=int, default=8, help="episodios por tanda con --horas")
@@ -434,23 +515,32 @@ def main():
     cfg["autonomia"].update(sendero_activo=True, sendero_paja=True)
     cfg["autonomia"].setdefault("escala_velocidad", 0.5)
 
-    if a.mundo and not (MUNDOS_DIR / f"{a.mundo}.json").exists():
-        sys.exit(f"no existe el mapa {MUNDOS_DIR / (a.mundo + '.json')}\n"
-                 f"dibujalo y guardalo en el dashboard (pestaña Editor de mapas)")
+    global ORIGENES
+    if a.todos_los_datos:
+        ORIGENES = None
+    disponibles = mundos_disponibles()
+    mundos = [a.mundo] if a.mundo else []
+    if a.mundos:
+        mundos = disponibles if a.mundos == "todos" else [n.strip() for n in a.mundos.split(",") if n.strip()]
+    faltan = [n for n in mundos if n not in disponibles]
+    if faltan:
+        sys.exit(f"no existen: {', '.join(faltan)}\nhay: {', '.join(disponibles)}\n"
+                 f"(los mapas se dibujan y guardan en el dashboard, pestaña Editor de mapas)")
 
     if a.horas:
-        toda_la_noche(a.horas, cfg, a.segundos, a.mundo, a.mezcla, a.por_tanda, a.epocas)
+        toda_la_noche(a.horas, cfg, a.segundos, None, a.mezcla, a.por_tanda, a.epocas,
+                      mundos=mundos)
         return
     if a.todo:
         print("== 1. recolectando ==")
-        recolectar(a.episodios, cfg, a.segundos, mundo_nombre=a.mundo, mezcla=a.mezcla)
+        recolectar(a.episodios, cfg, a.segundos, mezcla=a.mezcla, mundos=mundos)
         print("== 2. entrenando ==")
         entrenar(a.epocas)
         print("== 3. evaluando ==")
         evaluar(max(2, a.episodios // 4), cfg, a.segundos)
         return
     if a.recolectar:
-        recolectar(a.recolectar, cfg, a.segundos, mundo_nombre=a.mundo, mezcla=a.mezcla)
+        recolectar(a.recolectar, cfg, a.segundos, mezcla=a.mezcla, mundos=mundos)
     if a.entrenar:
         entrenar(a.epocas)
     if a.evaluar:

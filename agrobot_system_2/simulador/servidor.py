@@ -28,6 +28,7 @@ import io
 import json
 import math
 import sys
+import time
 from pathlib import Path
 
 import cv2
@@ -67,7 +68,12 @@ class Simulacion:
         self.semilla = self.semilla if semilla is None else semilla
         self.ep = Episodio(self.escenario, self.cfg, DURACION_LARGA_S,
                            self.semilla, tiempo_real=True)
+        # El terreno se pinta una vez (3-5 s). Hecho aquí, en un hilo, y no
+        # en el primer fotograma: ahí congelaba la física y el WebSocket.
+        await asyncio.to_thread(self.ep.mundo.raster_suelo)
         self.enviados = 0
+        self._calidad_cache = (0.0, None)
+        self._fps_ref = (time.monotonic(), 0, 0.0)
         self.tarea = asyncio.create_task(self.ep._correr())
         for _ in range(100):         # esperar a que monte los módulos reales
             await asyncio.sleep(0.05)
@@ -84,6 +90,28 @@ class Simulacion:
             except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
                 self.tarea.cancel()
         self.tarea = None
+
+    def _fps_camara(self) -> float:
+        """Fotogramas que analizó el detector por segundo de reloj real."""
+        ahora = time.monotonic()
+        n = self.ep.frames_camara
+        t0, n0, fps = getattr(self, "_fps_ref", (ahora, n, 0.0))
+        if ahora - t0 >= 1.0:
+            fps = (n - n0) / (ahora - t0)
+            t0, n0 = ahora, n
+        self._fps_ref = (t0, n0, fps)
+        return round(fps, 1)
+
+    def _calidad_mapa(self) -> dict:
+        """Compara todas las celdas ocupadas contra todas las paredes: con
+        el mapa lleno son decenas de miles de distancias. A 10 Hz por
+        cliente era trabajo tirado; basta con recalcularla cada 2 s."""
+        ahora = time.monotonic()
+        t, valor = getattr(self, "_calidad_cache", (0.0, None))
+        if valor is None or ahora - t > 2.0:
+            valor = self.ep.slam.calidad_mapa(self.ep.mundo)
+            self._calidad_cache = (ahora, valor)
+        return valor
 
     def estado(self) -> dict:
         ep = self.ep
@@ -114,7 +142,16 @@ class Simulacion:
             "aprendizaje": ep.aprendizaje.resumen(),
             "slam": {**ep.slam.resumen((ep.robot.x, ep.robot.y, ep.robot.theta)),
                      "usar": ep.usar_slam, "ruido": ep.slam.ruido,
-                     "mapa": ep.slam.calidad_mapa(ep.mundo)},
+                     "fallos_casamiento": ep.slam.fallos_casamiento,
+                     "cierres": ep.slam.cierres,
+                     "mapa": self._calidad_mapa()},
+            "lidar_estado": {"caido": ep.slam.sin_lidar, "conexion": ep.fallos_lidar.conexion,
+                             "caidas": ep.fallos_lidar.caidas,
+                             "segundos_sin": round(ep.fallos_lidar.t_caido, 1),
+                             "edad_scan_s": round(ep.lidar.edad_scan_s(), 2)},
+            "camara_fps": self._fps_camara(),
+            "servo": round(ep.robot.servo),
+            "plantas_pisadas": r.plantas_pisadas,
             "ruta": [[round(float(x), 2), round(float(y), 2)] for x, y in ep.ruta[::3]],
             "recorrido_ideal": ep.modo_recorrido == "ideal",
             "filtro_ideal": ep.filtro_ideal,
@@ -155,14 +192,26 @@ def crear_app(sim: Simulacion) -> web.Application:
             pass
         return ws
 
+    def _ultimo_frame():
+        """El fotograma que vio el robot por última vez. Antes se renderizaba
+        otro distinto por petición, desde otro hilo y con el mismo generador
+        aleatorio que la física: ni era lo que analizaba el detector ni era
+        seguro. Solo si el robot aún no miró se renderiza uno."""
+        ep = sim.ep
+        frame = ep.ultimo_frame
+        if frame is None:
+            frame = ep.robot.mundo.camara(ep.robot.x, ep.robot.y, ep.robot.theta,
+                                          ep.geometria(), 320, 240)
+        return frame
+
     async def camara(_):
-        return _jpeg(await asyncio.to_thread(sim.ep.robot.frame, sim.ep.geometria(), 480, 360))
+        return _jpeg(_ultimo_frame(), calidad=85)
 
     async def sendero_vista(_):
         import sendero as sd
 
         def render():
-            frame = sim.ep.robot.frame(sim.ep.geometria(), 480, 360)
+            frame = _ultimo_frame()
             res = sim.ep.seguidor.vision.detectar(cv2, frame, sim.ep.cfg["autonomia"],
                                                   sim.ep.geometria())
             return sd.dibujar(cv2, frame, res)
@@ -181,15 +230,36 @@ def crear_app(sim: Simulacion) -> web.Application:
                                       (ep.robot.x, ep.robot.y, ep.robot.theta), cam, ep.traza)
         return _jpeg(img)
 
+    def _suelo_visor():
+        """El terreno pintado (el mismo que proyecta la cámara del robot),
+        recortado a los límites del mapa y sin las sombras horneadas: en el
+        3D las pone three.js según el sol. Tope de 4096 px, lo que admite
+        cualquier GPU."""
+        m = sim.ep.mundo
+        niveles, (x0r, y1r) = m.raster_suelo()
+        tex, res = niveles[0]
+        clave = (id(tex), res)
+        cache = getattr(sim, "_textura_visor", None)
+        if cache is not None and cache[0] == clave:
+            return cache[1]
+        x0, y0, x1, y1 = m.limites
+        c0, c1 = int((x0 - x0r) / res), int((x1 - x0r) / res)
+        f0, f1 = int((y1r - y1) / res), int((y1r - y0) / res)
+        img = np.ascontiguousarray(tex[f0:f1, c0:c1, :3])
+        escala = 4096 / max(img.shape[:2])
+        if escala < 1:
+            img = cv2.resize(img, None, fx=escala, fy=escala, interpolation=cv2.INTER_AREA)
+        sim._textura_visor = (clave, img)
+        return img
+
     async def textura_terreno(request):
         """El suelo del escenario como imagen, para el visor 3D.
 
-        Es la MISMA que ve la cámara del robot y el mapa 2D: bandas de paja,
-        plantas, humedad y piedras. Así el 3D no es una decoración aparte,
-        sino el terreno de verdad."""
-        px = int(request.query.get("px", 70))
-        img = await asyncio.to_thread(sim.ep.mundo.dibujo, px)
-        return _jpeg(img, calidad=88)
+        Es la MISMA que ve la cámara del robot: bandas de paja, plantas,
+        humedad y piedras. Así el 3D no es una decoración aparte, sino el
+        terreno de verdad."""
+        img = await asyncio.to_thread(_suelo_visor)
+        return _jpeg(img, calidad=90)
 
     async def relieve_terreno(request):
         """Mapa de relieve (normales) sacado del propio terreno.
@@ -197,20 +267,33 @@ def crear_app(sim: Simulacion) -> web.Application:
         Con esto la luz marca los surcos y la paja en vez de verse el suelo
         como una calcomanía plana, y no hace falta descargar ningún paquete
         de texturas."""
-        px = int(request.query.get("px", 70))
 
         def render():
-            base = sim.ep.mundo.dibujo(px)
+            base = _suelo_visor()
             gris = cv2.cvtColor(base, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
+            gris = cv2.GaussianBlur(gris, (0, 0), 1.2)
             gx = cv2.Sobel(gris, cv2.CV_32F, 1, 0, ksize=3)
             gy = cv2.Sobel(gris, cv2.CV_32F, 0, 1, ksize=3)
-            fuerza = 2.5
+            fuerza = 3.0
             n = np.dstack([-gx * fuerza, -gy * fuerza, np.ones_like(gris)])
             n /= np.linalg.norm(n, axis=2, keepdims=True)
             # Normales a color, como cualquier mapa de normales: RGB = XYZ.
             return ((n * 0.5 + 0.5) * 255).astype(np.uint8)[:, :, ::-1]
 
         return _jpeg(await asyncio.to_thread(render), calidad=88)
+
+    async def validar_mundo(request):
+        """El editor pregunta si el mapa sirve para entrenar."""
+        cuerpo = await request.json()
+        try:
+            m = mundo_mod.Mundo.desde_dict(cuerpo["mundo"])
+        except (KeyError, ValueError, TypeError) as exc:
+            return web.json_response({"error": f"mapa mal formado: {exc}"}, status=400)
+        if cuerpo.get("quitar_plantas_del_sendero"):
+            m.plantas = m._normalizar_plantas(mundo_mod._fuera_del_sendero(
+                m.plantas.tolist(), m.sendero.tolist(), m.ancho_sendero))
+        return web.json_response({"problemas": mundo_mod.validar(m),
+                                  "plantas": m.plantas.tolist()})
 
     async def geometria_mundo(_):
         m = sim.ep.mundo
@@ -341,10 +424,19 @@ def crear_app(sim: Simulacion) -> web.Application:
             ep.usar_slam = bool(cuerpo["usar_slam"])
         if "ruido" in cuerpo:
             ep.slam.ruido = max(0.0, min(3.0, float(cuerpo["ruido"])))
+        if "fallos_casamiento" in cuerpo:
+            ep.slam.fallos_casamiento = bool(cuerpo["fallos_casamiento"])
+        if "conexion" in cuerpo:
+            ep.fallos_lidar.cambiar(str(cuerpo["conexion"]))
+        if "cierres" in cuerpo:
+            ep.slam.cierres = bool(cuerpo["cierres"])
         if cuerpo.get("corregir"):
             ep.slam.corregir(ep.robot.x, ep.robot.y, ep.robot.theta)
         return web.json_response({"ok": True, "usar_slam": ep.usar_slam,
-                                  "ruido": ep.slam.ruido})
+                                  "ruido": ep.slam.ruido,
+                                  "fallos_casamiento": ep.slam.fallos_casamiento,
+                                  "conexion": ep.fallos_lidar.conexion,
+                                  "cierres": ep.slam.cierres})
 
     async def mapa_slam(_):
         """El mapa tal como lo está construyendo el SLAM, con las dos poses."""
@@ -468,6 +560,7 @@ def crear_app(sim: Simulacion) -> web.Application:
     app.router.add_get("/mundos", mundos)
     app.router.add_post("/mundos", mundos)
     app.router.add_get("/mapa_real/{nombre}", mundo_de_mapa_real)
+    app.router.add_post("/validar", validar_mundo)
     return app
 
 

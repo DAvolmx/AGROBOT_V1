@@ -2,32 +2,15 @@
 Patrullaje autónomo por waypoints.
 =================================
 
-El modo autónomo anterior solo levantaba una bandera y cargaba el modelo
-YOLO: el robot se quedaba quieto esperando que alguien lo condujera. Este
-módulo es la pieza que faltaba — el bucle que recorre el cultivo solo.
+Dos modos de navegación, con caída automática:
 
-Cómo funciona, y por qué así:
+  1. Nav2 (por defecto): planificación global + costmap + recovery behaviors.
+  2. Reactiva (fallback): si Nav2 no está o aborta un punto, el explorador
+     reactivo toma el mando con un rumbo objetivo hacia el waypoint.
 
-  · El recorrido son waypoints en el marco `map` de Nav2, grabados una vez
-    conduciendo el robot a mano. Se repiten en ciclo cerrado: al llegar al
-    último se vuelve al primero. No se calcula una ruta de cobertura porque
-    en un cultivo el recorrido útil lo decide el agricultor (por los surcos,
-    no por el área libre), y grabarlo es más fiable que inferirlo.
-
-  · La llegada se da por buena con lo primero que ocurra: Nav2 informa
-    éxito, o la pose en `map` queda a menos de WAYPOINT_TOL_M. La distancia
-    cubre el caso de que el resultado de la acción se pierda (Nav2
-    reiniciado a mitad de misión). Si Nav2 aborta —no encontró camino ni
-    tras sus maniobras de recuperación— se pasa al punto siguiente.
-
-  · El escaneo va por reloj propio (cada SCAN_PERIODO_S), no por waypoint.
-    Si fuera por waypoint, dos puntos juntos darían dos barridos seguidos y
-    un tramo largo se quedaría sin ninguno.
-
-  · Para escanear se CANCELA la meta primero. El barrido tiene que hacerse
-    con el robot quieto —un servo barriendo mientras el robot avanza da
-    fotos movidas— y mientras haya una meta viva Nav2 sigue publicando
-    /cmd_vel y pisaría el cero que mandamos.
+El recorrido son waypoints en el marco `map`, grabados conduciendo a mano.
+Se repiten en ciclo cerrado. El escaneo va por reloj propio (SCAN_PERIODO_S),
+no por waypoint.
 """
 import asyncio
 import json
@@ -52,24 +35,35 @@ DISTANCIA_AUTO_CM = 50
 TICK_AUTO_S = 0.2
 
 
+REACTIVE_TICK_S = 0.25
+REACTIVE_ARRIVE_M = 0.50
+REACTIVE_TIMEOUT_S = 120.0
+
+
 class PatrolController:
     """
-    Bucle de patrulla. Vive en el event loop del backend y habla con Nav2
-    por los callbacks que le pasa jetson_server, para no acoplarse ni al
-    puente de ROS ni al actuador.
+    Bucle de patrulla. Navega con Nav2 cuando está disponible; si no, cae
+    a navegación reactiva (explorador + rumbo objetivo hacia el waypoint).
     """
 
     def __init__(self, *, send_nav_goal, cancel_nav_goal, estado_meta, get_pose,
                  barrido, on_event, ruta_waypoints: Path,
-                 distancia_puntos=lambda: DISTANCIA_AUTO_CM):
+                 distancia_puntos=lambda: DISTANCIA_AUTO_CM,
+                 conducir=None, parar=None, distancias=None, edad_scan=None,
+                 get_costmap=None):
         self._distancia_puntos = distancia_puntos
-        self._send_nav_goal = send_nav_goal      # (x, y, theta_deg) -> bool
-        self._cancel_nav_goal = cancel_nav_goal  # ()
-        self._estado_meta = estado_meta          # () -> "en_curso" | "exito" | "abortada" | ...
-        self._get_pose = get_pose                # () -> {x, y, theta_deg}
-        self._barrido = barrido                  # corutina() — mueve el servo y vuelve
-        self._on_event = on_event                # (dict) — al dashboard
+        self._send_nav_goal = send_nav_goal
+        self._cancel_nav_goal = cancel_nav_goal
+        self._estado_meta = estado_meta
+        self._get_pose = get_pose
+        self._barrido = barrido
+        self._on_event = on_event
         self._ruta = ruta_waypoints
+        self._conducir = conducir
+        self._parar_robot = parar
+        self._distancias = distancias
+        self._edad_scan = edad_scan
+        self._get_costmap = get_costmap
 
         self.waypoints: list[dict] = []
         self.activo = False
@@ -78,16 +72,15 @@ class PatrolController:
         self.ultimo_escaneo = 0.0
         self.escaneos = 0
         self.estado = "detenido"
+        self.modo_nav = "nav2"
         self._tarea: asyncio.Task | None = None
         self._ultima_deteccion_escaneada = 0.0
-        # Un escaneo cancela la meta de Nav2 para parar el robot. Puede
-        # dispararlo el reloj o una detección de planta, que corre en otra
-        # tarea: `_ir_a` usa esto para esperar y reenviar la meta después.
         self._escaneando = False
         self._meta_cancelada = False
         self.auto_activa = False
         self._auto_ultima = None
         self._tarea_auto: asyncio.Task | None = None
+        self._intentos_reactivos = 0
 
         self._cargar()
 
@@ -296,13 +289,15 @@ class PatrolController:
         """Navega a un waypoint, intercalando los barridos que toquen.
 
         Devuelve "llegado" | "abortada" | "timeout" | "sin_nav2" | "detenido".
+        Si Nav2 falla, cae a navegación reactiva automáticamente.
         """
         i = self.indice % len(self.waypoints)
         if not await self._enviar(wp):
-            self.estado = "Nav2 no disponible"
-            self._emitir({"evento": "nav2_caido"})
-            return "sin_nav2"
+            self.modo_nav = "reactiva"
+            self._emitir({"evento": "nav2_caido", "fallback": "reactiva"})
+            return await self._ir_reactivo(wp)
 
+        self.modo_nav = "nav2"
         self.estado = "navegando"
         self._emitir({"evento": "rumbo_a", "indice": i, "waypoint": wp})
 
@@ -311,7 +306,7 @@ class PatrolController:
             await asyncio.sleep(TICK_S)
 
             if self._escaneando:
-                inicio = time.monotonic()     # el tiempo barriendo no cuenta
+                inicio = time.monotonic()
                 continue
 
             if time.monotonic() - self.ultimo_escaneo >= SCAN_PERIODO_S:
@@ -319,9 +314,9 @@ class PatrolController:
                 continue
 
             if self._meta_cancelada:
-                # La canceló un escaneo (del reloj o de una detección).
                 if not await self._enviar(wp):
-                    return "sin_nav2"
+                    self.modo_nav = "reactiva"
+                    return await self._ir_reactivo(wp)
                 inicio = time.monotonic()
                 continue
 
@@ -331,21 +326,106 @@ class PatrolController:
                 return "llegado"
 
             if estado in ("abortada", "rechazada", "cancelada"):
-                # Nav2 ya probó sus maniobras de recuperación (girar,
-                # retroceder, esperar) y no encontró camino. Antes la
-                # patrulla no se enteraba y el robot quedaba quieto hasta
-                # el timeout de 90 s.
-                self._emitir({"evento": "meta_abortada", "indice": i})
-                await asyncio.sleep(1.0)
-                return "abortada"
+                self._emitir({"evento": "meta_abortada", "indice": i, "fallback": "reactiva"})
+                self.modo_nav = "reactiva"
+                return await self._ir_reactivo(wp)
 
             if time.monotonic() - inicio > GOAL_TIMEOUT_S:
-                # No se aborta la misión: en un cultivo que un punto quede
-                # inalcanzable (barro, una rama caída) es normal, y plantarse
-                # ahí para siempre es peor que saltárselo.
                 self._emitir({"evento": "timeout", "indice": i})
                 self._cancel_nav_goal()
                 return "timeout"
+        return "detenido"
+
+    def _rumbo_a_wp(self, wp: dict):
+        """Ángulo relativo y distancia al waypoint, desde la pose actual."""
+        pose = self._get_pose()
+        if pose is None:
+            return None
+        dx = wp["x"] - pose.get("x", 0.0)
+        dy = wp["y"] - pose.get("y", 0.0)
+        dist = math.hypot(dx, dy)
+        if dist < 0.01:
+            return (0.0, dist)
+        ang_mundo = math.degrees(math.atan2(dy, dx))
+        ang_robot = pose.get("theta_deg", 0.0)
+        rel = (ang_mundo - ang_robot + 180) % 360 - 180
+        return (rel, dist)
+
+    async def _ir_reactivo(self, wp: dict) -> str:
+        """Navega hacia un waypoint con pulsos reactivos + costmap.
+
+        Es más lento y menos preciso que Nav2, pero funciona sin ROS.
+        El robot avanza si el waypoint está adelante, o gira hasta que lo esté.
+        """
+        if self._conducir is None or self._distancias is None:
+            self.estado = "sin Nav2 ni control reactivo"
+            return "sin_nav2"
+
+        i = self.indice % len(self.waypoints)
+        self.estado = f"reactiva → wp {i}"
+        self._emitir({"evento": "reactiva_inicio", "indice": i, "waypoint": wp})
+        self._intentos_reactivos += 1
+
+        inicio = time.monotonic()
+        while self.activo:
+            await asyncio.sleep(REACTIVE_TICK_S)
+
+            if self._escaneando:
+                inicio = time.monotonic()
+                continue
+
+            if time.monotonic() - self.ultimo_escaneo >= SCAN_PERIODO_S:
+                await self.escanear("periódico reactivo")
+                continue
+
+            if self._distancia_a(wp) <= REACTIVE_ARRIVE_M:
+                self._emitir({"evento": "llegado", "indice": i, "modo": "reactiva"})
+                return "llegado"
+
+            if time.monotonic() - inicio > REACTIVE_TIMEOUT_S:
+                self._emitir({"evento": "timeout_reactivo", "indice": i})
+                if self._parar_robot:
+                    self._parar_robot()
+                return "timeout"
+
+            if self._edad_scan and self._edad_scan() > 1.0:
+                self.estado = "reactiva: sin LIDAR"
+                if self._parar_robot:
+                    self._parar_robot()
+                continue
+
+            d = self._distancias()
+            rumbo = self._rumbo_a_wp(wp)
+            if rumbo is None:
+                continue
+            ang, dist = rumbo
+            avance_libre = 0.6
+
+            frente = d.get("adelante")
+            frente = math.inf if frente is None else frente
+
+            if abs(ang) < 30 and frente >= avance_libre:
+                self.estado = f"reactiva: avanzando ({dist:.1f}m)"
+                self._conducir("adelante")
+            elif abs(ang) >= 30:
+                lado = "izquierda" if ang > 0 else "derecha"
+                self.estado = f"reactiva: girando {lado} ({ang:+.0f}°)"
+                self._conducir(lado, False)
+            elif frente < avance_libre:
+                costmap = self._get_costmap() if self._get_costmap else None
+                if costmap and costmap._scan_count >= 3:
+                    centro, _ = costmap.hueco_libre()
+                    if centro is not None:
+                        lado = "izquierda" if centro > 0 else "derecha"
+                    else:
+                        lado = "izquierda" if (d.get("izquierda") or 0) >= (d.get("derecha") or 0) else "derecha"
+                else:
+                    lado = "izquierda" if (d.get("izquierda") or 0) >= (d.get("derecha") or 0) else "derecha"
+                self.estado = f"reactiva: esquivando {lado}"
+                self._conducir(lado, False)
+
+        if self._parar_robot:
+            self._parar_robot()
         return "detenido"
 
     def _distancia_a(self, wp: dict) -> float:
@@ -375,10 +455,12 @@ class PatrolController:
         return {
             "activo": self.activo,
             "estado": self.estado,
+            "modo_nav": self.modo_nav,
             "waypoints": self.waypoints,
             "indice": self.indice % len(self.waypoints) if self.waypoints else 0,
             "vueltas": self.vueltas,
             "escaneos": self.escaneos,
+            "intentos_reactivos": self._intentos_reactivos,
             "proximo_escaneo_s": round(restante if self.activo else SCAN_PERIODO_S, 1),
             "auto_activa": self.auto_activa,
             "distancia_auto_m": self._distancia_puntos(),

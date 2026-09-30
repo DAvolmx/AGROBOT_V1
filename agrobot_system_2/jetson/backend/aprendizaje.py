@@ -42,6 +42,12 @@ CIERRE_S = 3.0
 MAX_FRACASOS = 2
 # Cuánto se espera, tras aplicar una maniobra, para juzgar si funcionó.
 JUICIO_S = 6.0
+# Una corrección son unos pocos pulsos ("atrás, atrás, giro largo, adelante").
+# Mantener pulsado un botón del dashboard repite el pulso cada 110 ms, así
+# que una sesión de manejo manual quedaba guardada como "maniobra" de cientos
+# de pasos (30 de 34, hasta 1009, el 2026-09-30) que el robot repetía entera
+# al verse en esa situación: minutos girando. Más de esto no es una lección.
+MAX_PASOS = 40
 
 
 def _tramo(valor, tramos=TRAMOS_M) -> str:
@@ -121,6 +127,7 @@ class Aprendizaje:
         self.ruta = Path(ruta)
         self.autoguardar = autoguardar
         self.maniobras: dict[str, list[Maniobra]] = {}
+        self.descartadas = []          # demasiado largas: se guardan, no se usan
         self.historial = []            # cada intervención cerrada, para revisar
         self._abierta = None           # intervención en curso
         self._ultimo_toque = 0.0
@@ -137,13 +144,19 @@ class Aprendizaje:
             return
         for d in datos.get("maniobras", []):
             m = Maniobra.desde_dict(d)
+            if len(m.pasos) > MAX_PASOS:
+                # No se borran: quedan en el fichero para revisarlas a mano.
+                self.descartadas.append(m.a_dict())
+                continue
             self.maniobras.setdefault(m.firma, []).append(m)
+        self.descartadas += datos.get("descartadas", [])
         self.historial = datos.get("historial", [])[-500:]
 
     def guardar(self):
         self.ruta.parent.mkdir(parents=True, exist_ok=True)
         self.ruta.write_text(json.dumps({
             "maniobras": [m.a_dict() for lista in self.maniobras.values() for m in lista],
+            "descartadas": self.descartadas,
             "historial": self.historial[-500:],
         }, indent=1, ensure_ascii=False))
 
@@ -173,6 +186,15 @@ class Aprendizaje:
         if not pasos:
             self._abierta = None
             return None
+        if len(pasos) > MAX_PASOS:
+            # Manejo manual largo, no una corrección: se anota y no se aprende.
+            self.historial.append({"t": round(time.time()), "firma": self._abierta["firma"],
+                                   "pasos": len(pasos), "estado": self._abierta["estado"],
+                                   "descartada": f"más de {MAX_PASOS} pasos"})
+            self._abierta = None
+            if self.autoguardar:
+                self.guardar()
+            return None
         m = Maniobra(self._abierta["firma"], pasos)
         lista = self.maniobras.setdefault(m.firma, [])
         igual = next((x for x in lista if [p["accion"] for p in x.pasos]
@@ -193,7 +215,8 @@ class Aprendizaje:
     # -------------------------------------------------------------- uso
     def consultar(self, sensores: dict, estado: str = "") -> Maniobra | None:
         """¿Me enseñaron algo para esta situación?"""
-        candidatas = [m for m in self.maniobras.get(firma(sensores, estado), []) if m.fiable]
+        candidatas = [m for m in self.maniobras.get(firma(sensores, estado), [])
+                      if m.fiable and len(m.pasos) <= MAX_PASOS]
         if not candidatas:
             return None
         return max(candidatas, key=lambda m: (m.confianza, m.exitos))

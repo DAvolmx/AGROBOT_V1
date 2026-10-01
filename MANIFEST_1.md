@@ -4408,3 +4408,27 @@ antiguo `LoRa_Wan` y no se unían a `LoRa-Wan`.
   normal en todas, tj 51–67 °C, RAM máx 7002 MB, consumo medio 8,2 W.
 - **Informe**: `tools/informe_sesion.py` → `logs/sesion_20261001/informe.html`
   (publicado como artifact).
+
+---
+
+## ENTRADA HISTORIAL: 2026-10-01 (7) — Despliegue de t027 y ajustes de sistema
+
+- **Política desplegada: `politica_20261001_1255_t027.pt`** (validación 12,81
+  frente a 21,03 de tanda048), autorizado por el usuario. Copiada a
+  `~/.agrobot/aprendizaje/politica.pt` (la que carga el backend al arrancar)
+  y a `jetson/backend/politica.pt`. Respaldo:
+  `~/.agrobot/aprendizaje/politica_desplegada_hasta_20261001.pt`. Backend
+  reiniciado (kill → `Restart=always`); `backend.log`: "política cargada".
+- **`agrobot-rendimiento.service` instalado y activo**: solo `jetson_clocks
+  --fan` (CPU 1,51 GHz, GPU 624,75 MHz, EMC 2133 MHz fijos). Se sacó
+  `nvpmodel -m 0` porque pide confirmar un reinicio por teclado y el servicio
+  fallaba; 15 W es el modo por defecto del perfil y se aplica al arrancar.
+- **WiFi sin ahorro de energía** (`zz-agrobot-wifi-sin-ahorro.conf`
+  instalado): latencia al router 4 ms de media, 10 ms de máximo (antes picos
+  de 1–2,7 s).
+- **Registros del sistema persistentes**: `/etc/systemd/journald.conf.d/
+  agrobot-persistente.conf` (copia en `jetson/systemd/etc/...`): Storage=
+  persistent, 500 MB, 1 mes. Antes eran volátiles y tras un apagado de golpe
+  no quedaba rastro.
+- Al matar el backend aparece un Traceback de `publish_imu` (publica cuando
+  rclpy ya se cerró): inofensivo, solo en el apagado.

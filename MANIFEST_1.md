@@ -4366,3 +4366,45 @@ antiguo `LoRa_Wan` y no se unían a `LoRa-Wan`.
   de integración importando el backend sin ROS con un enlace falso.
 - Pendiente: reiniciar el backend (sudo) para activarlo; calibrar en el
   terreno los umbrales (el `k` se aprende solo).
+
+---
+
+## ENTRADA HISTORIAL: 2026-10-01 (6) — Entrenamiento largo, validación y robustez de la sesión
+
+- **Entrenamiento** 12:55–16:32 UTC (`logs/entrenamiento_20261001.log`):
+  29 tandas sin fallos, 290 episodios (20 descartados), 280 796 → 418 218
+  ejemplos, acierto 80,7–82,9 %. 12 mapas, mezcla 0,8, 10 episodios/tanda,
+  150 s. Simulador con freno activo (75 % de episodios frena en 0,4–1,5 m/s²,
+  25 % desliza como antes), giro 0,45–0,80 y ruido de IMU medido.
+- **Validación** (mismo banco y semillas, simulador nuevo; menos es mejor):
+  tanda048 (desplegado) **21,03** · `politica_20261001_1255_t027.pt`
+  **12,81** · t029 23,46 · t006 18,91. **Ganador: t027.** Ojo: las
+  validaciones anteriores al 2026-10-01 en `modelos.json` son con el
+  simulador viejo y NO son comparables con estas.
+- **Despliegue PENDIENTE**: el sistema de permisos bloqueó cambiar el modelo
+  y reiniciar el backend sin confirmación del usuario. Comando en el informe.
+- **OOM**: el entrenamiento del 2026-09-30 murió por OOM a los 80 min
+  (kern.log 18:47). Ahora: `tools/supervisor_entrenamiento.sh` (relanza
+  siguiendo la numeración), `cargar_dataset` con `array` en vez de listas,
+  `oom_score_adj` 1000 en entrenamiento y validación (muere eso, no el
+  backend). La validación de 4 modelos en un proceso llegó a 5,7 GB y fue
+  matada: `historial.py --validar` ahora usa un proceso por modelo.
+- **Mediciones con el robot parado** (`logs/sesion_20261001/mediciones/`):
+  LIDAR 9,98 Hz, ruido 3,3 mm, 1,8 % sin retorno (dentro del rango simulado;
+  los atípicos eran una persona moviéndose). IMU 19 Hz, ruido acc 0,011 g
+  long / 0,045 g vertical, giro 0,5 °/s → `simulador/robot.py`. C3 estado
+  10,8 Hz (p95 152 ms). LoRa V3 0 % pérdida.
+- **Firmware**: `dt` de la rampa topado a 50 ms (un loop trabado daba tirón a
+  fondo); `tests/comportamiento_test.cpp` compila el .ino REAL con stubs que
+  registran pines y reloj (17/17), integrado en `verificar.sh`. Pendiente
+  cargar en la C3.
+- **Rendimiento**: MAXN SUPER no disponible (la placa arranca con
+  `nvpmodel_p3767_0003.conf`, sin super; requiere reflashear).
+  `agrobot-rendimiento.service` ahora = 15 W + `jetson_clocks --fan`;
+  el ahorro WiFi se anula con `zz-agrobot-wifi-sin-ahorro.conf` (el
+  `default-wifi-powersave-on.conf` de Ubuntu pisaba al `99-*`). Ambos
+  pendientes de instalar con sudo.
+- **Vigía** `tools/vigia_sesion.py`: 59 muestras 12:56–17:50, seguridad
+  normal en todas, tj 51–67 °C, RAM máx 7002 MB, consumo medio 8,2 W.
+- **Informe**: `tools/informe_sesion.py` → `logs/sesion_20261001/informe.html`
+  (publicado como artifact).

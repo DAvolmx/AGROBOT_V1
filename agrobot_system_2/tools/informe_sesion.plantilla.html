@@ -1,0 +1,190 @@
+<title>AgroBot · Sesión del 1 de octubre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Informe técnico de campo: columna de lectura con tablas de datos; acento color tierra húmeda,
+   verde hoja solo para "bien". */
+:root {{
+  --bg: #f3f4ef; --surface: #fbfbf8; --ink: #1d2420; --muted: #5d665f; --line: #d5d9cf;
+  --accent: #8a5a2b; --accent-soft: #efe3d3; --ok: #2f6b3f; --ok-soft: #dcebdc; --warn: #8a6100; --warn-soft: #f3e6c4;
+  --crit: #9b2c22; --crit-soft: #f4d9d4;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}}
+@media (prefers-color-scheme: dark) {{ :root:not([data-theme="light"]) {{
+  --bg: #141815; --surface: #1b201c; --ink: #e6e9e3; --muted: #9aa39b; --line: #2d342e;
+  --accent: #d39a62; --accent-soft: #3a2c1d; --ok: #7cc28c; --ok-soft: #1f3324; --warn: #e2b54d; --warn-soft: #3a2f14;
+  --crit: #ee8a7f; --crit-soft: #3d1f1c; color-scheme: dark; }} }}
+:root[data-theme="dark"] {{
+  --bg: #141815; --surface: #1b201c; --ink: #e6e9e3; --muted: #9aa39b; --line: #2d342e;
+  --accent: #d39a62; --accent-soft: #3a2c1d; --ok: #7cc28c; --ok-soft: #1f3324; --warn: #e2b54d; --warn-soft: #3a2f14;
+  --crit: #ee8a7f; --crit-soft: #3d1f1c; color-scheme: dark; }}
+body {{ background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); }}
+.pagina {{ max-width: 960px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 64px; display: grid; gap: 44px; }}
+header {{ display: grid; gap: 10px; border-bottom: 2px solid var(--ink); padding-bottom: 22px; }}
+.eyebrow {{ font: 600 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }}
+h1 {{ font: 800 clamp(30px, 5vw, 46px)/1.05 var(--display); margin: 0; text-wrap: balance; letter-spacing: -.01em; }}
+h2 {{ font: 700 24px/1.2 var(--display); margin: 0; text-wrap: balance; }}
+h3 {{ font: 700 17px/1.3 var(--display); margin: 0; }}
+p {{ margin: 0; max-width: 68ch; }}
+.lead {{ font-size: 18px; color: var(--ink); max-width: 70ch; }}
+.meta {{ font: 13px/1.5 var(--mono); color: var(--muted); }}
+section {{ display: grid; gap: 16px; }}
+.cifras {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }}
+.cifra {{ background: var(--surface); border: 1px solid var(--line); padding: 14px 16px; display: grid; gap: 4px; }}
+.cifra b {{ font: 600 26px/1.1 var(--mono); font-variant-numeric: tabular-nums; }}
+.cifra span {{ font-size: 13px; color: var(--muted); }}
+.veredicto {{ border-left: 4px solid var(--ok); background: var(--ok-soft); padding: 14px 18px; display: grid; gap: 6px; }}
+.veredicto.aviso {{ border-color: var(--warn); background: var(--warn-soft); }}
+figure.grafico {{ margin: 0; background: var(--surface); border: 1px solid var(--line); padding: 12px; }}
+figure.grafico svg {{ width: 100%; height: auto; display: block; }}
+figure.grafico figcaption {{ font-size: 13px; color: var(--muted); padding-top: 6px; }}
+svg .grid {{ stroke: var(--line); stroke-width: 1; }}
+svg .tick {{ fill: var(--muted); font: 11px var(--mono); }}
+svg .lbl {{ fill: var(--ink); font: 600 12px var(--mono); }}
+svg .line {{ fill: none; stroke: var(--accent); stroke-width: 2.2; }}
+svg .area {{ fill: var(--accent-soft); stroke: none; }}
+svg .dot {{ fill: var(--accent); }}
+.tabla {{ overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }}
+table {{ border-collapse: collapse; width: 100%; font-size: 14px; }}
+th, td {{ padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }}
+thead th {{ font: 600 12px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); white-space: nowrap; }}
+td.num, th.num {{ text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }}
+tbody tr:last-child th, tbody tr:last-child td {{ border-bottom: 0; }}
+tr.gana th, tr.gana td {{ background: var(--ok-soft); }}
+td.total {{ font-weight: 600; }}
+.chip {{ display: inline-block; margin-left: 8px; font: 600 11px/1.6 var(--mono); padding: 0 7px; border: 1px solid currentColor; color: var(--muted); border-radius: 3px; vertical-align: 1px; }}
+tr.gana .chip {{ color: var(--ok); }}
+.dos {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }}
+.dos > * {{ min-width: 0; }}
+.cambios {{ display: grid; gap: 18px; }}
+.cambio {{ display: grid; grid-template-columns: 150px 1fr; gap: 18px; padding-top: 16px; border-top: 1px solid var(--line); }}
+.cambio > div {{ min-width: 0; display: grid; gap: 8px; }}
+.cambio ul, .lista {{ margin: 0; padding-left: 18px; display: grid; gap: 4px; }}
+.area-tag {{ font: 600 12px/1.4 var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }}
+.salud {{ list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }}
+.salud li {{ display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dotted var(--line); padding-bottom: 4px; }}
+.salud .k {{ font-family: var(--mono); }} .salud .v {{ color: var(--muted); text-align: right; }}
+.fotos {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }}
+.fotos figure {{ margin: 0; display: grid; gap: 6px; }}
+.fotos img {{ width: 100%; border: 1px solid var(--line); display: block; }}
+.fotos figcaption {{ font: 12px var(--mono); color: var(--muted); }}
+.pendiente {{ counter-reset: p; display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }}
+.pendiente li {{ background: var(--surface); border: 1px solid var(--line); padding: 12px 16px; display: grid; gap: 4px; }}
+.pendiente li b {{ font-family: var(--display); }}
+code {{ font: 13px var(--mono); background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }}
+.incidentes td:first-child {{ white-space: nowrap; font-family: var(--mono); font-size: 13px; }}
+@media (max-width: 620px) {{ .cambio {{ grid-template-columns: 1fr; gap: 6px; }} }}
+</style>
+
+<div class="pagina">
+<header>
+  <span class="eyebrow">AgroBot · informe de sesión</span>
+  <h1>Sesión del 1 de octubre de 2026</h1>
+  <p class="lead">Red fija y portátil, firmware de motores nuevo, detección de patinaje con modo seguro, y un entrenamiento largo de la política de navegación con el simulador ajustado al chasis nuevo. El robot quedó parado y vigilado mientras entrenaba.</p>
+  <p class="meta">Entrenamiento {inicio} → {fin} UTC · vigilancia {v0}–{v1} UTC · Jetson Orin Nano</p>
+</header>
+
+<section>
+  <h2>Resultado del entrenamiento</h2>
+  <div class="cifras">
+    <div class="cifra"><b>{tandas}</b><span>tandas completas, sin fallos</span></div>
+    <div class="cifra"><b>{episodios}</b><span>episodios simulados ({descartados} descartados por recorrido corto)</span></div>
+    <div class="cifra"><b>{ej1}</b><span>ejemplos de entrenamiento (empezó con {ej0})</span></div>
+    <div class="cifra"><b>{acierto} %</b><span>acierto de validación de la última tanda</span></div>
+  </div>
+  <figure class="grafico">
+    {grafico}
+    <figcaption>Acierto de validación por tanda (oscila entre {amin} % y {amax} %). El acierto por sí solo no elige el modelo: lo elige la validación en escenarios, más abajo.</figcaption>
+  </figure>
+  <div class="dos">
+    <div class="tabla"><table class="evals"><thead><tr><th scope="col">Tanda</th><th scope="col" class="num">Desvío (cm)</th><th scope="col" class="num">Pisadas</th></tr></thead><tbody>{evals}</tbody></table></div>
+    <p>Cada 3 tandas el entrenador compara el robot <i>sin</i> la política contra el robot <i>con</i> ella en dos episodios. La flecha va de sin política a con política: en la mayoría la política reduce el desvío del sendero y las plantas pisadas. Son evaluaciones cortas y ruidosas; la decisión se toma con la validación completa.</p>
+  </div>
+  <h3>Validación: mismo banco de 5 escenarios y mismas semillas (menos puntos es mejor)</h3>
+  {validacion}
+  <div class="veredicto aviso"><b>Modelo ganador: {ganador}</b><p>El modelo anterior (tanda048) se volvió a validar con el simulador nuevo para que la comparación sea justa: con el freno activo y la IMU medida rinde mucho peor que los 8,08 puntos que sacaba con el simulador viejo, que es justo por qué hacía falta reentrenar.</p></div>
+</section>
+
+<section>
+  <h2>Qué se cambió hoy</h2>
+  <div class="cambios">
+    <div class="cambio"><span class="area-tag">Red</span><div>
+      <p>El router DIR-615 pasó de punto de acceso a router propio (192.168.0.1) con IP fijas por equipo, una sola red WiFi <code>LoRa_Wan</code> en canal 1 fijo, y salida a internet por cable con el WiFi <code>LORA</code> configurado como respaldo.</p>
+      <ul><li>Pi 192.168.0.10 (cable) y .20 (WiFi) · Jetson .142 · gateway Heltec .11.</li>
+      <li>El Heltec reenvía a la Pi y ChirpStack recibe sus estadísticas cada 30 s.</li>
+      <li>Tailscale en Jetson y Pi para ver los dashboards desde cualquier lugar.</li>
+      <li>Clave en el dashboard del robot (usuario <code>agrobot</code>).</li></ul></div></div>
+    <div class="cambio"><span class="area-tag">Firmware C3</span><div>
+      <ul><li><b>Freno activo:</b> al parar, el puente H pone los motores en corto en vez de dejarlos sueltos.</li>
+      <li><b>Traseros de apoyo:</b> 60 % del duty del delantero en recta y 85 % en giro, sin pulsos de arranque, rueda libre si no aportan, protección térmica estimada.</li>
+      <li><b>Rampa de aceleración</b> (subir en ~0,4 s, frenar inmediato) y <b>servo suave</b> a 90 °/s.</li>
+      <li>Test nuevo que compila el <code>.ino</code> real y comprueba todo lo anterior: 17/17. Encontró un tirón posible si el loop se trababa; corregido.</li></ul></div></div>
+    <div class="cambio"><span class="area-tag">Seguridad</span><div>
+      <ul><li><b>Detección de patinaje y atasco</b> al estilo de los róveres de Marte: compara la velocidad ordenada con la medida por el LIDAR; recorta la velocidad si patina.</li>
+      <li><b>Modo seguro</b> con tres niveles (normal, precaución, seguro): ante atasco, LIDAR o C3 caídos, EKF corrupto o temperatura alta detiene la autonomía, avisa al dashboard y a Telegram, y exige rearme manual.</li>
+      <li>Probado con 11 pruebas automáticas y una prueba de integración del backend.</li></ul></div></div>
+    <div class="cambio"><span class="area-tag">Rendimiento</span><div>
+      <ul><li>La detección de plagas corre en la GPU (32 ms por imagen contra 463 en CPU) y pasó de 4 a 10 inferencias por segundo.</li>
+      <li>MAXN SUPER no está disponible en esta placa sin reflashear; se preparó un servicio de 15 W con relojes fijos.</li></ul></div></div>
+    <div class="cambio"><span class="area-tag">Simulador</span><div>
+      <ul><li>Freno activo: 75 % de los episodios frenan en 10–40 cm, 25 % deslizan como antes.</li>
+      <li>Giro con traseros de apoyo y ruido de IMU medido hoy en el robot.</li></ul></div></div>
+    <div class="cambio"><span class="area-tag">Entrenamiento</span><div>
+      <ul><li>El entrenamiento del 30 de septiembre murió por falta de memoria a los 80 minutos. Ahora un supervisor lo relanza, el dataset se carga en arreglos compactos y el sistema mata primero al entrenamiento, nunca al backend del robot.</li>
+      <li>La validación corre un proceso por modelo.</li></ul></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Mediciones con el robot parado</h2>
+  <div class="tabla"><table>
+    <thead><tr><th scope="col">Sensor</th><th scope="col">Medido</th><th scope="col">Uso</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">LIDAR</th><td>9,98 Hz, variación 2,9 ms · ruido 3,3 mm en superficies quietas · 1,8 % sin retorno</td><td>Dentro del rango que ya simula (ruido base ×1 a ×3). Las lecturas raras eran una persona moviéndose, no el sensor.</td></tr>
+      <tr><th scope="row">IMU</th><td>19 Hz · sesgo del giro 0,02 °/s · ruido 0,5 °/s (cabeceo) · acelerómetro 0,011 g longitudinal, 0,045 g vertical</td><td>Simulador ajustado: el ruido vertical y el del giro estaban 4 y 1,7 veces bajos.</td></tr>
+      <tr><th scope="row">C3</th><td>Estado a 10,8 Hz, el 95 % en menos de 152 ms · BLE y WiFi activos</td><td>Coincide con la latencia ya simulada.</td></tr>
+      <tr><th scope="row">LoRa V3</th><td>0 % de pérdida</td><td>Sin cambios.</td></tr>
+    </tbody></table></div>
+</section>
+
+<section>
+  <h2>Vigilancia de la sesión</h2>
+  <p>{muestras} revisiones automáticas cada 5 minutos, con foto de la cámara en cada una. El modo seguro estuvo en <b>normal</b> en {normal} de {muestras}.</p>
+  <div class="cifras">
+    <div class="cifra"><b>{tjmed} °C</b><span>temperatura media de la Jetson ({tjmin}–{tjmax} °C)</span></div>
+    <div class="cifra"><b>{rammed} MB</b><span>RAM media en uso (máximo {rammax} MB de 7546)</span></div>
+    <div class="cifra"><b>{potmed} W</b><span>consumo medio (máximo {potmax} W)</span></div>
+    <div class="cifra"><b>{gpumed} %</b><span>uso medio de la GPU</span></div>
+  </div>
+  <div class="dos">
+    <div><h3>Salud de cada parte</h3><ul class="salud">{salud}</ul>
+    <p class="meta">La C3 y la LoRa V3 estuvieron apagadas a propósito (robot parado). "Radio" es la tarjeta WiFi: avisó por temperatura en algunas revisiones.</p></div>
+    <div class="fotos">{fotos}</div>
+  </div>
+</section>
+
+<section>
+  <h2>Incidentes y cómo se resolvieron</h2>
+  <div class="tabla"><table class="incidentes"><thead><tr><th scope="col">Cuándo</th><th scope="col">Qué pasó</th><th scope="col">Solución</th></tr></thead><tbody>
+    <tr><td>30 sep 18:47</td><td>El entrenamiento de 8 h murió por falta de memoria en la tanda 1.</td><td>Supervisor, carga compacta y prioridad de sacrificio. Hoy: 29 tandas sin una caída.</td></tr>
+    <tr><td>1 oct, 03:30</td><td>La Jetson perdía el router: el cliente WiFi del router buscaba <code>LORA</code> sin parar y abandonaba su canal.</td><td>Cliente WiFi apagado mientras <code>LORA</code> no exista. 0 caídas desde entonces.</td></tr>
+    <tr><td>1 oct, madrugada</td><td>Una IP repetida en dos reservas tumbó el DNS y el DHCP del router.</td><td>Reserva quitada; regla documentada: nunca dos reservas con la misma IP.</td></tr>
+    <tr><td>1 oct 17:49</td><td>La validación de 4 modelos en un proceso llegó a 5,7 GB y el sistema la detuvo. El backend siguió vivo.</td><td>Un proceso por modelo.</td></tr>
+  </tbody></table></div>
+</section>
+
+<section>
+  <h2>Lo que queda por hacer</h2>
+  <ul class="pendiente">
+    <li><b>Desplegar el modelo ganador (t027).</b><p>Quedó validado pero no desplegado: cambiar el modelo y reiniciar el backend del robot requiere tu confirmación. Se guarda copia del anterior para volver atrás.</p></li>
+    <li><b>Cargar el firmware actualizado en la C3.</b><p>Lleva el tope de la rampa ante un loop trabado. Desde el Arduino IDE como la vez anterior.</p></li>
+    <li><b>Instalar el servicio de rendimiento y quitar el ahorro de energía del WiFi.</b><p>Requiere <code>sudo</code>; los comandos están en el MANIFEST del 1 de octubre.</p></li>
+    <li><b>Medir en el robot real.</b><p>Distancia de frenado con el freno activo, rpm de una rueda delantera y una trasera al mismo PWM (ajusta el 60 % de los traseros) y velocidad real al 100 %.</p></li>
+    <li><b>Probar el modo seguro moviendo el robot.</b><p>Los umbrales son de partida; la eficiencia normal la aprende solo andando.</p></li>
+    <li><b>Cambiar las claves por defecto</b> (<code>12345678</code>, admin/admin) después de la presentación.</li>
+  </ul>
+</section>
+</div>

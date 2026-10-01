@@ -2679,8 +2679,60 @@ async def training_log_correction_handler(request: web.Request):
     return web.json_response({"ok": True})
 
 
+# =============================================
+# ===== CLAVE DEL DASHBOARD =====
+# =============================================
+# Sin esto cualquiera en la red (o por Tailscale) podía mover el robot. La
+# clave vive FUERA del repo; si el archivo no existe el dashboard queda
+# abierto como antes, para no dejar a nadie fuera por un despliegue a medias.
+# El navegador la pide una vez (Basic) y desde ahí vale una cookie de sesión,
+# que es lo que lleva el WebSocket: no todos los navegadores reenvían el
+# Basic en el handshake de /ws. Lo local (127.0.0.1: tools/sensores.py, tests)
+# no la necesita.
+CLAVE_DASHBOARD_PATH = Path(os.environ.get(
+    "AGROBOT_CLAVE_DASHBOARD", Path.home() / ".config/agrobot/clave_dashboard"))
+USUARIO_DASHBOARD = "agrobot"
+COOKIE_SESION = "agrobot_sesion"
+
+
+def _leer_clave_dashboard() -> str:
+    try:
+        return CLAVE_DASHBOARD_PATH.read_text().strip()
+    except OSError:
+        return ""
+
+
+def _middleware_clave(clave: str):
+    import base64, hashlib, hmac, secrets
+    esperado = "Basic " + base64.b64encode(f"{USUARIO_DASHBOARD}:{clave}".encode()).decode()
+    # Token derivado de la clave + sal de este arranque: cambiar la clave o
+    # reiniciar el backend invalida las sesiones viejas.
+    token = hashlib.sha256((secrets.token_hex(16) + clave).encode()).hexdigest()
+
+    @web.middleware
+    async def exigir_clave(request: web.Request, handler):
+        if request.remote in ("127.0.0.1", "::1"):
+            return await handler(request)
+        if hmac.compare_digest(request.cookies.get(COOKIE_SESION, ""), token):
+            return await handler(request)
+        if hmac.compare_digest(request.headers.get("Authorization", ""), esperado):
+            resp = await handler(request)
+            if not resp.prepared:
+                resp.set_cookie(COOKIE_SESION, token, httponly=True, samesite="Strict")
+            return resp
+        return web.Response(status=401, text="Clave requerida",
+                            headers={"WWW-Authenticate": 'Basic realm="AgroBot"'})
+    return exigir_clave
+
+
 def create_app() -> web.Application:
-    app = web.Application()
+    clave = _leer_clave_dashboard()
+    if clave:
+        app = web.Application(middlewares=[_middleware_clave(clave)])
+    else:
+        print(f"[seguridad] SIN clave de dashboard ({CLAVE_DASHBOARD_PATH} no existe): "
+              f"cualquiera en la red puede mover el robot")
+        app = web.Application()
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/video", video_handler)
     app.router.add_post("/api/video/record", video_record_handler)

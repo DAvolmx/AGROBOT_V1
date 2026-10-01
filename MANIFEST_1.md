@@ -184,10 +184,10 @@ cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
 - Robot: 40 cm de largo × 35 cm de ancho. Sin encoders.
 
 ### Pendiente, por prioridad
-1. Freno activo en firmware (ambos pines del TA6586 en alto al parar).
+1. ~~Freno activo en firmware~~ — **hecho en código el 2026-10-01** (`FRENO_ACTIVO`); falta cargarlo en la C3.
 2. Medir velocidad real al 100 % y alinear `max_v_mps` con `V_MAX`.
 3. Parachoques físico con finales de carrera directo al C3.
-4. Seguridad: clave del AP `12345678`, API sin autenticación.
+4. Seguridad: clave del AP `12345678`. La API ya admite clave (2026-10-01, archivo `~/.config/agrobot/clave_dashboard`); falta crear el archivo y reiniciar el backend.
 5. Arreglar `agrobot_navigation.launch.py`.
 6. Odometría visual: webcam **midiendo pero sin calibrar ni fusionar**;
    cámara de profundidad **preparada, falta comprarla** (ver arriba).
@@ -4257,3 +4257,29 @@ antiguo `LoRa_Wan` y no se unían a `LoRa-Wan`.
 **Archivos:** `agrobot_system_2/jetson/backend/jetson_server.py`,
 `agrobot_system_2/docs/RED_E_IPS.md` (nuevo), `agrobot_system_2/README.md`,
 `MANIFEST_1.md`, `.gitignore`. Los respaldos `respaldos/dir615_*.json` quedan FUERA de git (contienen la clave del Wi-Fi).
+
+---
+
+## ENTRADA HISTORIAL: 2026-10-01 (2) — Freno activo, clave del dashboard, reserva de WAN
+
+- **Freno activo** (`firmware/esp32c3_actuator/esp32c3_actuator.ino`): rueda
+  parada = FI=BI=HIGH (freno del TA6586) en vez de LOW (rueda libre).
+  Constante `FRENO_ACTIVO`. Compila con arduino-cli 1.5.1 + esp32 3.3.11
+  (95 % de la flash: BLE+WiFi deja poco margen). **Pendiente cargarlo** (la C3
+  no estaba por USB en la Jetson; el usuario lo sube desde Windows).
+- Corrección a la auditoría del mismo día: el backend tiene `max_v_mps` 1,5,
+  pero el firmware recorta a `V_MAX` 0,55 m/s / `OMEGA_MAX` 1,5 rad/s; lo que
+  cambia es que el 100 % de PWM llega con menos recorrido del mando.
+- **Clave del dashboard** (`jetson_server.py`, middleware `_middleware_clave`):
+  Basic `agrobot:<clave>` → cookie de sesión `agrobot_sesion` (la lleva el
+  WebSocket). Clave en `~/.config/agrobot/clave_dashboard` (o
+  `AGROBOT_CLAVE_DASHBOARD`), fuera del repo; sin archivo = abierto como
+  antes. 127.0.0.1 exento. Probado desde IP de red: 401 sin/mala clave, 200
+  con clave, WS con cookie sí y sin cookie 401.
+- **Router**: Cliente Wi-Fi a `LORA` (`wlan0-vxd`, conexión `wifi_LORA`
+  `wlan0-vxd_1`) y **reserva de WAN** (id 210): principal `eth1_2` (cable),
+  respaldo `wlan0-vxd_1`, ping 8.8.8.8 cada 10 s, 3 fallos/5 aciertos. Ojo:
+  el PC no puede dar internet por `LORA` si a la vez está conectado a
+  `LoRa-Wan`/`LoRa_Wan` (círculo sin salida, se probó).
+- `agrobot_system_2/tools/dlink_rpc.py`: cliente de la API del router (antes
+  vivía en un scratchpad que se borra).

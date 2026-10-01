@@ -92,7 +92,7 @@ Verificado el 2026-10-01: la Pi recibe sus estadísticas cada 30 s.
   `jetson`); la Jetson aún no los usa porque su systemd-resolved no manda
   nombres de una sola palabra al DNS.
 - Respaldo de la configuración del router: `respaldos/` (raíz del repo, fuera de git porque contiene claves).
-- Administración: `http://192.168.0.1`, usuario `admin`.
+- Administración: `http://192.168.0.1`, usuario `admin`; por script: `tools/dlink_rpc.py`.
 
 ## 5. Gateway Heltec HT-M02
 
@@ -126,4 +126,4 @@ Verificado el 2026-10-01: la Pi recibe sus estadísticas cada 30 s.
 - Autorizar la Pi en Tailscale (enlace generado con `tailscale up`).
 - Reiniciar `agrobot-backend` (requiere sudo) para que las alertas vayan a
   `192.168.0.10:8092`.
-- Configurar en el router el Cliente Wi-Fi "LORA" + reserva de WAN.
+- ~~Cliente Wi-Fi "LORA" + reserva de WAN~~ — hecho: cable principal, `LORA` respaldo (la fuente de `LORA` no puede estar conectada a `LoRa-Wan`/`LoRa_Wan`).

@@ -134,6 +134,12 @@ const int   PWM_MAX      = 255;
 // =============================================
 const int PWM_MIN = 200;
 
+// Rueda parada = FRENO (FI=BI=HIGH: el TA6586 pone en corto el motor), no
+// rueda libre (FI=BI=LOW). Sin freno el robot seguía rodando por inercia al
+// soltar el mando o al saltar el watchdog. Con el motor quieto el corto no
+// consume corriente; solo se nota al empujar el robot a mano encendido.
+const bool FRENO_ACTIVO = true;
+
 const uint8_t       KICK_PULSOS  = 3;
 const unsigned long KICK_ON_MS   = 200;
 const unsigned long KICK_OFF_MS  = 30;
@@ -461,8 +467,9 @@ static void pwmWriteCanal(uint8_t canal, uint32_t duty) {
 
 static void aplicarDuty(Rueda &r) {
   if (r.sentido == 0) {
-    digitalWrite(r.pinFI, LOW);
-    digitalWrite(r.pinBI, LOW);
+    const uint8_t nivel = FRENO_ACTIVO ? HIGH : LOW;
+    digitalWrite(r.pinFI, nivel);
+    digitalWrite(r.pinBI, nivel);
     r.dcCompleto = false;
     return;
   }

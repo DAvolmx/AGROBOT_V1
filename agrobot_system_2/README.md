@@ -80,8 +80,9 @@ La única conexión directa entre los dos es `POST /api/alert`: la Jetson le
 empuja al gateway lo que detecta (plagas) para que él lo publique en
 Telegram, porque la Jetson no tiene salida a internet. La URL del gateway
 se ajusta con la variable de entorno `AGROBOT_GATEWAY_URL` (por defecto
-`http://192.168.12.2:8092`); si el gateway está caído, la Jetson lo
-registra y sigue trabajando.
+`http://192.168.0.10:8092` desde el 2026-10-01; antes `192.168.12.2`); si el
+gateway está caído, la Jetson lo registra y sigue trabajando. Plan de
+direcciones vigente: [`docs/RED_E_IPS.md`](docs/RED_E_IPS.md).
 
 Los dos dashboards son procesos y páginas independientes — no comparten
 WebSocket. El de la Jetson (control en tiempo real) solo es accesible

@@ -63,13 +63,14 @@ JETSON_AP_IP = "192.168.12.1"
 LORA_UDP_PORT = 5001
 HTTP_PORT = 8080
 CMD_SEND_HZ = 20
-# Gateway de la Raspberry Pi. La Jetson NO tiene salida a internet (vive en
-# la red aislada del AP), así que las alarmas que hay que hacer llegar al
+# Gateway de la Raspberry Pi. Las alarmas que hay que hacer llegar al
 # celular del operador se empujan al gateway por LAN y él las publica en
-# Telegram. Si el gateway está apagado, esto falla en silencio: avisar es
-# deseable, pero nunca a costa de frenar la detección o el control.
+# Telegram. La Pi va por cable al router "LoRa-Wan" (DIR-615 en modo router),
+# que le reserva 192.168.0.10 por MAC; la Jetson llega a ella como cliente
+# WiFi de esa misma red. Si el gateway está apagado, esto falla en silencio:
+# avisar es deseable, pero nunca a costa de frenar la detección o el control.
 GATEWAY_ALERT_URL = os.environ.get(
-    "AGROBOT_GATEWAY_URL", "http://192.168.12.2:8092") + "/api/alert"
+    "AGROBOT_GATEWAY_URL", "http://192.168.0.10:8092") + "/api/alert"
 GATEWAY_ALERT_TIMEOUT_S = 4
 
 # UNA sola sesion HTTP para todo el proceso, no una por aviso.

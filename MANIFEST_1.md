@@ -15,11 +15,22 @@
 > Cualquier LLM o persona que retome este proyecto debe poder reconstruir
 > el estado completo del sistema leyendo solo este archivo.
 
-Última actualización: 2026-09-30
+Última actualización: 2026-10-01
 
 ---
 
 ## 0. ESTADO ACTUAL — 2026-09-17 (leer esto primero)
+
+> **Cambios vigentes del 2026-10-01 — RED** (detalle en
+> `agrobot_system_2/docs/RED_E_IPS.md` y en el Historial):
+> - El DIR-615X pasó de punto de acceso a **modo router**: LAN
+>   `192.168.0.1/24`, canal 1 fijo, dos SSID en la misma red (`LoRa-Wan` y
+>   `LoRa_Wan`). IP fijas: Pi `192.168.0.10` (cable) / `.20` (Wi-Fi), Jetson
+>   `.142`, gateway Heltec `.11` (Wi-Fi, estática). Reemplaza el plan con la
+>   Pi en `192.168.12.2` de la §2.
+> - Las alertas de la Jetson van a `http://192.168.0.10:8092`; el Heltec
+>   reenvía a `192.168.0.10:1700` (antes `192.168.0.170`).
+> - Tailscale en Jetson (`100.82.220.28`) y Pi (`lora-server-pi`).
 
 > **Cambios vigentes del 2026-09-30** (detalle en el Historial, al final):
 > - **Enlace con la C3 REDUNDANTE: BLE + WiFi UDP a la vez** (`enlace_c3.py`,
@@ -57,9 +68,13 @@ cosa, manda esta (y la sección vieja lleva una nota de reemplazo).
 
 ### Red
 - Una sola radio (Intel 8265) sirve el AP `JETSON_AP` (`ap0`) y el cliente
-  `LoRa_Wan`. **Tienen que estar en el mismo canal** o el enlace se vuelve
-  intermitente ("la Jetson se cuelga"). `agrobot-sync-ap-channel.sh` corre
-  como `ExecStartPre` de hostapd y copia el canal del cliente.
+  `LoRa-Wan` (antes `LoRa_Wan`). **Tienen que estar en el mismo canal** o el
+  enlace se vuelve intermitente ("la Jetson se cuelga").
+  `agrobot-sync-ap-channel.sh` corre como `ExecStartPre` de hostapd y además
+  cada minuto (`agrobot-sync-ap-channel.timer`), y copia el canal del cliente.
+- Plan de direcciones completo, reglas del router y checklist de mudanza:
+  **`agrobot_system_2/docs/RED_E_IPS.md`**. Regla clave: nunca dos reservas
+  DHCP con la misma IP (el router se queda sin DNS ni DHCP).
 
 ### Reloj (la Jetson no tiene pila de RTC)
 - Algo en el arranque devuelve el reloj a 1970 a los ~9 s y NTP lo corrige
@@ -225,6 +240,12 @@ a un histórico remoto vía LoRaWAN.
    RASPBERRY PI — ChirpStack + Mosquitto + gateway_server.py propio
      Histórico SQLite, dashboard remoto :8092, downlinks de emergencia
 ```
+
+> **2026-10-01 — reemplazo parcial:** la Pi y el gateway Heltec ya no
+> cuelgan del AP de la Jetson sino del router `LoRa-Wan` (DIR-615 en modo
+> router, `192.168.0.0/24`): Pi `192.168.0.10`, Heltec `192.168.0.11`,
+> Jetson cliente `192.168.0.142`. El AP `192.168.12.0/24` sigue igual para
+> el robot. Ver `agrobot_system_2/docs/RED_E_IPS.md`.
 
 **Quién crea el AP:** la Jetson Nano. Todo lo demás (ESP32 LoRa V3,
 ESP32-C3 Mini, cualquier dispositivo que vea el dashboard) es cliente de
@@ -4203,3 +4224,36 @@ ros_bridge,config_store}.py`, `agrobot_config.json`, `jetson/dashboard/index.htm
   hileras). Copia de la anterior: `politica_desplegada_hasta_20260930.pt`.
   El sesgo del giroscopio se autocalibra con el robot quieto: dejarlo parado
   ~30 s al arrancar en el terreno.
+
+---
+
+## ENTRADA HISTORIAL: 2026-10-01 — Red fija y móvil (router, IP, Heltec, Tailscale)
+
+**Problema.** "Todo cambió de IP": el DIR-615X (`LoRa-Wan`) estaba en modo
+punto de acceso detrás del Huawei, así que las IP las repartía el Huawei y
+cambiaban con cada red. La Jetson mandaba las alertas a `192.168.12.2`
+(la Pi ya no estaba ahí) y el gateway Heltec reenviaba a `192.168.0.170`
+(IP vieja de la Pi). Además la Pi y el Heltec tenían guardado el SSID
+antiguo `LoRa_Wan` y no se unían a `LoRa-Wan`.
+
+**Cambios.**
+- Router en modo router (`192.168.0.1/24`, DHCP `.100–.200`), canal 1 fijo,
+  segundo SSID `LoRa_Wan` en la misma LAN. Reservas: Jetson `.142`, Pi `.10`
+  (cable) y `.20` (Wi-Fi), Heltec `.11` (Wi-Fi). Respaldo en `respaldos/`.
+- Incidente: una reserva duplicada (misma IP, dos MAC) tumbó el dnsmasq del
+  router (sin DNS/DHCP); se quitó. Antes, leer a ciegas todos los ids de la
+  API del router reinició su radio. Ambos documentados en `docs/RED_E_IPS.md`.
+- Pi: perfil Wi-Fi corregido a `LoRa-Wan` (métrica 600, el cable manda),
+  SSH habilitado, Tailscale instalado (`lora-server-pi`).
+- Heltec HT-M02: modo *WIFI Client* en `LoRa_Wan`, IP estática
+  `192.168.0.11`, servidor `192.168.0.10:1700`. ChirpStack recibe sus stats
+  (gateway `065f31fffe49b5a6`, `us915_0`). Su cable queda como red propia
+  `192.168.4.1` y no debe ir al router.
+- `jetson_server.py`: `GATEWAY_ALERT_URL` por defecto
+  `http://192.168.0.10:8092` (antes `192.168.12.2`). Pendiente reiniciar
+  `agrobot-backend` (sudo).
+- Tailscale en la Jetson (`100.82.220.28`).
+
+**Archivos:** `agrobot_system_2/jetson/backend/jetson_server.py`,
+`agrobot_system_2/docs/RED_E_IPS.md` (nuevo), `agrobot_system_2/README.md`,
+`MANIFEST_1.md`, `.gitignore`. Los respaldos `respaldos/dir615_*.json` quedan FUERA de git (contienen la clave del Wi-Fi).

@@ -4283,3 +4283,29 @@ antiguo `LoRa_Wan` y no se unían a `LoRa-Wan`.
   `LoRa-Wan`/`LoRa_Wan` (círculo sin salida, se probó).
 - `agrobot_system_2/tools/dlink_rpc.py`: cliente de la API del router (antes
   vivía en un scratchpad que se borra).
+
+---
+
+## ENTRADA HISTORIAL: 2026-10-01 (3) — Firmware C3: traseros de apoyo, rampa, servo suave; WiFi estable
+
+- **Traseros de apoyo** (`esp32c3_actuator.ino`, MOTORES TRASEROS DE APOYO):
+  R1/L1 delanteras = tracción; R2/L2 traseras = apoyo. Duty trasero =
+  duty delantero × `FACTOR_TRASERO_RECTO` 0,60 (recta) / `FACTOR_TRASERO_GIRO`
+  0,85 (giro), tope `PWM_TOPE_TRASERO` 215, sin pulsos de arranque, rueda
+  LIBRE (no freno) si el aporte queda < `PWM_MIN_TRASERO` 110. Protección
+  térmica ESTIMADA (media móvil de duty², TAU 60 s, recorta entre 0,35 y
+  0,60). Valores de partida SIN MEDIR: ajustar el factor con rpm
+  delantera/trasera al mismo PWM. Motivo: los traseros (más rpm, menos torque)
+  se recalentaban peleando contra los delanteros.
+- **Rampa de aceleración** (`RAMPA_V_PCT_S` 250 %/s, `RAMPA_OMEGA_PCT_S`
+  300 %/s): subir es progresivo, bajar/parar/invertir hacia cero inmediato.
+  Para el SLAM (menos patinaje → rf2o/EKF sin saltos falsos).
+- **Servo suave** (`SERVO_GRADOS_S` 90 °/s): `setServo` fija objetivo,
+  `updateServo` lo alcanza. El estado reporta la posición real.
+- Compila (95 % de flash). Pendiente cargarlo desde Windows.
+- **WiFi**: la Jetson perdía el router porque el Cliente Wi-Fi del router
+  buscaba `LORA` (ausente) y abandonaba su canal: 8 fallos de autenticación
+  en 40 min. Cliente Wi-Fi APAGADO (la conexión `wifi_LORA` y la reserva de
+  WAN siguen configuradas; encender el cliente solo cuando `LORA` exista).
+  Con eso 0 caídas en 3 min de prueba. Router con una sola red: `LoRa_Wan`.
+  Pi con `autoconnect-retries 0` (antes se rendía tras perder la red).

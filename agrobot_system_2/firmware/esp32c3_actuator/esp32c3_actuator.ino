@@ -140,6 +140,49 @@ const int PWM_MIN = 200;
 // consume corriente; solo se nota al empujar el robot a mano encendido.
 const bool FRENO_ACTIVO = true;
 
+// =============================================
+// ===== MOTORES TRASEROS DE APOYO =====
+// =============================================
+// Los delanteros (R1, L1) tienen mucho torque y llevan la tracción. Los
+// traseros (R2, L2) son más rápidos y más débiles y se recalentaban: a igual
+// PWM querían ir más rápido que los delanteros y terminaban peleando contra
+// ellos, cargados. Ahora reciben una FRACCIÓN del duty del delantero de su
+// lado: en recta apenas acompañan, en giro (el skid-steer necesita torque
+// para arrastrar las ruedas de costado) ayudan más.
+//
+// Ojo, física: bajar el PWM NO les da más torque; les baja la velocidad, la
+// corriente y el calor. El torque lo ponen los delanteros. Más torque real en
+// los traseros solo se consigue con una reducción mecánica.
+//
+// AJUSTE: con el robot en el aire, mismo PWM en todas, contar vueltas por
+// minuto de una delantera y de una trasera. FACTOR_TRASERO_RECTO ≈
+// rpm_delantera / rpm_trasera: así la trasera gira a la velocidad del suelo y
+// no pelea. Los valores de abajo son un punto de partida, no medidos.
+const float FACTOR_TRASERO_RECTO = 0.60f;
+const float FACTOR_TRASERO_GIRO  = 0.85f;
+// Por debajo de esto la trasera no aporta nada útil: rueda LIBRE (no freno:
+// frenada mientras el robot avanza sería un ancla).
+const int   PWM_MIN_TRASERO      = 110;
+// Tope de los pulsos de giro en las traseras (los delanteros van a 255).
+const int   PWM_TOPE_TRASERO     = 215;
+// Protección térmica ESTIMADA (no hay sensor): media móvil del duty² de las
+// traseras con constante de tiempo TAU. Pasado CARGA_LIMITE, el aporte de las
+// traseras baja linealmente hasta cero en CARGA_CORTE.
+const float TERMICO_TAU_S        = 60.0f;
+const float TERMICO_CARGA_LIMITE = 0.35f;
+const float TERMICO_CARGA_CORTE  = 0.60f;
+float cargaTrasera = 0.0f;   // 0..1, estimación del calentamiento
+
+// =============================================
+// ===== RAMPA DE ACELERACIÓN =====
+// =============================================
+// Acelerar de golpe (más los pulsos de arranque) hacía patinar las ruedas:
+// la odometría por LIDAR (rf2o) y el EKF ven un salto que no es real y el
+// SLAM se deforma. La velocidad SUBE como mucho a este ritmo; BAJAR y PARAR
+// son inmediatos (la seguridad no espera a ninguna rampa).
+const float RAMPA_V_PCT_S     = 250.0f;   // % de V_MAX por segundo (0→100 % en 0,4 s)
+const float RAMPA_OMEGA_PCT_S = 300.0f;   // % de OMEGA_MAX por segundo
+
 const uint8_t       KICK_PULSOS  = 3;
 const unsigned long KICK_ON_MS   = 200;
 const unsigned long KICK_OFF_MS  = 30;
@@ -210,6 +253,8 @@ struct Rueda {
   unsigned long kickFaseHasta;
   unsigned long quietaDesde;
   bool          dcCompleto;
+  bool          apoyo;   // trasera: motor de apoyo (ver MOTORES TRASEROS DE APOYO)
+  bool          libre;   // parada en rueda libre en vez de freno (apoyo apagado en marcha)
 };
 
 static uint32_t servoDuty(int angulo) {
@@ -226,11 +271,30 @@ static void servoEscribir(int angulo) {
 #endif
 }
 
+// Servo SUAVE: setServo() solo fija el objetivo y updateServo() lo alcanza a
+// SERVO_GRADOS_S. El salto directo sacudía la cámara (fotos movidas para el
+// YOLO) y el pico de corriente del servo metía ruido en la C3.
+const float SERVO_GRADOS_S = 90.0f;
+int   servoObjetivo = SERVO_PARK_ANGLE;
+float servoPosicion = SERVO_PARK_ANGLE;
+
 void setServo(int angle) {
-  angle = constrain(angle, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
-  if (angle != currentServoAngle) {
-    currentServoAngle = angle;
-    servoEscribir(angle);
+  servoObjetivo = constrain(angle, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
+}
+
+void updateServo() {
+  static unsigned long ultimo = millis();
+  unsigned long ahora = millis();
+  float dt = (ahora - ultimo) / 1000.0f;
+  if (dt < 0.02f) return;
+  ultimo = ahora;
+  float d = servoObjetivo - servoPosicion;
+  float paso = SERVO_GRADOS_S * dt;
+  servoPosicion += constrain(d, -paso, paso);
+  int angulo = (int)lroundf(servoPosicion);
+  if (angulo != currentServoAngle) {
+    currentServoAngle = angulo;
+    servoEscribir(angulo);
   }
 }
 
@@ -319,7 +383,8 @@ portMUX_TYPE bleMux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool blePending = false;
 CmdFrame bleInbox;
 
-float lastV = 0, lastOmega = 0;
+float lastV = 0, lastOmega = 0;                 // lo pedido por la Jetson
+float vAplicada = 0.0f, omegaAplicada = 0.0f;   // lo aplicado tras la rampa
 uint8_t lastServo = 0;
 bool lastLed = false;
 uint16_t lastSeq = 0;
@@ -430,13 +495,15 @@ class CmdWriteCallback : public BLECharacteristicCallbacks {
 // =============================================
 // ===== MOTORES =====
 // =============================================
-Rueda ruedaR1 = {R1_FI, R1_BI, CH_R1, INVERT_R1, KICK_DESFASE_MS, 0, 0, 0, false, 0, 0, false};
-Rueda ruedaR2 = {R2_FI, R2_BI, CH_R2, INVERT_R2, KICK_DESFASE_MS, 0, 0, 0, false, 0, 0, false};
-Rueda ruedaL1 = {L1_FI, L1_BI, CH_L1, INVERT_L1, 0,               0, 0, 0, false, 0, 0, false};
-Rueda ruedaL2 = {L2_FI, L2_BI, CH_L2, INVERT_L2, 0,               0, 0, 0, false, 0, 0, false};
+// R1/L1 = delanteras (tracción), R2/L2 = traseras (apoyo). Agrupación por
+// lado verificada en el robot: MANIFEST §3, "Agrupación de lados".
+Rueda ruedaR1 = {R1_FI, R1_BI, CH_R1, INVERT_R1, KICK_DESFASE_MS, 0, 0, 0, false, 0, 0, false, false, false};
+Rueda ruedaR2 = {R2_FI, R2_BI, CH_R2, INVERT_R2, KICK_DESFASE_MS, 0, 0, 0, false, 0, 0, false, true,  false};
+Rueda ruedaL1 = {L1_FI, L1_BI, CH_L1, INVERT_L1, 0,               0, 0, 0, false, 0, 0, false, false, false};
+Rueda ruedaL2 = {L2_FI, L2_BI, CH_L2, INVERT_L2, 0,               0, 0, 0, false, 0, 0, false, true,  false};
 Rueda *RUEDAS[4]     = {&ruedaR1, &ruedaR2, &ruedaL1, &ruedaL2};
-Rueda *LADO_DER[2]   = {&ruedaR1, &ruedaR2};
-Rueda *LADO_IZQ[2]   = {&ruedaL1, &ruedaL2};
+Rueda *LADO_DER[2]   = {&ruedaR1, &ruedaR2};   // {delantera, trasera}
+Rueda *LADO_IZQ[2]   = {&ruedaL1, &ruedaL2};   // {delantera, trasera}
 
 static void pwmAttach(uint8_t pin, uint8_t canal) {
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -467,17 +534,18 @@ static void pwmWriteCanal(uint8_t canal, uint32_t duty) {
 
 static void aplicarDuty(Rueda &r) {
   if (r.sentido == 0) {
-    const uint8_t nivel = FRENO_ACTIVO ? HIGH : LOW;
+    const uint8_t nivel = (FRENO_ACTIVO && !r.libre) ? HIGH : LOW;
     digitalWrite(r.pinFI, nivel);
     digitalWrite(r.pinBI, nivel);
     r.dcCompleto = false;
     return;
   }
   int duty = r.dutyPedido;
+  const int tope = r.apoyo ? PWM_TOPE_TRASERO : PWM_MAX;
   if (r.kickRestantes > 0) {
-    duty = r.kickAlto ? PWM_MAX : 0;
+    duty = r.kickAlto ? tope : 0;
   } else if (giroActivo && giroAlto) {
-    duty = PWM_MAX;
+    duty = max(duty, tope);
   }
 
   uint8_t pinActivo = (r.sentido > 0) ? r.pinFI : r.pinBI;
@@ -517,7 +585,9 @@ void setRueda(Rueda &r, int duty, int sentido) {
       digitalWrite(pinPasivo, LOW);
       pwmAttach(sentido > 0 ? r.pinFI : r.pinBI, r.canal);
 
-      if (KICK_PULSOS > 0 && millis() - r.quietaDesde >= KICK_REARME_MS) {
+      // Las traseras no reciben pulsos de arranque: el robot lo arrancan
+      // los delanteros, y los picos a fondo eran lo que más las calentaba.
+      if (KICK_PULSOS > 0 && !r.apoyo && millis() - r.quietaDesde >= KICK_REARME_MS) {
         r.kickRestantes = KICK_PULSOS;
         r.kickAlto      = false;
         r.kickFaseHasta = millis() + r.kickDesfaseMs;
@@ -568,13 +638,48 @@ void updateGiro() {
   for (int i = 0; i < 4; i++) aplicarDuty(*RUEDAS[i]);
 }
 
+// Aporte de las traseras según la carga térmica estimada: 1 = completo,
+// 0 = apagadas (rueda libre) hasta que se enfríen.
+static float factorTermicoTrasero() {
+  if (cargaTrasera <= TERMICO_CARGA_LIMITE) return 1.0f;
+  return constrain(1.0f - (cargaTrasera - TERMICO_CARGA_LIMITE) /
+                          (TERMICO_CARGA_CORTE - TERMICO_CARGA_LIMITE), 0.0f, 1.0f);
+}
+
+// lado[0] = delantera (tracción), lado[1] = trasera (apoyo).
 static void setLado(Rueda *lado[2], float w, float escala, float wRef) {
   float frac = constrain(fabs(w) * escala / wRef, 0.0f, 1.0f);
   const int piso = giroActivo ? PWM_MIN_GIRO : PWM_MIN;
   int duty = 0;
   if (frac > 0.02f) duty = piso + (int)lroundf(frac * (PWM_MAX - piso));
   int sentido = (w >= 0) ? 1 : -1;
-  for (int i = 0; i < 2; i++) setRueda(*lado[i], duty, sentido);
+
+  Rueda &del = *lado[0];
+  Rueda &tra = *lado[1];
+  del.libre = false;
+  setRueda(del, duty, sentido);
+
+  const float factor = (giroActivo ? FACTOR_TRASERO_GIRO : FACTOR_TRASERO_RECTO)
+                       * factorTermicoTrasero();
+  int dutyTra = (int)lroundf(duty * factor);
+  if (dutyTra < PWM_MIN_TRASERO) dutyTra = 0;
+  dutyTra = min(dutyTra, PWM_TOPE_TRASERO);
+  // Delantera en marcha y trasera sin aporte: la trasera rueda libre.
+  tra.libre = (duty > 0 && dutyTra == 0);
+  setRueda(tra, dutyTra, sentido);
+}
+
+// Llamar en cada vuelta del loop: integra el calentamiento estimado.
+void updateTermico() {
+  static unsigned long ultimo = millis();
+  unsigned long ahora = millis();
+  float dt = (ahora - ultimo) / 1000.0f;
+  if (dt < 0.05f) return;
+  ultimo = ahora;
+  float u = 0.0f;
+  if (ruedaR2.sentido != 0) u = max(u, ruedaR2.dutyPedido / (float)PWM_MAX);
+  if (ruedaL2.sentido != 0) u = max(u, ruedaL2.dutyPedido / (float)PWM_MAX);
+  cargaTrasera += (u * u - cargaTrasera) * min(dt / TERMICO_TAU_S, 1.0f);
 }
 
 void applyMotors(float vx, float omega) {
@@ -604,7 +709,44 @@ void applyMotors(float vx, float omega) {
 void stopMotors() {
   giroActivo = false;
   giroAlto   = false;
-  for (int i = 0; i < 4; i++) setRueda(*RUEDAS[i], 0, 0);
+  vAplicada = 0.0f;
+  omegaAplicada = 0.0f;
+  // Parado = las cuatro frenadas (también las traseras que iban libres).
+  for (int i = 0; i < 4; i++) {
+    RUEDAS[i]->libre = false;
+    setRueda(*RUEDAS[i], 0, 0);
+  }
+}
+
+// Rampa: lleva lo aplicado hacia lo pedido (lastV/lastOmega). Subir en
+// magnitud está limitado; bajar, cambiar de sentido hacia cero y parar es
+// inmediato. Se llama desde el loop, así la rampa avanza aunque las tramas
+// lleguen a saltos.
+static float rampa(float actual, float objetivo, float pasoMax) {
+  if (fabsf(objetivo) <= fabsf(actual) || (objetivo * actual < 0.0f)) {
+    // Frenar o invertir: primero se baja de golpe a lo pedido si va hacia
+    // cero; si invierte, se pasa por cero y luego sube con rampa.
+    if (objetivo * actual < 0.0f) return 0.0f;
+    return objetivo;
+  }
+  float d = objetivo - actual;
+  return actual + constrain(d, -pasoMax, pasoMax);
+}
+
+void updateRampa() {
+  static unsigned long ultimo = millis();
+  unsigned long ahora = millis();
+  float dt = (ahora - ultimo) / 1000.0f;
+  if (dt < 0.01f) return;
+  ultimo = ahora;
+  if (inFailsafe) return;
+  float v = rampa(vAplicada, lastV, RAMPA_V_PCT_S / 100.0f * V_MAX * dt);
+  float w = rampa(omegaAplicada, lastOmega, RAMPA_OMEGA_PCT_S / 100.0f * OMEGA_MAX * dt);
+  if (v != vAplicada || w != omegaAplicada) {
+    vAplicada = v;
+    omegaAplicada = w;
+    applyMotors(vAplicada, omegaAplicada);
+  }
 }
 
 // =============================================
@@ -671,7 +813,11 @@ bool aplicarComando(const CmdFrame &c, uint8_t via) {
   lastLed   = (c.flags & FLAG_LED) != 0;
 
   inFailsafe = false;
-  applyMotors(lastV, lastOmega);
+  // Bajar o parar se aplica ya (paso 0 = sin subida); subir lo hace
+  // updateRampa() en el loop.
+  vAplicada     = rampa(vAplicada, lastV, 0.0f);
+  omegaAplicada = rampa(omegaAplicada, lastOmega, 0.0f);
+  applyMotors(vAplicada, omegaAplicada);
   if ((c.flags & FLAG_SCAN) && !scanning) startScan();
   setLed(lastLed);
   if (!scanning) {
@@ -884,6 +1030,8 @@ void setup() {
   }
   servoEscribir(SERVO_PARK_ANGLE);
   currentServoAngle = SERVO_PARK_ANGLE;
+  servoObjetivo = SERVO_PARK_ANGLE;
+  servoPosicion = SERVO_PARK_ANGLE;
 
   // ── BLE ────────────────────────────────────────────────────────────────
   BLEDevice::init("AGROBOT-C3");
@@ -980,8 +1128,11 @@ void loop() {
   }
 
   updateScan();
+  updateRampa();
   updateKicks();
   updateGiro();
+  updateTermico();
+  updateServo();
 
   // Traza de motores (2 Hz)
   {

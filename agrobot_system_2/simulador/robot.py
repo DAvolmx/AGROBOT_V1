@@ -195,8 +195,12 @@ class RobotSim:
         # estimador que solo mire el acelerómetro.
         propia = a_long / 9.80665
         n = lambda sigma: float(self.rng.normal(0, sigma))
+        # Ruido medido con el robot quieto el 2026-10-01 (2774 muestras a
+        # 19 Hz): acelerómetro 0,105 m/s² longitudinal (0,011 g) pero
+        # 0,44 m/s² vertical (0,045 g); giroscopio 0,5 °/s en el eje de
+        # cabeceo. Antes el vertical y el giro estaban 4 y 1,7 veces bajos.
         self._imu.actualizar(math.sin(r) + propia + n(0.012), 0.0,
-                             math.cos(r) + n(0.012), giro_dps + n(0.3), self.t)
+                             math.cos(r) + n(0.045), giro_dps + n(0.5), self.t)
 
     def _paso_servo(self, dt):
         objetivo = self.servo_objetivo

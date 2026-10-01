@@ -1,5 +1,5 @@
 [Unit]
-Description=AgroBot - Jetson al máximo rendimiento (MAXN SUPER + relojes fijos)
+Description=AgroBot - Jetson al máximo rendimiento (15 W + relojes fijos)
 # Antes que el backend (YOLO) y ROS (SLAM/Nav2): que arranquen ya con la GPU
 # y la CPU a frecuencia máxima, sin esperar a que el gobernador suba.
 Before=agrobot-backend.service agrobot-ros.service
@@ -8,9 +8,12 @@ After=nvpmodel.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# Modo 2 = MAXN_SUPER en /etc/nvpmodel/nvpmodel_p3767_0003_super.conf (el
-# enlace /etc/nvpmodel.conf tiene que apuntar a ese archivo).
-ExecStart=/usr/sbin/nvpmodel -m 2
+# Modo 0 = 15 W, el máximo del perfil con el que está flasheada esta placa.
+# MAXN SUPER NO está disponible: al arrancar, el sistema reapunta
+# /etc/nvpmodel.conf al perfil normal (nvpmodel_p3767_0003.conf) porque la
+# placa se flasheó sin la configuración Super; forzar "-m 2" falla con
+# "bad power mode" (2026-10-01). Super exige reflashear la Jetson.
+ExecStart=/usr/sbin/nvpmodel -m 0
 # Fija CPU, GPU y memoria a su máximo y el ventilador al máximo. Sin esto el
 # gobernador baja relojes entre inferencias y cada una arranca "en frío".
 ExecStart=/usr/bin/jetson_clocks --fan

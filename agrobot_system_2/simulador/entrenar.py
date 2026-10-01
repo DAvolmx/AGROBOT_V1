@@ -157,8 +157,17 @@ def aleatorizar(ep, rng) -> dict:
     campo. Así la red aprende a conducir con cualquiera de ellos, y el robot
     real, que es uno más de esa familia, no la pilla por sorpresa."""
     r = ep.robot
-    r.rendimiento_giro = float(rng.uniform(0.50, 0.80))    # patina más o menos al girar
-    r.decel_inercia = float(rng.uniform(0.15, 0.30))       # desliza 60-100 cm al soltar
+    # Traseros como motores de apoyo (firmware 2026-10-01): en giro aportan
+    # el 85 % del duty, así que el giro puede rendir algo menos que antes.
+    r.rendimiento_giro = float(rng.uniform(0.45, 0.80))    # patina más o menos al girar
+    # Freno activo en la C3 (2026-10-01): parado = TA6586 en corto, ya no
+    # rueda libre. SIN MEDIR todavía: el 75 % de los episodios frena en
+    # ~10-40 cm (0,4-1,5 m/s² desde 0,55 m/s) y el 25 % conserva el
+    # deslizamiento viejo (60-100 cm), por si en el terreno frena menos.
+    if rng.uniform() < 0.75:
+        r.decel_inercia = float(rng.uniform(0.40, 1.50))
+    else:
+        r.decel_inercia = float(rng.uniform(0.15, 0.30))
     r.escala_latencia = float(rng.uniform(0.6, 2.0))       # BLE más o menos cargado
     ep.slam.ruido = float(rng.uniform(0.5, 1.5))
     ep.fallos_lidar.cambiar(str(rng.choice(["usb", "usb", "uart", "ninguna"])))

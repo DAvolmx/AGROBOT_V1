@@ -250,9 +250,26 @@ if __name__ == "__main__":
         rutas = [Path(r) for r in a.validar] or sorted(BASE.glob("politica*.pt"))
         if not rutas:
             raise SystemExit(f"no hay modelos en {BASE}")
-        for r in rutas:
-            print(f"\nvalidando {r.name} en {len(a.banco)} escenarios…", flush=True)
-            validar_modelo(r, banco=tuple(a.banco), segundos=a.segundos)
+        if len(rutas) == 1:
+            print(f"\nvalidando {rutas[0].name} en {len(a.banco)} escenarios…", flush=True)
+            validar_modelo(rutas[0], banco=tuple(a.banco), segundos=a.segundos)
+        else:
+            # Un proceso por modelo: la memoria de los episodios (mundo, cámara
+            # en la GPU, que en la Jetson es la misma RAM) se acumula dentro
+            # de un proceso, y el 2026-10-01 validar 4 modelos seguidos llegó a
+            # 5,7 GB y el OOM killer lo mató en el segundo. Cada hijo queda con
+            # oom_score_adj 1000: si falta memoria muere él, no el backend.
+            import subprocess
+            import sys
+            for r in rutas:
+                hijo = subprocess.Popen([sys.executable, "-u", __file__, "--validar", str(r),
+                                         "--segundos", str(a.segundos), "--banco", *a.banco])
+                try:
+                    Path(f"/proc/{hijo.pid}/oom_score_adj").write_text("1000")
+                except OSError:
+                    pass
+                if hijo.wait() != 0:
+                    print(f"  {r.name}: la validación terminó con código {hijo.returncode}", flush=True)
     if a.eventos:
         for f in leer(limite=40):
             print(f"{f['cuando']}  {f['tipo']:<14s} "

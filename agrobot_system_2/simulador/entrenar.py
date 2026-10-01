@@ -309,7 +309,12 @@ def cargar_dataset(espejo=True, origenes=("ideal_dr", "ideal_dr2")):
     giros como avances. None = todo."""
     if not DATASET.exists():
         sys.exit(f"no hay datos todavía: correr --recolectar (falta {DATASET})")
-    X, y, escenarios = [], [], set()
+    # Arreglos compactos (4 bytes por número) en vez de listas de listas de
+    # float de Python (~32 bytes por número más la lista): con 200 000 filas
+    # y el espejo, el pico de memoria de esta función era de varios cientos
+    # de MB por tanda, y el 2026-09-30 el OOM killer mató el entrenamiento.
+    from array import array
+    X, y, escenarios = array("f"), array("q"), set()
     with DATASET.open() as f:
         for fila in csv.DictReader(f):
             if fila["accion"] not in pol.ACCIONES:
@@ -318,12 +323,15 @@ def cargar_dataset(espejo=True, origenes=("ideal_dr", "ideal_dr2")):
                 continue
             x = [float(fila[c]) for c in pol.ENTRADAS]
             a_idx = pol.ACCIONES.index(fila["accion"])
-            X.append(x); y.append(a_idx)
+            X.extend(x); y.append(a_idx)
             escenarios.add(fila.get("escenario", ""))
             if espejo:
                 xe, ye = espejar(x, a_idx)
-                X.append(xe); y.append(ye)
-    return np.array(X, np.float32), np.array(y, np.int64), sorted(escenarios)
+                X.extend(xe); y.append(ye)
+    n = len(pol.ENTRADAS)
+    Xa = np.frombuffer(X, dtype=np.float32).reshape(-1, n).copy()
+    ya = np.frombuffer(y, dtype=np.int64).copy()
+    return Xa, ya, sorted(escenarios)
 
 
 # ------------------------------------------------------------------ entrenar

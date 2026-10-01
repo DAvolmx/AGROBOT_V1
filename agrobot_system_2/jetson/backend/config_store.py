@@ -53,6 +53,10 @@ DEFAULTS = {
         # 2026-09-29 (yolo11s, GPU): 640 px = 72-96 ms, 480 px = 44 ms. El
         # robot va lento y en los barridos la plaga ocupa mucha imagen.
         "imgsz": 480,
+        # Tope de inferencias por segundo. Era 4 (0,25 s) cuando YOLO corría en
+        # CPU (~460 ms/frame); en GPU tarda 32-71 ms, así que 10 Hz cabe y la
+        # detección acompaña al robot en tiempo real. Bajarlo libera GPU/CPU.
+        "infer_hz_max": 10,
         # Cuándo una detección dispara el barrido de cámara: "siempre",
         # "autonomo" (solo con la patrulla en marcha) o "nunca". Con
         # cualquiera, la detección tiene que persistir y el robot haberse

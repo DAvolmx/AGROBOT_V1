@@ -39,10 +39,10 @@ import asyncio
 import threading
 import time
 
-# Periodo mínimo entre inferencias. No se corre YOLO en cada frame: a 30 FPS
-# serían 30 inferencias/s que la Jetson no da, y para detectar una plaga en
-# una planta no hace falta esa cadencia — el robot se mueve lento.
-INFER_PERIOD_S = 0.25
+# Periodo mínimo por defecto entre inferencias. No se corre YOLO en cada
+# frame: 30 inferencias/s no hacen falta para una plaga en una planta. El
+# valor real sale de detection.infer_hz_max (config), por defecto 10 Hz.
+INFER_PERIOD_S = 0.1
 
 # Una misma plaga aparece en decenas de frames seguidos. Sin esto se emitía
 # un mensaje WebSocket y un toast POR CAJA Y POR FRAME: a 30 FPS eso inunda
@@ -321,11 +321,13 @@ class CameraWorker:
 
             self._emitir(nuevas, frame, cfg)
 
-            # Ritmo: al menos INFER_PERIOD_S entre inferencias, descontando
-            # lo que ya tardó. Si el modelo es lento, esto no suma espera.
+            # Ritmo: al menos un periodo entre inferencias, descontando lo
+            # que ya tardó. Si el modelo es lento, esto no suma espera.
+            hz_max = float(cfg.get("infer_hz_max", 1.0 / INFER_PERIOD_S) or 1.0 / INFER_PERIOD_S)
+            periodo = 1.0 / max(hz_max, 0.5)
             ciclo = time.perf_counter() - t0
-            self.infer_hz = 1.0 / max(ciclo, INFER_PERIOD_S)
-            resto = INFER_PERIOD_S - ciclo
+            self.infer_hz = 1.0 / max(ciclo, periodo)
+            resto = periodo - ciclo
             if resto > 0:
                 self._stop.wait(resto)
 

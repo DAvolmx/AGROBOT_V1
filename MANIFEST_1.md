@@ -4309,3 +4309,26 @@ antiguo `LoRa_Wan` y no se unían a `LoRa-Wan`.
   WAN siguen configuradas; encender el cliente solo cuando `LORA` exista).
   Con eso 0 caídas en 3 min de prueba. Router con una sola red: `LoRa_Wan`.
   Pi con `autoconnect-retries 0` (antes se rendía tras perder la red).
+
+---
+
+## ENTRADA HISTORIAL: 2026-10-01 (4) — Rendimiento: detección a 10 Hz, MAXN SUPER preparado
+
+- Medido en la Jetson (yolo11s ip102, 480 px): **GPU 32 ms/frame, CPU
+  463 ms/frame**. El backend SÍ usa la GPU (`infer_ms` ≈ 71 con relojes de
+  15 W); el `GR3D_FREQ 0%` de tegrastats engaña con inferencias cortas.
+  El aviso de PyTorch "CC 8.7 no soportada" no impide usar la GPU.
+- La detección estaba topada a 4 Hz (`INFER_PERIOD_S` 0,25, pensado para
+  CPU). Ahora `detection.infer_hz_max` (config, por defecto 10).
+  Archivos: `camera.py`, `config_store.py`.
+- La placa es Orin Nano **p3767-0003** y usaba el perfil normal (solo
+  15 W / 7 W). Existe `nvpmodel_p3767_0003_super.conf` con 15W / 25W /
+  **MAXN_SUPER** (id 2). Preparado `jetson/systemd/agrobot-rendimiento.service`
+  (nvpmodel -m 2 + `jetson_clocks --fan` antes del backend y ROS) y
+  `etc/NetworkManager/conf.d/99-agrobot-wifi-sin-ahorro.conf`
+  (`wifi.powersave = 2`: el ahorro daba picos de 1-2,7 s al router).
+  **Pendiente instalar (sudo)**. Ojo: MAXN SUPER consume más; la fuente del
+  robot tiene que aguantar picos de ~25 W o habrá reinicios por caída de
+  tensión.
+- TensorRT no está instalado (exportar el modelo a `.engine` FP16 sería el
+  siguiente salto de velocidad).

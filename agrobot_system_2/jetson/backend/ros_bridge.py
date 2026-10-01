@@ -122,7 +122,8 @@ class AgroBotROSBridge:
     métodos sin preocuparse de si ROS está disponible o no.
     """
 
-    def __init__(self, on_cmd_vel, on_scan_points, on_fused_pose, on_map):
+    def __init__(self, on_cmd_vel, on_scan_points, on_fused_pose, on_map,
+                 on_odom_lidar=None):
         self.available = ROS_AVAILABLE
         self._on_cmd_vel = on_cmd_vel            # callback(v_ref, omega_ref)
         self._on_scan_points = on_scan_points    # callback([{angle_deg, distance_m}, ...])
@@ -139,7 +140,8 @@ class AgroBotROSBridge:
             return
 
         rclpy.init(args=None)
-        self._node = _BridgeNode(on_cmd_vel, on_scan_points, on_fused_pose, on_map)
+        self._node = _BridgeNode(on_cmd_vel, on_scan_points, on_fused_pose, on_map,
+                                 on_odom_lidar)
         self._executor = rclpy.executors.SingleThreadedExecutor()
         self._executor.add_node(self._node)
         self._thread = threading.Thread(target=self._girar_vigilado, daemon=True)
@@ -248,8 +250,10 @@ class AgroBotROSBridge:
 
 if ROS_AVAILABLE:
     class _BridgeNode(Node):
-        def __init__(self, on_cmd_vel, on_scan_points, on_fused_pose, on_map):
+        def __init__(self, on_cmd_vel, on_scan_points, on_fused_pose, on_map,
+                     on_odom_lidar=None):
             super().__init__("agrobot_bridge")
+            self._on_odom_lidar = on_odom_lidar
             self._on_cmd_vel = on_cmd_vel
             self._on_scan_points = on_scan_points
             self._on_fused_pose = on_fused_pose
@@ -267,6 +271,14 @@ if ROS_AVAILABLE:
             # ---- robot_localization (EKF) -> pose fusionada real ----
             self.create_subscription(
                 Odometry, "/odometry/filtered", lambda m: self._seguro("odom", self._odom_cb, m), 10)
+
+            # ---- rf2o -> velocidad MEDIDA por el LIDAR, sin mezclar ----
+            # La de /odometry/filtered no sirve para detectar patinaje: el
+            # EKF ya fusionó ahí la velocidad ORDENADA (/wheel_odom).
+            if on_odom_lidar is not None:
+                self.create_subscription(
+                    Odometry, "/odom_rf2o",
+                    lambda m: self._seguro("odom_rf2o", self._odom_lidar_cb, m), 10)
 
             # ---- slam_toolbox -> mini-mapa del dashboard ----
             self._ultimo_mapa = 0.0
@@ -351,6 +363,10 @@ if ROS_AVAILABLE:
                 # siempre, nadie mide la velocidad lateral.)
                 "var_vx": msg.twist.covariance[0],
             })
+
+        def _odom_lidar_cb(self, msg: "Odometry"):
+            self._on_odom_lidar(float(msg.twist.twist.linear.x),
+                                float(msg.twist.twist.angular.z))
 
         def _map_cb(self, msg: "OccupancyGrid"):
             """

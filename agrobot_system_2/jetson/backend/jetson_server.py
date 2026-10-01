@@ -55,6 +55,8 @@ from navigation_logger import NavigationLogger, analizar_sesion
 from aprendizaje import Aprendizaje
 from cabeceo import CabeceoIMU
 from politica import Politica
+from deslizamiento import MonitorDeslizamiento
+from modo_seguro import ModoSeguro, SEGURO, PRECAUCION
 
 # =============================================
 # ===== CONFIG =====
@@ -556,6 +558,16 @@ class ActuatorController:
                 _schedule(state.broadcast({"type": "obstacle_warning", "data": aviso}))
             v_ref = v_seg
 
+        # Patinaje y modo seguro: recortan TODO lo que mueve el robot, igual
+        # que el freno por LIDAR. En SEGURO la autonomía queda en 0 y el
+        # mando manual va lento (para sacarlo del apuro).
+        factor = min(monitor_desliz.factor_velocidad(),
+                     modo_seg.factor(manual=not _autonomia_activa()))
+        if factor < 1.0:
+            v_ref *= factor
+            omega_ref *= factor
+        monitor_desliz.on_orden(v_ref, omega_ref)
+
         if abs(v_ref) > 1e-3 or abs(omega_ref) > 1e-3:
             self._t_movimiento = time.monotonic()
         pose_estimator.on_command(v_ref, omega_ref)
@@ -703,7 +715,20 @@ def _ros_on_map(map_dict: dict):
     _schedule(state.broadcast({"type": "map", "data": map_dict}))
 
 
-ros_bridge = AgroBotROSBridge(_ros_on_cmd_vel, _ros_on_scan_points, _ros_on_fused_pose, _ros_on_map)
+# Patinaje / atasco (ver deslizamiento.py) y modo seguro (ver modo_seguro.py):
+# lo ordenado se compara con lo que mide el LIDAR, y los fallos serios
+# llevan al robot a un estado seguro en vez de dejarlo seguir a ciegas.
+monitor_desliz = MonitorDeslizamiento()
+modo_seg = ModoSeguro()
+
+
+def _ros_on_odom_lidar(v: float, w: float):
+    """Velocidad medida por rf2o (hilo de ROS): solo actualiza números."""
+    monitor_desliz.on_medida(v, w)
+
+
+ros_bridge = AgroBotROSBridge(_ros_on_cmd_vel, _ros_on_scan_points, _ros_on_fused_pose, _ros_on_map,
+                              on_odom_lidar=_ros_on_odom_lidar)
 
 # Se crea en start_background, cuando ya existe el event loop al que el hilo
 # de captura tiene que despachar los frames.
@@ -912,6 +937,96 @@ async def _bucle_zupt():
         except Exception as exc:
             print(f"[zupt] falló: {type(exc).__name__}: {exc}")
         await asyncio.sleep(1.0 / ZUPT_HZ)
+
+
+def _autonomia_activa() -> bool:
+    """Algo que no es el operador está moviendo (o puede mover) el robot."""
+    return bool(state.mission_active
+                or (patrol is not None and patrol.activo)
+                or (explorador is not None and explorador.activo))
+
+
+def _detener_autonomia():
+    """Lo mismo que el botón de parar misión: la patrulla y el explorador
+    primero (si no, vuelven a mandar velocidad o una meta a Nav2)."""
+    if patrol is not None:
+        patrol.detener()
+    if explorador is not None:
+        explorador.detener()
+    ros_bridge.cancel_nav_goal()
+    state.mission_active = False
+    if actuator_proto is not None:
+        actuator_proto.emergency_stop()
+
+
+MODO_SEGURO_HZ = 5
+
+
+def _entradas_modo_seguro() -> dict:
+    ahora = time.time()
+    vistos = health._last_seen
+    edad = lambda k: (ahora - vistos[k]) if k in vistos else None
+    return {
+        "moviendose": actuator_proto is not None and not actuator_proto.en_reposo(),
+        "autonomia": _autonomia_activa(),
+        "edad_lidar_s": edad("lidar"),
+        "edad_c3_s": edad("esp32c3"),
+        "atascado": monitor_desliz.atascado,
+        "patinaje": monitor_desliz.patinaje,
+        "temp_c": (state.system_stats or {}).get("temp_c"),
+        "ekf_var_vx": (ros_fused_pose or {}).get("var_vx") if ros_bridge.available else None,
+        "mapa_corrupto": bool((ros_last_map or {}).get("corrupto")),
+    }
+
+
+def estado_seguridad() -> dict:
+    return {**modo_seg.estado(), "deslizamiento": monitor_desliz.estado()}
+
+
+async def _bucle_modo_seguro():
+    """Monitores de fallos a 5 Hz (ver modo_seguro.py). Al ENTRAR en SEGURO
+    detiene la autonomía, avisa al dashboard y a Telegram (vía la Pi)."""
+    nivel_previo = modo_seg.nivel
+    ultimo_envio = 0.0
+    while True:
+        try:
+            est = modo_seg.evaluar(_entradas_modo_seguro())
+            nivel = est["nivel"]
+            if nivel != nivel_previo:
+                motivo = "; ".join(est["motivos"]) or "todo en orden"
+                print(f"[seguridad] {nivel_previo} -> {nivel}: {motivo}")
+                if nivel == SEGURO:
+                    _detener_autonomia()
+                    await state.broadcast({"type": "toast", "data": {
+                        "kind": "error", "title": "MODO SEGURO",
+                        "message": f"Robot detenido: {motivo}. Revisar y rearmar."}})
+                    _schedule(_avisar_al_gateway({
+                        "tipo": "seguridad", "titulo": "AgroBot en MODO SEGURO",
+                        "mensaje": motivo}))
+                elif nivel == PRECAUCION:
+                    await state.broadcast({"type": "toast", "data": {
+                        "kind": "warning", "title": "Precaución",
+                        "message": f"Velocidad reducida: {motivo}"}})
+                nivel_previo = nivel
+                ultimo_envio = 0.0
+            if time.monotonic() - ultimo_envio > 2.0:
+                ultimo_envio = time.monotonic()
+                await state.broadcast({"type": "seguridad", "data": estado_seguridad()})
+        except Exception as exc:
+            print(f"[seguridad] bucle falló: {type(exc).__name__}: {exc}")
+        await asyncio.sleep(1.0 / MODO_SEGURO_HZ)
+
+
+async def seguridad_get_handler(request: web.Request):
+    return web.json_response(estado_seguridad())
+
+
+async def seguridad_rearmar_handler(request: web.Request):
+    ok, msg = modo_seg.rearmar()
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success" if ok else "warning", "title": "Modo seguro", "message": msg}})
+    return web.json_response({"ok": ok, "message": msg, **estado_seguridad()},
+                             status=200 if ok else 409)
 
 
 async def _bucle_rampa():
@@ -2303,6 +2418,7 @@ async def start_background(app: web.Application):
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
     app["zupt_task"] = asyncio.create_task(_bucle_zupt())
+    app["modo_seguro_task"] = asyncio.create_task(_bucle_modo_seguro())
 
     # Patrulla autónoma. Se crea acá y no arriba porque sus callbacks
     # necesitan el `actuator_proto` que se acaba de construir.
@@ -2772,6 +2888,8 @@ def create_app() -> web.Application:
     app.router.add_get("/api/costmap/maps", local_map_list_handler)
     app.router.add_post("/api/costmap/delete", local_map_delete_handler)
     app.router.add_get("/api/health", health_handler)
+    app.router.add_get("/api/seguridad", seguridad_get_handler)
+    app.router.add_post("/api/seguridad/rearmar", seguridad_rearmar_handler)
     app.router.add_get("/api/captures", captures_list_handler)
     app.router.add_post("/api/captures/clear", captures_clear_handler)
     app.router.add_post("/api/nav/set_goal", nav_set_goal_handler)

@@ -665,6 +665,7 @@ input[type="text"], select { font-family: inherit; }
       <div class="pill" id="pill-actuator" role="status"><span class="dot"></span><span class="pill-txt">ESP32-C3</span></div>
       <div class="pill" id="pill-lidar" role="status"><span class="dot"></span><span class="pill-txt">LIDAR</span></div>
       <div class="pill" id="pill-lora" role="status"><span class="dot"></span><span class="pill-txt">ESP32 LoRa</span></div>
+      <div class="pill" id="pill-seguridad" role="button" tabindex="0" title="Modo seguro"><span class="dot"></span><span class="pill-txt">Seguridad</span></div>
       <span class="mono" id="clock" style="font-size:14px; color:var(--ink-soft);">--:--:--</span>
     </div>
   </header>
@@ -1613,6 +1614,7 @@ input[type="text"], select { font-family: inherit; }
       // Llega hasta 4 veces por segundo mientras frena: se marca en el
       // panel de distancias en vez de apilar un toast por mensaje.
       case "obstacle_warning": marcarFrenado(msg.data); break;
+      case "seguridad": updateSeguridad(msg.data); break;
       case "capture": addCapture(msg.data); break;
       case "captures_cleared": setCaptures([]); break;
     }
@@ -1690,6 +1692,39 @@ input[type="text"], select { font-family: inherit; }
   // Texto del backend dentro de innerHTML: siempre escapado.
   function escapeHtml(txt) {
     return String(txt).replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+  }
+
+  // Modo seguro (FDIR) y patinaje: ver modo_seguro.py / deslizamiento.py.
+  let seguridadEnganchada = false;
+  function updateSeguridad(d) {
+    const el = $("pill-seguridad");
+    if (!el || !d) return;
+    seguridadEnganchada = !!d.enganchado;
+    const nivel = d.nivel;
+    setPill("pill-seguridad", nivel === "seguro" ? "crit" : nivel === "precaucion" ? "warn" : "ok");
+    const des = d.deslizamiento || {};
+    const pat = des.patinaje ? ` · patina ${Math.round(des.patinaje * 100)} %` : "";
+    el.querySelector(".pill-txt").textContent =
+      nivel === "seguro" ? "MODO SEGURO" : nivel === "precaucion" ? "Precaución" + pat : "Seguro ✓";
+    el.title = (d.motivos && d.motivos.length ? d.motivos.join("\n") + "\n" : "Sin fallos\n") +
+      `Patinaje ${Math.round((des.patinaje || 0) * 100)} % · eficiencia ${des.eficiencia_k != null ? des.eficiencia_k : "—"}` +
+      (seguridadEnganchada ? "\nToca para rearmar" : "");
+  }
+  async function rearmarSeguridad() {
+    if (!seguridadEnganchada) return;
+    if (!confirm("¿Revisaste el robot? Rearmar el modo seguro permite volver a la autonomía.")) return;
+    try {
+      const r = await fetch("/api/seguridad/rearmar", { method: "POST" });
+      const j = await r.json();
+      updateSeguridad(j);
+    } catch (e) { toast("error", "Modo seguro", "No se pudo rearmar: " + e); }
+  }
+  {
+    const el = $("pill-seguridad");
+    if (el) {
+      el.addEventListener("click", rearmarSeguridad);
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") rearmarSeguridad(); });
+    }
   }
 
   function renderHealth(list) {

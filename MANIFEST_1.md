@@ -4332,3 +4332,37 @@ antiguo `LoRa_Wan` y no se unían a `LoRa-Wan`.
   tensión.
 - TensorRT no está instalado (exportar el modelo a `.engine` FP16 sería el
   siguiente salto de velocidad).
+
+---
+
+## ENTRADA HISTORIAL: 2026-10-01 (5) — Detección de patinaje y modo seguro (técnicas de róveres NASA/JPL)
+
+- **`jetson/backend/deslizamiento.py`** (`MonitorDeslizamiento`): compara la
+  velocidad ORDENADA (la que sale a la C3, tras rampa y freno por LIDAR)
+  con la MEDIDA por rf2o (`/odom_rf2o`, nueva suscripción en
+  `ros_bridge.py`, `on_odom_lidar`). Idea de la odometría visual de los
+  róveres de Marte. La eficiencia normal `k` se aprende sola (TAU 20 s, solo
+  en marcha sana). `patinaje = 1 - (v_med/v_ord)/k`; ≥0,4 recorta a 0,6;
+  ≥0,7 a 0,35; vuelve a 1 a 0,25/s. Cada medida se compara con la orden de
+  hace 0,3 s (retraso de rf2o) y solo tras 0,7 s de orden estable: si no,
+  cada arranque daba un patinaje falso del 100 %. **Atasco**: ≥0,12 m/s
+  ordenados y <0,02 m/s / <0,05 rad/s medidos durante 2 s.
+- **`jetson/backend/modo_seguro.py`** (`ModoSeguro`, esquema FDIR / "safe
+  mode"): NORMAL / PRECAUCION (velocidad ×0,5) / SEGURO (autonomía ×0,
+  manual ×0,4). SEGURO por: atasco, LIDAR sin datos ≥2 s moviéndose,
+  C3 sin estado ≥1,5 s con autonomía, varianza EKF >1 o mapa corrupto con
+  autonomía, Jetson ≥95 °C. PRECAUCION por: LIDAR ≥0,6 s, ≥80 °C,
+  patinaje ≥0,4. SEGURO queda ENGANCHADO hasta rearme del operador, y no se
+  rearma si la causa sigue presente.
+- `jetson_server.py`: recorte en `ActuatorController._aplicar` (punto único
+  de mando, igual que el freno por LIDAR); `_bucle_modo_seguro` a 5 Hz: al
+  entrar en SEGURO detiene patrulla/explorador/Nav2 + parada de emergencia,
+  toast y alerta a Telegram vía la Pi (`tipo: "seguridad"`). API
+  `GET /api/seguridad`, `POST /api/seguridad/rearmar`; WS `type: "seguridad"`
+  cada 2 s. "Manual" = sin autonomía activa.
+- Dashboard: píldora **Seguridad** en la cabecera (verde/ámbar/rojo); en
+  rojo, al tocarla pide confirmación y rearma.
+- Pruebas: `tests/test_deslizamiento_modo_seguro.py` (11, sin robot) y prueba
+  de integración importando el backend sin ROS con un enlace falso.
+- Pendiente: reiniciar el backend (sudo) para activarlo; calibrar en el
+  terreno los umbrales (el `k` se aprende solo).

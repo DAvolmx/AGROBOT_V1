@@ -21,3 +21,7 @@ for V in 2 3; do
   echo "core ${V}.x -> compila"
 done
 g++ -std=c++17 -o /tmp/_agrobot_mlt motor_logic_test.cpp && /tmp/_agrobot_mlt
+# 3. Comportamiento del .ino REAL (no una copia): freno, traseros de apoyo,
+#    rampa y servo, con el Arduino simulado que registra pines y reloj.
+g++ -std=gnu++17 -include stubs_arduino/Arduino.h -Istubs_arduino \
+    -DESP_ARDUINO_VERSION_MAJOR=3 -o /tmp/_agrobot_comp comportamiento_test.cpp && /tmp/_agrobot_comp

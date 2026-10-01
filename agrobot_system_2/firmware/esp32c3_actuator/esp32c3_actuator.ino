@@ -739,6 +739,9 @@ void updateRampa() {
   float dt = (ahora - ultimo) / 1000.0f;
   if (dt < 0.01f) return;
   ultimo = ahora;
+  // Tope: si el loop se trabó (BLE, WiFi) la rampa NO debe recuperar de un
+  // salto todo el tiempo perdido; eso sería un tirón a fondo.
+  dt = min(dt, 0.05f);
   if (inFailsafe) return;
   float v = rampa(vAplicada, lastV, RAMPA_V_PCT_S / 100.0f * V_MAX * dt);
   float w = rampa(omegaAplicada, lastOmega, RAMPA_OMEGA_PCT_S / 100.0f * OMEGA_MAX * dt);

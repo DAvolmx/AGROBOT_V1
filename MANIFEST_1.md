@@ -4636,3 +4636,51 @@ atrás, derechas adelante. Si UNA rueda va al revés, se corrige con su
 (`POST /api/drive/mode`); modo seguro rearmado; aceleración 3 / 8 (la puso el
 usuario; queda en `agrobot_config.json`, sin commitear).
 
+---
+
+## ENTRADA HISTORIAL: 2026-10-02 (2) — Datos del pasillo al entrenamiento y movimiento robótico por pulsos
+
+Robot apagado (C3 y LoRa V3), Jetson encendida, en el mismo pasillo.
+
+- **Datos recopilados** (`logs/sesion_20261002_manejo/`): `pasos.jsonl`
+  (10 pulsos con foto, LIDAR antes/después y eco de la C3) y
+  `giros_medidos.jsonl` (5 giros medidos con ICP de scans + giróscopo Z +
+  EKF; el scratchpad con los .npz se perdió al reiniciar la Jetson, los
+  números estaban registrados). Pose a 1 Hz en
+  `~/.agrobot/navigation_logs/poses_20261002_010038.csv`.
+- **Calibración del simulador** (`tools/calibrar_con_pasillo.py` →
+  `simulador/calibracion_real.json`): reproduce en el simulador el MISMO
+  pulso que el robot (interior, troceado 0,6, rampa de la config) y ajusta:
+  frenada **3,24 m/s²** (avance medido 26,3 cm/pulso, sim 25,6),
+  rendimiento de giro **0,019** (1,6°/pulso medido; el simulador suponía
+  0,45–0,80 = 55° por pulso), retroceso al girar **0,053** (8 cm/pulso).
+  `robot.py` gana `retroceso_giro`; `entrenar.aleatorizar()` sortea
+  alrededor de lo medido (40 % giro como el firmware viejo, 60 % 0,05–0,80
+  por el firmware nuevo sin medir; 60 % frenada ±30 % de lo medido).
+- **Mundo `pasillo_real`** (`mundo.py`): pasillo de 65 cm, poste, cuarto de
+  2 × 1,3 m, pesa/cobija/chancla bajo el LIDAR. El explorador actual choca 15
+  veces en 60 s simulados ahí (antes de calibrar el chasis).
+- **Movimiento robótico por pulsos** (`paso_robotico.py`, `POST/GET
+  /api/paso`): `{"accion":"avanzar","cm":50}` / `{"accion":"girar",
+  "grados":-90}` / `{"accion":"parar"}`. Cada pulso: orden → esperar a que
+  termine y el scan quede quieto (±1 cm 0,3 s) → medir avance con los huecos
+  delante/detrás del LIDAR (NO el EKF: vx de rf2o invertido) o el giro con el
+  rumbo (giróscopo) → decidir. Se rinde con `sin_progreso` (3 pulsos sin
+  moverse), `obstaculo` (hueco bajo el umbral del freno), `retroceso` (al
+  girar, < 15 cm detrás), `sin_lidar`, `max_pulsos`. Registra cada pulso en
+  `~/.agrobot/pasos_roboticos/` (sirve para recalibrar). El "parar" de
+  `/api/drive` y cualquier pulso manual lo cancelan. 7 pruebas en
+  `tests/test_paso_robotico.py`. Probado de punta a punta con la C3
+  apagada: 3 pulsos, avance 0,0 m medido, `sin_progreso`.
+- **Reentrenamiento** lanzado 03:12 UTC, 3,5 h, supervisor
+  (`logs/lanzar_entrenamiento_20261002.sh`, log
+  `logs/entrenamiento_20261002.log`), 13 mapas con `pasillo_real`, mezcla
+  0,8. `habitacion_real.json` no lo acepta `entrenar.py` como mapa. Desplegar
+  el modelo resultante pide confirmación del usuario.
+- **Arranque tras apagón: el vigía del reloj reinició ROS a media subida**
+  (02:58:13): slam_toolbox murió (−11 / −6), el relanzado quedó colgado en
+  "configurando" y Nav2 abortó ("transform base_link→map"). Se reinició
+  `agrobot-ros` a mano y quedó bien. Pendiente: que el vigía espere a que
+  ROS termine de arrancar, o que reinicie solo si ROS arrancó con el reloj
+  en 1970.
+

@@ -118,3 +118,27 @@ def test_giro_casi_nulo_se_rinde(tmp_path):
     r = RobotFalso(giro_deg=0.3)
     res = correr(r.hacer(tmp_path).girar(45))
     assert res["resultado"] == "sin_progreso"
+
+
+def test_pulso_recto_que_gira_se_detiene(tmp_path):
+    """Medido el 2026-10-02: cada pulso 'adelante' giraba 8-16° a la derecha."""
+    r = RobotFalso(avance_m=0.25)
+    orig = r.ordenar
+
+    def ordenar_con_deriva(accion, escala, maniobra):
+        orig(accion, escala, maniobra)
+        dx, _ = r.pendiente
+        r.pendiente = (dx, -15.0)
+    r.ordenar = ordenar_con_deriva
+    res = correr(r.hacer(tmp_path).avanzar(1.0))
+    assert res["resultado"] == "deriva_rumbo"
+    assert len(r.ordenes) == 1
+
+
+def test_delante_y_detras_no_coinciden(tmp_path):
+    r = RobotFalso(avance_m=0.25)
+    d0 = r.distancias
+    r.distancias = lambda: {"adelante": d0()["adelante"] + (1.6 if r.x > 0.1 else 0.0),
+                            "atras": d0()["atras"]}
+    res = correr(r.hacer(tmp_path).avanzar(1.0))
+    assert res["resultado"] == "medida_incoherente"

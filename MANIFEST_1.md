@@ -4760,3 +4760,43 @@ Pedido del usuario tras ver que el LIDAR no veía la cobija ni la pesa.
 - Reanudado 04:34 en la tanda 9 con el código corregido (ejemplos nuevos
   con origen `ideal_dr3`); fin previsto ~06:50.
 
+---
+
+## ENTRADA HISTORIAL: 2026-10-02 (4) — Primera prueba con el firmware nuevo, suelo libre en vivo y paso robótico
+
+La Jetson se reinició (~04:40; el entrenamiento murió con ella). Firmware
+nuevo cargado en la C3 por el usuario (`CABLEADO_INVIERTE_AVANCE`, traseros
+al 80 %/100 %, watchdog del loop). Robot en el pasillo.
+
+- **Suelo libre bloqueado con el suelo despejado.** Tras el reinicio la
+  memoria del suelo se aprendió de un fotograma malo y, como la referencia
+  "no se parecía" al recuerdo, NUNCA se actualizaba: `objeto_en_referencia`
+  fijo, 0 % de suelo, hueco 0 → el freno habría bloqueado todo avance.
+  Arreglo: si con el suelo recordado coincide menos del 5 % de la imagen
+  (`MEMORIA_INVALIDA`), se reaprende de la referencia actual (un obstáculo
+  real deja el resto del suelo coincidiendo: cobija 15 %, suelo normal
+  37-69 %). Probado con una memoria arruinada a propósito: se recupera y la
+  cobija se sigue detectando. En vivo: suelo 69 %, pared a 2,2 m por cámara
+  (LIDAR 2,06 desde el centro).
+- **Sentido del firmware nuevo: correcto.** Pulso "adelante" escala 0,3:
+  frente −24 cm, detrás +23 cm.
+- **El robot se desvía a la derecha en cada pulso recto: 8° (manual),
+  16,5° y 11,6° (paso robótico); ~45° en tres pulsos** hasta quedar cruzado
+  en el pasillo, a 2 cm de la pared izquierda, mirando al poste y a una caja
+  con cables. El usuario lo tiene que enderezar. Con el firmware anterior
+  no se medía este desvío. Sospecha: los dos lados no empujan igual
+  (traseros al 80 % en recta ahora) o una rueda va al revés y pelea con su
+  compañera (ya se vio retroceso al girar). **Prueba pendiente: robot en el
+  aire, pulso adelante y pulso izquierda, mirar el sentido de cada rueda.**
+- **Fallo de `paso_robotico`: aceptaba avances medidos con el robot
+  girando.** Con el rumbo cambiando 16°, el hueco "delante" pasó de 1,88 a
+  0,28 m (otra cosa) y dio 0,67 m de avance y "completado" en 2 pulsos. Ahora
+  se para con `deriva_rumbo` si un pulso recto gira más de 8°
+  (`MAX_DERIVA_DEG`) y con `medida_incoherente` si el hueco delantero y el
+  trasero discrepan más de 10 cm. 9 pruebas.
+- Entrenamiento relanzado tras el reinicio (`logs/lanzar_entrenamiento_20261002.sh`,
+  3,7 h, desde la tanda 9).
+- La evasión autónoma (`/api/evasion`) NO se probó: primero hay que
+  resolver el desvío; con un robot que gira 15° por pulso recto, cualquier
+  plan sale mal.
+

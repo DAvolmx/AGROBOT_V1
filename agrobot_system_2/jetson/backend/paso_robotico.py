@@ -32,6 +32,9 @@ Fallos que detecta en vez de insistir:
   · "retroceso": al girar el robot retrocede (medido) y se queda sin hueco
     detrás -> para antes de tocar.
   · "sin_lidar": scan viejo, no se puede medir.
+  · "deriva_rumbo": un pulso recto giró más de MAX_DERIVA_DEG (el robot se
+    desvía; lo de "delante" ya es otra cosa y el avance no se puede medir).
+  · "medida_incoherente": delante y detrás no coinciden en lo avanzado.
 
 Cada pulso queda registrado (antes/después/orden) en JSONL con la misma forma
 que `logs/sesion_20261002_manejo/pasos.jsonl`, para recalibrar el simulador
@@ -61,6 +64,14 @@ TOL_AVANCE_M = 0.08       # llegar a ±8 cm (un pulso son ~25)
 TOL_GIRO_DEG = 5.0
 # Hueco mínimo detrás para seguir girando (el giro retrocede, medido).
 HUECO_TRASERO_GIRO_M = 0.15
+# Un pulso RECTO que cambia el rumbo más que esto no es recto: el robot se
+# desvía (2026-10-02, firmware con traseros al 80 %: 8-16° a la derecha por
+# pulso) y el "delante" del LIDAR ya mira a otra cosa, así que el avance
+# medido no vale. Se para y se avisa en vez de seguir midiendo mal.
+MAX_DERIVA_DEG = 8.0
+# Delante y detrás deben contar la misma historia (lo que se acercó lo de
+# delante = lo que se alejó lo de detrás). Si no, la medida no es fiable.
+MAX_DESACUERDO_M = 0.10
 
 
 def _envolver(grados: float) -> float:
@@ -211,6 +222,13 @@ class PasoRobotico:
                 if progreso is None:
                     resultado = "sin_medida"
                     break
+                if not es_giro:
+                    if giro is not None and abs(giro) > MAX_DERIVA_DEG:
+                        resultado = "deriva_rumbo"
+                        break
+                    if _desacuerdo(antes, despues) > MAX_DESACUERDO_M:
+                        resultado = "medida_incoherente"
+                        break
                 minimo = PROGRESO_MIN_DEG if es_giro else PROGRESO_MIN_M
                 if progreso < minimo:
                     sin_progreso += 1
@@ -229,6 +247,13 @@ class PasoRobotico:
             self.estado.update(activo=False, resultado=resultado, hecho=round(hecho, 3),
                                pulsos=pulsos)
         return dict(self.estado)
+
+
+def _desacuerdo(antes: dict, despues: dict) -> float:
+    """Diferencia entre lo que dice el hueco delantero y el trasero (m)."""
+    if None in (antes.get("adelante"), despues.get("adelante"), antes.get("atras"), despues.get("atras")):
+        return 0.0
+    return abs((antes["adelante"] - despues["adelante"]) - (despues["atras"] - antes["atras"]))
 
 
 def _cambio(a, b) -> float:

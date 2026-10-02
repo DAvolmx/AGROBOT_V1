@@ -47,6 +47,25 @@ REF_DISPERSION_MAX = 0.45 # fracción de la referencia que no cae en sus 3 bins 
 # la referencia ya no es suelo sino algo que el robot tiene encima.
 MEMORIA_ALFA = 0.1
 MEMORIA_EXTRANA = 0.55
+# Si con el suelo RECORDADO no coincide casi nada de la imagen, el que está
+# mal es el recuerdo (aprendido de un fotograma raro al arrancar, otra luz,
+# otro sitio), no la escena: se reaprende. Con un obstáculo real delante el
+# resto del suelo sí coincide (la cobija: > 30 %). 2026-10-02: sin esto la
+# memoria quedó mal tras reiniciar y bloqueó el freno con el suelo despejado.
+MEMORIA_INVALIDA = 0.05
+
+
+def _suelo_por_histograma(cv2, hsv, hist, hist_v):
+    """Máscara de "parece suelo" por retroproyección de los histogramas."""
+    # Ensancha un bin en cada sentido: el suelo real no es de un solo color.
+    hist = cv2.GaussianBlur(hist, (3, 3), 0)
+    hist_v = cv2.GaussianBlur(hist_v, (1, 3), 0)
+    cv2.normalize(hist, hist, 0, 255, cv2.NORM_MINMAX)
+    cv2.normalize(hist_v, hist_v, 0, 255, cv2.NORM_MINMAX)
+    p_hs = cv2.calcBackProject([hsv], [0, 1], hist, [0, 180, 0, 256], 1)
+    p_v = cv2.calcBackProject([hsv], [2], hist_v, [0, 256], 1)
+    prob = (p_hs.astype(np.float32) / 255.0) * (p_v.astype(np.float32) / 255.0) ** 0.5
+    return prob >= UMBRAL_SUELO
 
 
 class SueloLibre:
@@ -107,6 +126,7 @@ class SueloLibre:
         if self._mem_hs is not None:
             diferencia = float(cv2.compareHist(self._mem_hs, hist, cv2.HISTCMP_BHATTACHARYYA))
             extrana = diferencia > MEMORIA_EXTRANA
+        ref_hs, ref_v = hist.copy(), hist_v.copy()
         if extrana:
             # Hay algo delante: se mira la imagen con el suelo RECORDADO.
             hist, hist_v = self._mem_hs.copy(), self._mem_v.copy()
@@ -115,20 +135,18 @@ class SueloLibre:
         else:
             self._mem_hs = (1 - MEMORIA_ALFA) * self._mem_hs + MEMORIA_ALFA * hist
             self._mem_v = (1 - MEMORIA_ALFA) * self._mem_v + MEMORIA_ALFA * hist_v
-        # Ensancha un bin en cada sentido: el suelo real no es de un solo color.
-        hist = cv2.GaussianBlur(hist, (3, 3), 0)
-        hist_v = cv2.GaussianBlur(hist_v, (1, 3), 0)
-        cv2.normalize(hist, hist, 0, 255, cv2.NORM_MINMAX)
-        cv2.normalize(hist_v, hist_v, 0, 255, cv2.NORM_MINMAX)
-        p_hs = cv2.calcBackProject([hsv], [0, 1], hist, [0, 180, 0, 256], 1)
-        p_v = cv2.calcBackProject([hsv], [2], hist_v, [0, 256], 1)
-        prob = (p_hs.astype(np.float32) / 255.0) * (p_v.astype(np.float32) / 255.0) ** 0.5
-        suelo = prob >= UMBRAL_SUELO
 
         # Horizonte: filas sin intersección con el suelo no cuentan.
         filas = np.arange(ALTO)
         dist_fila, _ = self.distancia_fila(filas, geo, ALTO, ANCHO)
         validas = np.isfinite(dist_fila) & (dist_fila > 0) & (dist_fila < DISTANCIA_MAX_M)
+
+        suelo = _suelo_por_histograma(cv2, hsv, hist, hist_v)
+        memoria_reaprendida = False
+        if extrana and validas.any() and float(suelo[validas].mean()) < MEMORIA_INVALIDA:
+            self._mem_hs, self._mem_v = ref_hs.copy(), ref_v.copy()
+            extrana, memoria_reaprendida = False, True
+            suelo = _suelo_por_histograma(cv2, hsv, ref_hs, ref_v)
 
         # Columna a columna, de abajo hacia arriba: primera racha de no-suelo.
         base = np.full(ANCHO, -1, dtype=np.int32)
@@ -173,6 +191,7 @@ class SueloLibre:
             "puntos": puntos,
             "referencia_dudosa": dispersion > REF_DISPERSION_MAX and not extrana,
             "objeto_en_referencia": extrana,
+            "memoria_reaprendida": memoria_reaprendida,
             "diferencia_con_memoria": None if diferencia is None else round(diferencia, 3),
             "distancia_min_visible_m": float(np.nanmin(np.where(validas, dist_fila, np.nan))
                                              + geo["camara_adelante_m"]) if validas.any() else None,

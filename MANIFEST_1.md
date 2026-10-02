@@ -4620,6 +4620,18 @@ core 2.x: `esp_task_wdt_init`) y `enableLoopWDT()`; colgado 2 s → reinicio →
 **Firmware para flashear = el del repo a partir de este commit** (incluye
 puntos 8, 10 y 12).
 
+**13. Recableado de los drivers: el sentido se corrige en el FIRMWARE.**
+Tras recablear (firmware viejo aún en la C3), con la Jetson invirtiendo el
+giro, el usuario vio avance y giro al revés: el cableado hace
+(v, ω) → (−v, ω). Firmware: `CABLEADO_INVIERTE_AVANCE = true`,
+`CABLEADO_INVIERTE_GIRO = false`, aplicados al entrar en `applyMotors()`
+(el eco de estado sigue mostrando lo pedido). Jetson:
+`enlace_c3.INVERTIR_GIRO = False` (reemplaza al punto 9) y backend
+reiniciado. Hasta flashear, el avance sale invertido. Verificar con el robot
+en el aire: "adelante" = las cuatro hacia delante; "izquierda" = izquierdas
+atrás, derechas adelante. Si UNA rueda va al revés, se corrige con su
+`INVERT_` y no con estas dos.
+
 **Estado que quedó cambiado:** modo de manejo `interior`
 (`POST /api/drive/mode`); modo seguro rearmado; aceleración 3 / 8 (la puso el
 usuario; queda en `agrobot_config.json`, sin commitear).

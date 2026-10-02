@@ -38,8 +38,11 @@ ESTADO_BLE_VIEJO_S = 0.3
 # EKF/LIDAR, tras reconectar los drivers). Avanzar va bien, así que son los
 # lados izquierdo/derecho cruzados. Se corrige aquí, el único punto por donde
 # salen las órdenes a la C3 (BLE y WiFi), para que valga para botones,
-# exploración, patrulla y Nav2. Si se recablean los drivers, volver a False.
-INVERTIR_GIRO = True
+# exploración, patrulla y Nav2.
+# 2026-10-02, después: el usuario recableó y el sentido del cableado se
+# corrige ahora en el FIRMWARE (CABLEADO_INVIERTE_AVANCE/GIRO en el .ino).
+# Aquí queda en False: la Jetson manda las órdenes tal cual.
+INVERTIR_GIRO = False
 
 
 class EnlaceC3:

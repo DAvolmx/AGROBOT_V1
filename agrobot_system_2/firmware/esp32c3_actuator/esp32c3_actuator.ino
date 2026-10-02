@@ -117,6 +117,16 @@ const bool INVERT_R2 = false;
 const bool INVERT_L1 = false;
 const bool INVERT_L2 = false;
 
+// Sentido del CABLEADO de los drivers, como un todo (2026-10-02). Tras
+// recablear, con la Jetson invirtiendo el giro, el usuario vio avance Y giro
+// al revés: el cableado hace (v, ω) -> (-v, ω). Se corrige AQUÍ, en un solo
+// sitio, y la Jetson manda las órdenes tal cual (enlace_c3.INVERTIR_GIRO =
+// False). Se aplica en applyMotors(): el eco de estado sigue mostrando lo
+// pedido. Si se vuelve a recablear: probar con el robot en el aire y ajustar
+// solo estas dos (o los INVERT_ de arriba si es UNA rueda la que va al revés).
+const bool CABLEADO_INVIERTE_AVANCE = true;
+const bool CABLEADO_INVIERTE_GIRO   = false;
+
 const uint32_t MOTOR_PWM_HZ = 1000;
 const uint8_t MOTOR_PWM_BITS = 8;
 
@@ -691,6 +701,8 @@ void updateTermico() {
 }
 
 void applyMotors(float vx, float omega) {
+  if (CABLEADO_INVIERTE_AVANCE) vx = -vx;
+  if (CABLEADO_INVIERTE_GIRO)   omega = -omega;
   vx    = constrain(vx,    -V_MAX,     V_MAX);
   omega = constrain(omega, -OMEGA_MAX, OMEGA_MAX);
 

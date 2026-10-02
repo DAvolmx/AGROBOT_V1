@@ -4597,6 +4597,17 @@ carga 0,39, antes 0,23). Pruebas del .ino ajustadas a las constantes;
 del punto 8). El IMU (Y adelante, X a los lados) ya se remapea bien en
 `jetson_server.py` antes de publicar `/imu/data_raw`; el yaw sale de Z.
 
+**11. Giro medido en zona abierta (≥ 59 cm libres), firmware VIEJO aún.**
+4 pulsos (interior, escala 0,4; la C3 aplica 1,6 rad/s ~0,8 s), medidos con
+ICP de scans, giróscopo Z integrado y EKF (coinciden entre sí):
+izquierda 1,5° / 0,0°; derecha 2,3° / 2,6°, con **13 y 16 cm de retroceso**
+en los de derecha (antes, ~10 cm con izquierda). Los sensores están bien; el
+robot de verdad no pivota y, gire hacia donde gire, el lado que va hacia
+atrás vence al que va hacia adelante. Sospecha: una rueda con el sentido
+cambiado o peleando con su compañera de lado tras reconectar los drivers.
+Prueba pendiente: robot en el aire, pulso de giro, mirar cada rueda.
+Scripts usados (scratchpad de la sesión): `giro_captura.py` + `icp.py`.
+
 **Estado que quedó cambiado:** modo de manejo `interior`
 (`POST /api/drive/mode`); modo seguro rearmado; aceleración 3 / 8 (la puso el
 usuario; queda en `agrobot_config.json`, sin commitear).

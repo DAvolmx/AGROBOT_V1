@@ -28,6 +28,12 @@ OMEGA_MIN_EFECTIVA = 0.55
 RENDIMIENTO_GIRO = 0.65
 # Deceleración al soltar: v²/(2·d) con d ≈ 0,8 m desde 0,55 m/s.
 DECEL_INERCIA = 0.19
+# Retroceso al girar sobre el eje (m/s de marcha atrás por rad/s de giro
+# pedido). Medido en el pasillo el 2026-10-02: cada pulso de giro hacía
+# retroceder al robot 3-16 cm, porque el lado que va hacia atrás empuja más
+# que el que va hacia delante. 0 = el chasis ideal de antes. Lo ajusta
+# tools/calibrar_con_pasillo.py y lo sortea entrenar.aleatorizar().
+RETROCESO_GIRO = 0.0
 RADIO_ROBOT_M = 0.24          # media diagonal de la carrocería (40 × 35 cm)
 
 # Servo de la cámara. Medido en el robot real el 2026-09-19: INCLINA (no
@@ -87,6 +93,7 @@ class RobotSim:
         # aprenda UN chasis ideal (aleatorización de dominio).
         self.rendimiento_giro = RENDIMIENTO_GIRO
         self.decel_inercia = DECEL_INERCIA
+        self.retroceso_giro = RETROCESO_GIRO
         self.escala_latencia = 1.0
 
     def ordenar(self, v, omega):
@@ -228,7 +235,10 @@ class RobotSim:
         self.omega_rampa += max(-dom, min(dom, self.omega_obj - self.omega_rampa))
 
         self.v = self._efectiva(self.v_rampa, V_MIN_EFECTIVA)
-        self.omega = self._efectiva(self.omega_rampa, OMEGA_MIN_EFECTIVA) * self.rendimiento_giro
+        omega_pedida = self._efectiva(self.omega_rampa, OMEGA_MIN_EFECTIVA)
+        self.omega = omega_pedida * self.rendimiento_giro
+        # El giro sobre el eje no es simétrico en el robot real: retrocede.
+        self.v -= self.retroceso_giro * abs(omega_pedida)
 
         # Patinaje: un skid-steer nunca va exactamente recto.
         v = self.v * (1 + self.rng.normal(0, 0.03))

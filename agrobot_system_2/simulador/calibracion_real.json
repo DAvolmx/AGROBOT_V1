@@ -1,0 +1,56 @@
+{
+  "fuente": "logs/sesion_20261002_manejo",
+  "firmware_giro": "2026-10-01 (viejo, traseros 0,85/215)",
+  "medido": {
+    "avance_cm_por_pulso_escala_0_4": {
+      "media": 26.2,
+      "desvio": 2.2,
+      "n": 4,
+      "valores": [
+        23,
+        29,
+        26,
+        27
+      ]
+    },
+    "giro_deg_por_pulso": {
+      "media": 1.6,
+      "n": 4,
+      "valores": [
+        1.5,
+        0.0,
+        2.3,
+        2.6
+      ]
+    },
+    "retroceso_cm_por_pulso_de_giro": {
+      "media": 8.0,
+      "n": 7,
+      "valores": [
+        2.0,
+        0.0,
+        13.0,
+        16.0,
+        10.0,
+        12.0,
+        3.0
+      ]
+    }
+  },
+  "ajustado": {
+    "decel_inercia": 3.24,
+    "rendimiento_giro": 0.019,
+    "retroceso_giro": 0.053
+  },
+  "comprobacion_sim": {
+    "avance_cm": 25.6,
+    "giro_deg": 1.41,
+    "retroceso_cm": 8.0,
+    "giro_ideal_deg_rend_1": 85.5
+  },
+  "config": {
+    "suavidad_duty": 0.6,
+    "max_linear_accel_mps2": 3,
+    "max_angular_accel_rps2": 8
+  }
+}

@@ -149,6 +149,20 @@ def escenario_para(k, mundos, mezcla, rng):
     return "aleatorio"
 
 
+_CALIBRACION = {}
+
+
+def calibracion_real():
+    """Lo ajustado con el robot real (`simulador/calibracion_real.json`), o None."""
+    if "v" not in _CALIBRACION:
+        ruta = Path(__file__).with_name("calibracion_real.json")
+        try:
+            _CALIBRACION["v"] = json.loads(ruta.read_text())["ajustado"]
+        except (OSError, ValueError, KeyError):
+            _CALIBRACION["v"] = None
+    return _CALIBRACION["v"]
+
+
 def aleatorizar(ep, rng) -> dict:
     """Sortea las condiciones del robot para este episodio.
 
@@ -157,17 +171,37 @@ def aleatorizar(ep, rng) -> dict:
     campo. Así la red aprende a conducir con cualquiera de ellos, y el robot
     real, que es uno más de esa familia, no la pilla por sorpresa."""
     r = ep.robot
-    # Traseros como motores de apoyo (firmware 2026-10-01): en giro aportan
-    # el 85 % del duty, así que el giro puede rendir algo menos que antes.
-    r.rendimiento_giro = float(rng.uniform(0.45, 0.80))    # patina más o menos al girar
-    # Freno activo en la C3 (2026-10-01): parado = TA6586 en corto, ya no
-    # rueda libre. SIN MEDIR todavía: el 75 % de los episodios frena en
-    # ~10-40 cm (0,4-1,5 m/s² desde 0,55 m/s) y el 25 % conserva el
-    # deslizamiento viejo (60-100 cm), por si en el terreno frena menos.
-    if rng.uniform() < 0.75:
-        r.decel_inercia = float(rng.uniform(0.40, 1.50))
+    cal = calibracion_real()
+    if cal is None:
+        # Sin calibración: lo de antes (supuesto, sin medir).
+        r.rendimiento_giro = float(rng.uniform(0.45, 0.80))
+        r.retroceso_giro = 0.0
+        if rng.uniform() < 0.75:
+            r.decel_inercia = float(rng.uniform(0.40, 1.50))
+        else:
+            r.decel_inercia = float(rng.uniform(0.15, 0.30))
     else:
-        r.decel_inercia = float(rng.uniform(0.15, 0.30))
+        # Medido conduciendo el robot real (tools/calibrar_con_pasillo.py,
+        # pasillo del 2026-10-02): el giro sobre el eje casi no rota (~2° por
+        # pulso, rendimiento ~0,02), retrocede ~8 cm por pulso de giro y el
+        # freno activo deja el avance en ~26 cm por pulso (~3 m/s²). Antes se
+        # sorteaba giro 0,45-0,80 y frenada 0,4-1,5: la red aprendía a girar
+        # en sitio con un robot que no existe.
+        rend, retro, decel = cal["rendimiento_giro"], cal["retroceso_giro"], cal["decel_inercia"]
+        u = rng.uniform()
+        if u < 0.4:      # el chasis tal como se midió (firmware de traseros viejo)
+            r.rendimiento_giro = float(rng.uniform(rend * 0.5, rend * 3.0))
+        else:            # firmware con traseros a fondo en giro: mejor, sin medir aún
+            r.rendimiento_giro = float(rng.uniform(0.05, 0.80))
+        r.retroceso_giro = float(rng.uniform(0.5, 1.5) * retro if rng.uniform() < 0.5
+                                 else rng.uniform(0.0, 0.5) * retro)
+        u = rng.uniform()
+        if u < 0.60:
+            r.decel_inercia = float(rng.uniform(0.6, 1.3) * decel)
+        elif u < 0.85:
+            r.decel_inercia = float(rng.uniform(0.40, 1.50))
+        else:
+            r.decel_inercia = float(rng.uniform(0.15, 0.30))   # deslizamiento viejo
     r.escala_latencia = float(rng.uniform(0.6, 2.0))       # BLE más o menos cargado
     ep.slam.ruido = float(rng.uniform(0.5, 1.5))
     ep.fallos_lidar.cambiar(str(rng.choice(["usb", "usb", "uart", "ninguna"])))
@@ -188,7 +222,8 @@ def aleatorizar(ep, rng) -> dict:
     }
     # El LIDAR se midió en interior (2026-09-30); fuera siempre es peor.
     m.lidar_peor = float(rng.uniform(1.0, 3.0))
-    return {"giro": round(r.rendimiento_giro, 2), "desliz": round(r.decel_inercia, 2),
+    return {"giro": round(r.rendimiento_giro, 3), "retro": round(r.retroceso_giro, 3),
+            "desliz": round(r.decel_inercia, 2),
             "latencia": round(r.escala_latencia, 2), "slam": round(ep.slam.ruido, 2),
             "lidar": ep.fallos_lidar.conexion, "suelo": m.superficie,
             "sol": round(m.sol_altura), "cam": round(m.camara_params["ganancia"], 2),

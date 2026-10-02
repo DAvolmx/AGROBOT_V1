@@ -1173,6 +1173,38 @@ def pasillo_estrecho():
     return Mundo("pasillo", paredes, ruta, 0.7, 0.2, [], (-4.5, -1.5, 2.5, 4.5)), (-3.5, 0.0, 0.0)
 
 
+def pasillo_real():
+    """El pasillo REAL donde se probó el robot el 2026-10-02 (plano del LIDAR
+    y fotos de la cámara, logs/sesion_20261002_manejo).
+
+    Pasillo de ~65 cm (el robot mide 35: ~15 cm por lado) que desemboca en
+    un cuarto de ~2 × 1,3 m, con un poste de madera a la derecha de la salida
+    y objetos BAJOS que el LIDAR no ve y la cámara sí: una pesa, una chancla
+    y una cobija en el suelo. Es lo que más falló de verdad: el freno marcaba
+    1-2 m libres con la pesa a 60 cm. Girar sobre el eje dentro del pasillo
+    roza las paredes; hay que salir al cuarto para girar."""
+    paredes = [
+        (-0.7, 0.32, 1.1, 0.32),      # pared izquierda del pasillo
+        (-0.7, -0.33, 1.0, -0.33),    # pared derecha del pasillo
+        (-0.7, -0.33, -0.7, 0.32),    # fondo del pasillo (detrás del robot)
+        (1.1, 0.32, 1.1, 1.45),       # el cuarto se abre a la izquierda
+        (1.1, 1.45, 2.35, 1.45),
+        (2.35, 1.45, 2.35, -0.65),    # pared del fondo del cuarto (la de la pesa)
+        (2.35, -0.65, 1.0, -0.65),    # puerta cerrada a la derecha
+        (1.0, -0.65, 1.0, -0.33),
+    ]
+    objetos = [
+        {"tipo": "maceta", "x": 0.95, "y": -0.27, "radio": 0.05, "altura": 1.5},   # poste de madera
+        {"tipo": "maceta", "x": 2.1, "y": 0.75, "radio": 0.16, "altura": 0.35},    # balde
+        {"tipo": "piedra", "x": 1.85, "y": 0.2, "radio": 0.13, "altura": 0.14},    # pesa (invisible al LIDAR)
+        {"tipo": "piedra", "x": 1.35, "y": 0.05, "radio": 0.25, "altura": 0.15},   # cobija en el suelo
+        {"tipo": "planta", "x": 1.55, "y": 0.45, "radio": 0.08, "altura": 0.03},   # chancla (se pisa)
+    ]
+    ruta = [(-0.4, 0.0), (0.9, 0.0), (1.55, 0.7), (1.55, 1.1)]
+    return Mundo("pasillo_real", paredes, ruta, 0.45, 0.0, [], (-1.0, -1.0, 2.6, 1.8),
+                 objetos=objetos), (-0.4, 0.0, 0.0)
+
+
 def callejon_sin_salida():
     """Bolsillo cerrado: entrena reconocer que no hay salida y volver atrás."""
     paredes = (_rect(-5, -3, 5, 3)
@@ -1337,6 +1369,7 @@ ESCENARIOS = {
     "bucle": bucle,
     "hileras": hileras,
     "pasillo": pasillo_estrecho,
+    "pasillo_real": pasillo_real,
     "callejon": callejon_sin_salida,
     "trampa_bucle": trampa_bucle,
     "invernadero": invernadero,

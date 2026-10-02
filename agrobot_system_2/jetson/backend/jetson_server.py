@@ -53,6 +53,7 @@ from explorador import ExploradorReactivo
 from sendero import SeguidorSendero
 from navigation_logger import NavigationLogger, analizar_sesion
 from aprendizaje import Aprendizaje
+from paso_robotico import PasoRobotico
 from cabeceo import CabeceoIMU
 from politica import Politica
 from deslizamiento import MonitorDeslizamiento
@@ -891,6 +892,7 @@ async def video_handler(request: web.Request):
 # =============================================
 patrol: PatrolController | None = None
 conductor: ConductorPulsos | None = None
+paso_robotico: PasoRobotico | None = None
 explorador: ExploradorReactivo | None = None
 nav_logger: NavigationLogger | None = None
 _nav_cal_task: asyncio.Task | None = None
@@ -1128,6 +1130,52 @@ async def _vigia_lidar():
 # =============================================
 # ===== MANEJO MANUAL POR PULSOS =====
 # =============================================
+def _pulso_robotico(accion: str, escala: float, maniobra: bool):
+    """Un pulso para paso_robotico, con el acelerador de la config."""
+    ctrl = state.config["control"]
+    conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * escala,
+                      omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
+
+
+async def paso_get_handler(request: web.Request):
+    """GET /api/paso — en qué va el movimiento robótico por pulsos."""
+    if paso_robotico is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    return web.json_response(paso_robotico.estado)
+
+
+async def paso_post_handler(request: web.Request):
+    """POST /api/paso  {"accion": "avanzar", "cm": 50} | {"accion": "girar",
+    "grados": -90} | {"accion": "parar"}; opcional "escala" (0,1-1).
+
+    Movimiento cerrado por sensores: pulso, esperar quieto, medir, decidir
+    (ver paso_robotico.py). Responde enseguida; el progreso en GET."""
+    if paso_robotico is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    accion = body.get("accion")
+    if accion == "parar":
+        paso_robotico.detener()
+        return web.json_response({"ok": True, **paso_robotico.estado})
+    if accion not in ("avanzar", "girar"):
+        return web.json_response({"error": "accion = avanzar | girar | parar"}, status=400)
+    if (patrol is not None and patrol.activo) or (explorador is not None and explorador.activo):
+        return web.json_response({"error": "hay autonomía en marcha — detenela primero"}, status=409)
+    try:
+        cantidad = float(body["cm"] if accion == "avanzar" else body["grados"])
+    except (KeyError, TypeError, ValueError):
+        return web.json_response({"error": "falta cm (avanzar) o grados (girar)"}, status=400)
+    if "escala" in body:
+        paso_robotico.escala = _unit(body.get("escala"), lo=0.1)
+    if not paso_robotico.iniciar(accion, cantidad):
+        return web.json_response({"error": "ya hay un movimiento en curso"}, status=409)
+    return web.json_response({"ok": True, "accion": accion, "cantidad": cantidad,
+                              "escala": paso_robotico.escala})
+
+
 async def drive_handler(request: web.Request):
     """POST /api/drive  {"accion": "adelante|atras|izquierda|derecha|parar",
                          "escala": 0.1..1, "maniobra": true}
@@ -1142,7 +1190,9 @@ async def drive_handler(request: web.Request):
     accion = body.get("accion", "")
 
     if accion == "parar":
-        # Parar lo para TODO: patrulla, exploración y pulsos.
+        # Parar lo para TODO: patrulla, exploración, pasos robóticos y pulsos.
+        if paso_robotico is not None and paso_robotico.estado.get("activo"):
+            paso_robotico.detener()
         if explorador is not None and explorador.activo:
             explorador.detener()
         if patrol is not None and patrol.activo:
@@ -1159,6 +1209,9 @@ async def drive_handler(request: web.Request):
             {"error": "la patrulla autónoma está en marcha — detenela para manejar a mano"},
             status=409)
 
+    # El operador toma el mando: el paso robótico en curso se cancela.
+    if paso_robotico is not None and paso_robotico.estado.get("activo"):
+        paso_robotico.detener()
     ctrl = state.config["control"]
     escala = _unit(body.get("escala", 1.0), lo=0.0)
     conductor.ordenar(accion,
@@ -2415,6 +2468,16 @@ async def start_background(app: web.Application):
     conductor = ConductorPulsos(send_command=actuator_proto.send_command,
                                 emergency_stop=actuator_proto.emergency_stop,
                                 get_config=lambda: state.config["control"])
+    global paso_robotico
+    paso_robotico = PasoRobotico(
+        ordenar=_pulso_robotico,
+        parar=conductor.parar,
+        conductor_activo=lambda: conductor.activo,
+        distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
+        rumbo_deg=lambda: current_pose().get("theta_deg"),
+        edad_scan_s=lidar_reactive.edad_scan_s,
+        umbral_freno_m=lambda: (state.config["slam"]["margen_parada_cm"]
+                                + state.config["slam"]["deslizamiento_cm"]) / 100.0)
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
     app["zupt_task"] = asyncio.create_task(_bucle_zupt())
@@ -2853,6 +2916,8 @@ def create_app() -> web.Application:
     app.router.add_get("/video", video_handler)
     app.router.add_post("/api/video/record", video_record_handler)
     app.router.add_post("/api/drive", drive_handler)
+    app.router.add_get("/api/paso", paso_get_handler)
+    app.router.add_post("/api/paso", paso_post_handler)
     app.router.add_get("/api/drive/mode", drive_mode_handler)
     app.router.add_post("/api/drive/mode", drive_mode_handler)
     app.router.add_get("/api/sendero/vista.jpg", sendero_vista_handler)

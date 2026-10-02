@@ -4728,4 +4728,35 @@ Pedido del usuario tras ver que el LIDAR no veía la cobija ni la pesa.
 - Diagnóstico: `GET /api/suelo` y `GET /api/suelo/vista.jpg` (verde =
   suelo, rojo = base de obstáculos, recuadro = referencia).
 - Sin probar con el robot andando (C3 apagada en esta sesión).
+- **Suelo libre también en el simulador** (`correr.py`, `_bucle_suelo` a 4 Hz
+  de reloj virtual; `SueloLibre(reloj=...)`): el freno simulado es el del
+  robot. En `pasillo_real` los choques con la pesa bajaron (29 → 7 en el
+  mismo episodio).
+
+### Entrenamiento del 2026-10-02: fallos encontrados y corregidos (commit ee182d4)
+- **`mundo_variado()` perdía radio, altura y solidez** de los objetos de
+  los escenarios incorporados: volvían a las medidas por defecto de su tipo.
+  En `pasillo_real` el poste de 5 cm pasaba a maceta de 16 cm y tapaba la
+  salida (9 de 9 episodios descartados con 0 m) y la pesa de 14 cm pasaba a
+  piedra de 32 cm, visible al LIDAR. Afectaba a todos los escenarios
+  incorporados con objetos de medida propia.
+- **Episodios "ideales" que chocan entraban al dataset** (solo se
+  descartaba por distancia): hasta 42 choques en uno. Ahora se descartan con
+  más de max(3, 0,5 por metro). El piloto ideal (pure pursuit) gira en sitio
+  donde la carrocería no cabe; pendiente que use la regla de `evasion.py`.
+- **El dataset no tiene NINGÚN ejemplo de "atrás"** (452 454 ejemplos:
+  adelante 372 940, izquierda/derecha 39 757 cada una, atrás 0): la
+  política no puede aprender a retroceder, que es lo único que sirve en un
+  pasillo donde no cabe girando. Lo cubre `evasion.py`; pendiente en el
+  piloto ideal.
+- **OOM dos veces** (04:20 y 04:27): la primera en la evaluación de la tanda 9
+  (5,8 GB); la segunda porque Claude corrió episodios de prueba del
+  simulador a la vez. El supervisor relanzó bien. No probar el simulador con
+  un entrenamiento en marcha.
+- **El supervisor detecta el entrenamiento con `pgrep -f
+  "simulador/entrenar.py"`**: cualquier comando cuyo texto contenga eso (un
+  bucle de espera, un grep) lo engaña y no relanza. Usar un patrón como
+  `entrenar[.]py --horas` al vigilarlo.
+- Reanudado 04:34 en la tanda 9 con el código corregido (ejemplos nuevos
+  con origen `ideal_dr3`); fin previsto ~06:50.
 

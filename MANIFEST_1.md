@@ -4502,6 +4502,21 @@ LIDAR en `null` con el LIDAR a 50 Hz (consistente con que
 `obstacle_avoidance.py` es código muerto, §0). `/api/health` marca sesgo del
 giróscopo +0,71 °/s en reposo.
 
+**7. "Le falta fuerza y torque" (usuario): troceado de la Jetson contra el
+freno activo del firmware.** `pulse_drive._tramo` alterna empuje y orden
+CERO (`control.suavidad_duty` 0,6, periodo 0,3 s: 180 ms / 120 ms). Se pensó
+para rueda libre, pero con `FRENO_ACTIVO = true` (firmware 2026-10-01) el cero
+pone los motores en CORTO el 40 % del tiempo, y como en el firmware bajar
+es inmediato y subir va por rampa (`RAMPA_V_PCT_S` 250 %/s), cada tramo de
+180 ms arranca de 0 y llega como mucho al ~45 % de lo pedido. En giro se
+suma el tren de pulsos del firmware (140 ms on / 90 ms off). Arreglo
+propuesto: `suavidad_duty = 1.0` (o hacer que el tramo apagado mande rueda
+libre en vez de freno). Claude fue bloqueado por el clasificador al
+cambiarlo; queda para el usuario. Otros recortes de torque del firmware:
+traseros al 60 % del duty en recta (`FACTOR_TRASERO_RECTO`, sin medir), tope
+215 y corte térmico ESTIMADO que puede dejarlos en rueda libre tras uso
+seguido.
+
 **Estado que quedó cambiado:** modo de manejo `interior`
 (`POST /api/drive/mode`); modo seguro rearmado; aceleración 3 / 8 (la puso el
 usuario; queda en `agrobot_config.json`, sin commitear).

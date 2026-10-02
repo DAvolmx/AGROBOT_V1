@@ -4800,3 +4800,32 @@ al 80 %/100 %, watchdog del loop). Robot en el pasillo.
   resolver el desvío; con un robot que gira 15° por pulso recto, cualquier
   plan sale mal.
 
+---
+
+## ENTRADA HISTORIAL: 2026-10-02 (5) — Parada de emergencia que no paraba, modo "preciso"
+
+- **"No vale el stop de emergencia" (usuario).** Dos fallos:
+  1. El botón (WebSocket) paraba patrulla, exploración y pulsos, pero NO la
+     evasión ni el paso robótico añadidos ese día: el lazo de pasos veía el
+     pulso cortado, esperaba quieto, medía y mandaba el SIGUIENTE.
+  2. El botón solo usaba el WebSocket: si estaba caído (pantalla del móvil
+     bloqueada) no hacía nada y no avisaba.
+  Arreglo: `_parada_total(origen)` en `jetson_server.py`, ÚNICA para todos
+  los caminos (botón por WS, nuevo `POST /api/emergencia`, `/api/drive`
+  "parar", downlink LoRa): para evasión → paso robótico → exploración →
+  patrulla → meta de Nav2 → pulsos → trama de parada al C3; una pieza que
+  falle no impide parar el resto. `PasoRobotico.detener()` levanta además una
+  bandera que el lazo mira antes de cada pulso (segunda barrera). Dashboard:
+  `pararTodo()` para el botón STOP (en `pointerdown`), el ■ y la barra
+  espaciadora, por HTTP y WS a la vez, con reintento y aviso rojo si no
+  llegó por ninguna. Probado en vivo: "avanzar 30 cm" + emergencia a 0,3 s →
+  1 pulso, `detenido`, 7 sistemas parados.
+- **Modo de manejo "preciso"** (`pulse_drive.MODOS`): pulso recto 0,4 s y de
+  giro 0,25 s (la mitad que interior), pedido del usuario: "pulsos cortos y
+  más controlados". Botón "Preciso" en el dashboard.
+- **El modo de manejo se guarda** (`control.modo_manejo`): antes cada
+  reinicio volvía a "exterior" (pulsos de 1 s a toda velocidad).
+- La C3 quedó solo por WiFi (BLE: "sigue sin aparecer").
+- Robot metido bajo una mesa contra una caja de plástico baja (el LIDAR
+  marcaba 72 cm libres; la cámara la tenía delante): no se movió.
+

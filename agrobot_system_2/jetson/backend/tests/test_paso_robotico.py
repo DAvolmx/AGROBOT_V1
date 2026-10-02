@@ -142,3 +142,21 @@ def test_delante_y_detras_no_coinciden(tmp_path):
                             "atras": d0()["atras"]}
     res = correr(r.hacer(tmp_path).avanzar(1.0))
     assert res["resultado"] == "medida_incoherente"
+
+
+def test_parada_de_emergencia_no_deja_mandar_otro_pulso(tmp_path):
+    """El fallo del 2026-10-02: tras la parada, el lazo mandaba el siguiente
+    pulso. Se detiene en medio del primero, sin cancelar la tarea (como
+    cuando lo llama la evasión directamente)."""
+    r = RobotFalso(avance_m=0.25)
+    orig = r.ordenar
+    caja = []
+
+    def ordenar_y_parar(accion, escala, maniobra):
+        orig(accion, escala, maniobra)
+        caja[0].detener()                 # el operador pulsa STOP durante el pulso
+    r.ordenar = ordenar_y_parar
+    caja.append(r.hacer(tmp_path))
+    res = correr(caja[0].avanzar(1.0))
+    assert res["resultado"] == "detenido"
+    assert len(r.ordenes) == 1

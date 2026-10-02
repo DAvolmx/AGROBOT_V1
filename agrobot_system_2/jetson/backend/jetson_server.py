@@ -363,7 +363,7 @@ class EnvTelemetryProtocol(asyncio.DatagramProtocol):
                     print("[lora] ✗ PARADA NO EJECUTADA: el enlace con el "
                           "ESP32-C3 todavía no está abierto")
                     return
-                actuator_proto.emergency_stop()
+                _parada_total(f"LoRa {comando}")
                 _lanzar(state.broadcast({
                     "type": "emergency_stop",
                     "data": {"origen": "lora_downlink", "comando": comando},
@@ -832,21 +832,7 @@ async def ws_handler(request: web.Request):
                 }})
 
             elif cmd.get("type") == "emergency_stop":
-                state.mission_active = False
-                # La patrulla y los pulsos primero: si no, vuelven a mandar
-                # velocidad (o una meta a Nav2) justo después de la parada.
-                if patrol is not None:
-                    patrol.detener()
-                if explorador is not None:
-                    explorador.detener()
-                if conductor is not None:
-                    conductor.parar()
-                actuator_proto.emergency_stop()
-                await state.broadcast({"type": "toast", "data": {
-                    "kind": "error", "title": "PARADA DE EMERGENCIA",
-                    "message": "Motores detenidos por el operador.",
-                }})
-                await state.broadcast({"type": "mission_state", "data": {"active": False}})
+                _parada_total("dashboard WebSocket")
 
     finally:
         state.ws_clients.discard(ws)
@@ -1299,6 +1285,50 @@ async def evasion_get_handler(request: web.Request):
     return web.json_response(evasion_estado)
 
 
+def _parada_total(origen: str) -> list[str]:
+    """PARADA DE EMERGENCIA: detiene TODO lo que puede mover el robot.
+
+    Un solo sitio para todos los caminos (botón del dashboard por HTTP o
+    WebSocket, /api/drive "parar", downlink LoRa). Antes cada camino paraba
+    una lista distinta y el botón no conocía la evasión ni el paso robótico:
+    el lazo de pasos veía cortado su pulso, esperaba quieto, medía y mandaba
+    el SIGUIENTE (2026-10-02, "no vale el stop de emergencia").
+
+    Orden: primero lo que DECIDE (para que no vuelva a mandar nada), luego lo
+    que ejecuta, y al final la trama de parada al C3. Síncrona y sin await:
+    sirve también desde el callback UDP del LoRa."""
+    hecho = []
+    pasos = [
+        ("evasion", _detener_evasion),
+        ("paso_robotico", lambda: paso_robotico is not None and paso_robotico.detener()),
+        ("exploracion", lambda: explorador is not None and explorador.detener()),
+        ("patrulla", lambda: patrol is not None and patrol.detener()),
+        ("nav2", ros_bridge.cancel_nav_goal),
+        ("pulsos", lambda: conductor is not None and conductor.parar()),
+        ("motores", lambda: actuator_proto is not None and actuator_proto.emergency_stop()),
+    ]
+    for nombre, fn in pasos:
+        try:
+            fn()
+            hecho.append(nombre)
+        except Exception as exc:          # una pieza rota no impide parar el resto
+            print(f"[emergencia] {nombre} falló al parar: {type(exc).__name__}: {exc}", flush=True)
+    state.mission_active = False
+    print(f"[emergencia] PARADA TOTAL ({origen}): {', '.join(hecho)}", flush=True)
+    _schedule(state.broadcast({"type": "mission_state", "data": {"active": False}}))
+    _schedule(state.broadcast({"type": "toast", "data": {
+        "kind": "error", "title": "PARADA DE EMERGENCIA",
+        "message": f"Todo detenido ({origen})."}}))
+    return hecho
+
+
+async def emergencia_handler(request: web.Request):
+    """POST /api/emergencia — parada total por HTTP (el WebSocket se cae al
+    bloquear la pantalla del móvil; una petición HTTP llega o da error)."""
+    hecho = _parada_total("dashboard HTTP")
+    return web.json_response({"ok": True, "detenido": hecho})
+
+
 def _pulso_robotico(accion: str, escala: float, maniobra: bool):
     """Un pulso para paso_robotico, con el acelerador de la config."""
     ctrl = state.config["control"]
@@ -1359,18 +1389,9 @@ async def drive_handler(request: web.Request):
     accion = body.get("accion", "")
 
     if accion == "parar":
-        # Parar lo para TODO: patrulla, exploración, pasos robóticos y pulsos.
-        _detener_evasion()
-        if paso_robotico is not None and paso_robotico.estado.get("activo"):
-            paso_robotico.detener()
-        if explorador is not None and explorador.activo:
-            explorador.detener()
-        if patrol is not None and patrol.activo:
-            patrol.detener()
-            state.mission_active = False
-            await state.broadcast({"type": "mission_state", "data": {"active": False}})
-        conductor.parar()
-        return web.json_response({"ok": True, "accion": "parar"})
+        # Parar lo para TODO (misma parada que el botón de emergencia).
+        hecho = _parada_total("/api/drive parar")
+        return web.json_response({"ok": True, "accion": "parar", "detenido": hecho})
 
     if accion not in ACCIONES:
         return web.json_response({"error": f"acción desconocida: {accion!r}"}, status=400)
@@ -1449,6 +1470,9 @@ async def drive_mode_handler(request: web.Request):
         return web.json_response({"error": f"modo desconocido: {modo!r}"}, status=400)
     if conductor:
         conductor.modo = modo
+    # Se guarda: antes cada reinicio del backend volvía a "exterior" (pulsos
+    # de 1 s a toda velocidad) sin avisar (2026-10-02).
+    state.config = config_store.update_section("control", {"modo_manejo": modo})
     await state.broadcast({"type": "drive_mode", "data": {"modo": modo}})
     await state.broadcast({"type": "toast", "data": {
         "kind": "success", "title": "Modo de manejo",
@@ -2639,6 +2663,8 @@ async def start_background(app: web.Application):
     conductor = ConductorPulsos(send_command=actuator_proto.send_command,
                                 emergency_stop=actuator_proto.emergency_stop,
                                 get_config=lambda: state.config["control"])
+    modo_guardado = state.config["control"].get("modo_manejo", "exterior")
+    conductor.modo = modo_guardado if modo_guardado in MODOS else "exterior"
     global paso_robotico
     paso_robotico = PasoRobotico(
         ordenar=_pulso_robotico,
@@ -3088,6 +3114,7 @@ def create_app() -> web.Application:
     app.router.add_get("/video", video_handler)
     app.router.add_post("/api/video/record", video_record_handler)
     app.router.add_post("/api/drive", drive_handler)
+    app.router.add_post("/api/emergencia", emergencia_handler)
     app.router.add_get("/api/paso", paso_get_handler)
     app.router.add_post("/api/paso", paso_post_handler)
     app.router.add_get("/api/drive/mode", drive_mode_handler)

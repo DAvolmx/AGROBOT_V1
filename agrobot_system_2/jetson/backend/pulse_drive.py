@@ -43,6 +43,18 @@ MODOS = {
         "maniobra_medio_s": 0.4,
         "vel_factor": 0.6,
     },
+    # Pulsos CORTOS (2026-10-02, pedido del usuario): la mitad de largos
+    # que en interior. Con el firmware nuevo cada pulso recto de 0,8 s
+    # desviaba el rumbo 8-16° a la derecha; con la mitad de pulso se mueve
+    # ~12 cm y se puede corregir antes de quedar cruzado en un pasillo.
+    "preciso": {
+        "pulso_recto_s": 0.4,
+        "pulso_giro_s": 0.25,
+        "maniobra_v": 0.0,
+        "maniobra_omega": 1.0,
+        "maniobra_medio_s": 0.25,
+        "vel_factor": 0.6,
+    },
     "exterior": {
         "pulso_recto_s": 1.0,
         "pulso_giro_s": 0.35,

@@ -105,6 +105,7 @@ class PasoRobotico:
         self._ruta = ruta_registro
         self._archivo = None
         self.tarea: asyncio.Task | None = None
+        self._abortar = False
         self.estado = {"activo": False, "orden": None, "resultado": None}
 
     # ------------------------------------------------------------ registro
@@ -159,6 +160,10 @@ class PasoRobotico:
         return True
 
     def detener(self):
+        # La bandera es la segunda barrera: si quien llamó a avanzar()/girar()
+        # no era nuestra propia tarea (p. ej. la evasión), cancelar la tarea
+        # no basta; el lazo la mira antes de CADA pulso y no manda ninguno más.
+        self._abortar = True
         if self.tarea is not None and not self.tarea.done():
             self.tarea.cancel()
         self._parar()
@@ -178,10 +183,14 @@ class PasoRobotico:
         self.estado = {"activo": True, "orden": {"accion": nombre, unidad: pedido},
                        "hecho": 0.0, "pulsos": 0, "resultado": None}
         hecho, sin_progreso, pulsos = 0.0, 0, 0
+        self._abortar = False
         tol = TOL_GIRO_DEG if es_giro else TOL_AVANCE_M
         resultado = "completado"
         try:
             while objetivo - hecho > tol:
+                if self._abortar:
+                    resultado = "detenido"
+                    break
                 if pulsos >= MAX_PULSOS:
                     resultado = "max_pulsos"
                     break
@@ -203,6 +212,9 @@ class PasoRobotico:
                 self._ordenar(accion, self.escala, False)
                 pulsos += 1
                 despues = await self._esperar_quieto()
+                if self._abortar:
+                    resultado = "detenido"
+                    break
                 r1 = self._rumbo()
 
                 avance = self._avance(antes, despues)

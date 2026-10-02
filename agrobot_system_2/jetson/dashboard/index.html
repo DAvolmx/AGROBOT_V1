@@ -763,6 +763,7 @@ input[type="text"], select { font-family: inherit; }
                   seguir · <strong>espacio</strong> o ■ para parar · flechas del teclado.</p>
                 <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                   <span style="font-size:13px; color:var(--ink-soft); margin-right:4px;">Modo:</span>
+                  <button class="mode-btn" id="mode-preciso" data-modo="preciso" title="Pulsos cortos (mitad de largos)">Preciso</button>
                   <button class="mode-btn" id="mode-interior" data-modo="interior">Interior</button>
                   <button class="mode-btn active" id="mode-exterior" data-modo="exterior">Exterior</button>
                 </div>
@@ -2804,7 +2805,35 @@ input[type="text"], select { font-family: inherit; }
     if (d.modo) { mostrarDriveMode(d.modo); }
   }).catch(() => {});
 
+  // PARADA TOTAL. Por HTTP y por WebSocket a la vez: el WebSocket se cae al
+  // bloquear la pantalla del móvil y antes el botón STOP, que solo usaba el
+  // WebSocket, no hacía NADA sin avisar (2026-10-02). El backend
+  // (`_parada_total`) para evasión, pasos robóticos, exploración, patrulla,
+  // Nav2, pulsos y motores, venga por donde venga.
+  async function pararTodo(btn) {
+    if (btn) {
+      btn.classList.add("active");
+      setTimeout(() => btn.classList.remove("active"), 180);
+    }
+    let porWs = false;
+    try {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "emergency_stop" }));
+        porWs = true;
+      }
+    } catch (_) {}
+    for (let intento = 0; intento < 2; intento++) {
+      try {
+        const res = await fetch("/api/emergencia", { method: "POST", keepalive: true });
+        if (res.ok) return true;
+      } catch (_) {}
+    }
+    if (!porWs) toast("error", "¡LA PARADA NO LLEGÓ!", "Sin conexión con la Jetson. Corta la batería de motores.", 10000);
+    return porWs;
+  }
+
   async function conducir(accion, btn) {
+    if (accion === "parar") return pararTodo(btn);
     if (btn) {
       btn.classList.add("active");
       setTimeout(() => btn.classList.remove("active"), 180);
@@ -2848,7 +2877,7 @@ input[type="text"], select { font-family: inherit; }
       // preventDefault: sin esto la barra hace scroll o "pulsa" el botón
       // que tenga el foco, que podría ser justo el de avanzar.
       e.preventDefault();
-      conducir("parar", document.querySelector(".c-stop"));
+      pararTodo(document.querySelector(".c-stop"));
       return;
     }
     const accion = accionDeTecla[e.key];
@@ -2889,8 +2918,11 @@ input[type="text"], select { font-family: inherit; }
   // ---------------------------------------------------------------
   // Emergency stop
   // ---------------------------------------------------------------
-  $("estop-btn").addEventListener("click", () => {
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "emergency_stop" }));
+  // pointerdown y no click: el click espera a soltar el dedo.
+  $("estop-btn").addEventListener("pointerdown", (e) => { e.preventDefault(); pararTodo($("estop-btn")); },
+                                  { passive: false });
+  $("estop-btn").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pararTodo($("estop-btn")); }
   });
 
   // ---------------------------------------------------------------

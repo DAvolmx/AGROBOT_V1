@@ -32,8 +32,10 @@
 >   100 %" y "robot atascado" enganchan el modo seguro con el robot avanzando.
 >   El TF del LIDAR (`yaw=π`) y los motores están BIEN (confirmado por el
 >   usuario con la cámara). Sin corregir todavía.
-> - Con la C3 aplicando v=0,54 (100 %) el robot no se mueve: fallo físico
->   entre la C3 y las ruedas (alimentación/cables de motores).
+> - Drivers reconectados por el usuario: avanza 21–29 cm por pulso. El GIRO
+>   salía invertido (lados cruzados): `enlace_c3.INVERTIR_GIRO = True`. El
+>   pivote casi no rota (1–4°/pulso) y retrocede al girar: revisar ruedas.
+> - Obstáculos bajos (cobija, pesa) invisibles al LIDAR y al freno.
 > - El modo seguro se engancha por un hueco de 1,7 s de la C3 y luego deja
 >   lanzar patrullas que no se mueven (factor 0).
 > - **La C3 y el LoRa V3 se reinician juntos** (cae la alimentación). Tras
@@ -4559,6 +4561,29 @@ Pendiente de hardware: alimentar la C3 y el LoRa V3 aparte de los motores
 (o condensador grande + regulador propio) y pull-down de 10 kΩ en las
 entradas del driver, que cubren también los ~ms antes de que corra
 `setup()`.
+
+**9. Manejo con registro tras reconectar los drivers** (10 pasos; foto +
+LIDAR antes/después + eco de la C3 por paso en
+`logs/sesion_20261002_manejo/pasos.jsonl` y `pasoNN.jpg`, fuera de git):
+- Adelante, escala 0,4 en interior: **21–29 cm por pulso**, repetible.
+- **Obstáculos bajos invisibles al LIDAR** (montado a 18 cm): una cobija en
+  el suelo y una pesa a ~60 cm delante salían como "185 cm / 104 cm
+  libres" (la pared). El freno no las ve; solo la cámara. Pendiente: que el
+  detector de cámara alimente el freno, o un sensor bajo.
+- **Giro invertido** (visto por el usuario, medido por EKF/LIDAR):
+  "izquierda" giraba a la derecha; avanzar iba bien → lados cruzados al
+  reconectar. Corregido en `enlace_c3.py` (`INVERTIR_GIRO = True`: niega
+  omega al mandar y el eco al recibir; un solo punto para botones,
+  exploración, patrulla y Nav2). Confirmado por el usuario. Si se recablean
+  los drivers, volver a False.
+- **El pivote casi no rota**: 1–4° por pulso de 0,8 s a 1,6 rad/s pedidos,
+  y en cada uno el robot RETROCEDE ~10 cm (pivota sobre un punto delante del
+  centro). Sospecha: alguna rueda empujando al revés o un par
+  delantera/trasera cruzado entre lados al reconectar. Prueba propuesta:
+  robot en el aire, pulso de giro, mirar el sentido de cada rueda. Suman
+  el troceado de la Jetson (punto 7) y los traseros al 60–85 %.
+- Al girar sobre su eje en sitios estrechos la esquina trasera roza (poste
+  a 2 cm): el giro en pasillos hay que hacerlo tras avanzar a un hueco.
 
 **Estado que quedó cambiado:** modo de manejo `interior`
 (`POST /api/drive/mode`); modo seguro rearmado; aceleración 3 / 8 (la puso el

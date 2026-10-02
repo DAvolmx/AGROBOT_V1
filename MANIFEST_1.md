@@ -32,6 +32,9 @@
 >   o TF del LIDAR (`yaw=π`, de `a3ab408`) mal.
 > - El modo seguro se engancha por un hueco de 1,7 s de la C3 y luego deja
 >   lanzar patrullas que no se mueven (factor 0).
+> - **La C3 y el LoRa V3 se reinician juntos** (cae la alimentación). Tras
+>   cada reinicio las entradas de los motores quedaban sueltas ~1,7 s: una
+>   llanta trasera se quedó girando. Firmware corregido, falta flashear.
 
 > **Cambios vigentes del 2026-10-01 — RED** (detalle en
 > `agrobot_system_2/docs/RED_E_IPS.md` y en el Historial):
@@ -4516,6 +4519,22 @@ cambiarlo; queda para el usuario. Otros recortes de torque del firmware:
 traseros al 60 % del duty en recta (`FACTOR_TRASERO_RECTO`, sin medir), tope
 215 y corte térmico ESTIMADO que puede dejarlos en rueda libre tras uso
 seguido.
+
+**8. Llanta trasera que se quedó girando sola + reinicios de la C3.** En
+`backend.log`, la C3 "acaba de arrancar (arranque normal)" 3 veces, y CADA
+vez el LoRa V3 se reinicia a la vez: cae la alimentación común (sin bandera
+de brownout = corte completo). El "sin estado de la C3 hace 1,7 s" que
+enganchó el modo seguro (punto 1) era uno de esos reinicios. Con aceleración
+3 / 8 los arranques piden más corriente. En el firmware, `setup()` ponía los
+pines de motor en LOW DESPUÉS de esperar al Serial (hasta 1,5 s + 200 ms):
+tras cada reinicio las entradas del TA6586 quedaban sin manejar, y las
+traseras van en GPIO4..7 (pines JTAG de la C3). **Corregido en código:** la
+inicialización de motores y `stopMotors()` van ahora lo primero de
+`setup()`. `verificar.sh` OK (cores 2.x y 3.x). **Falta cargarlo en la C3.**
+Pendiente de hardware: alimentar la C3 y el LoRa V3 aparte de los motores
+(o condensador grande + regulador propio) y pull-down de 10 kΩ en las
+entradas del driver, que cubren también los ~ms antes de que corra
+`setup()`.
 
 **Estado que quedó cambiado:** modo de manejo `interior`
 (`POST /api/drive/mode`); modo seguro rearmado; aceleración 3 / 8 (la puso el

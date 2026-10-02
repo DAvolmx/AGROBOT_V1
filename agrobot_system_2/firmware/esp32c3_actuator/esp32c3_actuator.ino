@@ -942,6 +942,20 @@ void enviarEstado() {
 // ===== SETUP =====
 // =============================================
 void setup() {
+  // Motores PRIMERO: todas las entradas a OUTPUT/LOW y luego frenadas.
+  // Antes esto iba después de esperar al Serial (hasta 1,7 s): tras cada
+  // reinicio (la C3 y el LoRa V3 se reinician juntos cuando cae la
+  // alimentación) las entradas del driver quedaban sin manejar ese rato, y
+  // las traseras van en GPIO4..7, que son los pines JTAG de la C3. Una
+  // llanta trasera se quedó girando sola (2026-10-02).
+  const int pinesMotor[] = {R1_FI, R1_BI, R2_FI, R2_BI,
+                            L1_FI, L1_BI, L2_FI, L2_BI};
+  for (int p : pinesMotor) {
+    pinMode(p, OUTPUT);
+    digitalWrite(p, LOW);
+  }
+  stopMotors();
+
   // Foco APAGADO antes que nada. En este robot la etapa del foco es de
   // lógica normal (enciende con el pin en ALTO) y el firmware la trata como
   // activa en bajo (LED_ACTIVO_EN_BAJO, que no se toca: GPIO8 es pin de
@@ -986,15 +1000,6 @@ void setup() {
   setLed(FOCO_APAGADO_FW);
   Serial.println("[foco] fin de la autoprueba, queda apagado");
 #endif
-
-  // Motores: todas las entradas a OUTPUT/LOW
-  const int pinesMotor[] = {R1_FI, R1_BI, R2_FI, R2_BI,
-                            L1_FI, L1_BI, L2_FI, L2_BI};
-  for (int p : pinesMotor) {
-    pinMode(p, OUTPUT);
-    digitalWrite(p, LOW);
-  }
-  stopMotors();
 
   Serial.print("[PWM] motores a ");
   Serial.print(MOTOR_PWM_HZ);

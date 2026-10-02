@@ -4608,6 +4608,18 @@ cambiado o peleando con su compañera de lado tras reconectar los drivers.
 Prueba pendiente: robot en el aire, pulso de giro, mirar cada rueda.
 Scripts usados (scratchpad de la sesión): `giro_captura.py` + `icp.py`.
 
+**12. Watchdog del lazo principal en la C3.** El failsafe de 500 ms sin
+órdenes se comprueba dentro de `loop()`: si `loop()` se colgaba (pila BLE o
+WiFi), los motores seguían con el último PWM sin límite. Ahora
+`iniciarWatchdogLoop()` (al final de `setup()`) mete el loop en el task
+watchdog con `WDT_LOOP_MS` = 2000 (core 3.x: `esp_task_wdt_reconfigure`,
+core 2.x: `esp_task_wdt_init`) y `enableLoopWDT()`; colgado 2 s → reinicio →
+`setup()` frena los motores lo primero (punto 8). El arranque informa
+"WATCHDOG: el loop se colgó" por Serial. Stub nuevo
+`tests/stubs_arduino/esp_task_wdt.h`; `verificar.sh` OK en los dos cores.
+**Firmware para flashear = el del repo a partir de este commit** (incluye
+puntos 8, 10 y 12).
+
 **Estado que quedó cambiado:** modo de manejo `interior`
 (`POST /api/drive/mode`); modo seguro rearmado; aceleración 3 / 8 (la puso el
 usuario; queda en `agrobot_config.json`, sin commitear).

@@ -71,6 +71,8 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include "esp_system.h"   // esp_reset_reason(): por qué se reinició la placa
+#include "esp_task_wdt.h" // watchdog del lazo principal (ver iniciarWatchdogLoop)
+void iniciarWatchdogLoop();   // definida tras setup(); declarada aquí para g++
 
 // Segunda vía de mando. 0 = firmware solo-BLE, como antes del 2026-09-30.
 #define ENLACE_WIFI 1
@@ -985,7 +987,8 @@ void setup() {
   Serial.printf("=== AGROBOT C3 BLE+WiFi — compilado el %s a las %s ===\n",
                 __DATE__, __TIME__);
   Serial.printf("[boot] motivo del reinicio: %d%s\n", (int)motivoReinicio,
-                motivoReinicio == ESP_RST_BROWNOUT ? " — CAÍDA DE TENSIÓN (batería baja)" : "");
+                motivoReinicio == ESP_RST_BROWNOUT ? " — CAÍDA DE TENSIÓN (batería baja)" :
+                motivoReinicio == ESP_RST_TASK_WDT ? " — WATCHDOG: el loop se colgó" : "");
 
   // Autoprueba del foco: apagada. Eran 8 s de arranque con el foco
   // parpadeando; en un bucle de reinicios por tensión baja, 8 s de consumo
@@ -1107,6 +1110,29 @@ void setup() {
 #endif
 
   lastCmdMillis = millis();
+  iniciarWatchdogLoop();
+}
+
+// =============================================
+// ===== WATCHDOG DEL LAZO PRINCIPAL =====
+// =============================================
+// El failsafe de CMD_TIMEOUT_MS se comprueba DENTRO de loop(). Si loop() se
+// cuelga (pila BLE o WiFi bloqueada), nadie lo comprueba y los motores siguen
+// con el último PWM sin límite. Con esto, si loop() no da una vuelta en
+// WDT_LOOP_MS la placa se reinicia, y setup() frena los motores lo primero
+// (2026-10-02). Se activa al FINAL de setup(): la espera al Serial y el
+// arranque del BLE/WiFi tardan más que esto.
+const uint32_t WDT_LOOP_MS = 2000;
+
+void iniciarWatchdogLoop() {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  esp_task_wdt_config_t cfg = {WDT_LOOP_MS, 0, true};   // timeout, sin tareas idle, reinicia
+  if (esp_task_wdt_reconfigure(&cfg) != ESP_OK) esp_task_wdt_init(&cfg);
+#else
+  esp_task_wdt_init((WDT_LOOP_MS + 999) / 1000, true);
+#endif
+  enableLoopWDT();     // el core lo alimenta al final de cada vuelta de loop()
+  Serial.printf("[wdt] watchdog del loop: %lu ms\n", (unsigned long)WDT_LOOP_MS);
 }
 
 // =============================================

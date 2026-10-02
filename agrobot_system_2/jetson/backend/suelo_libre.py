@@ -50,8 +50,9 @@ MEMORIA_EXTRANA = 0.55
 
 
 class SueloLibre:
-    def __init__(self, cfg: dict | None = None):
+    def __init__(self, cfg: dict | None = None, reloj=time.monotonic):
         self.cfg = cfg or {}
+        self._reloj = reloj          # el simulador pasa su reloj virtual
         self.ultimo: dict | None = None
         self._historia: list[np.ndarray] = []
         # Cómo se ve el suelo, aprendido de fotogramas anteriores. Sin esto,
@@ -168,7 +169,7 @@ class SueloLibre:
                     puntos.append({"angle_deg": math.degrees(math.atan2(yi, xi)),
                                    "distance_m": float(math.hypot(xi, yi))})
         res = {
-            "t": time.monotonic(),
+            "t": self._reloj(),
             "puntos": puntos,
             "referencia_dudosa": dispersion > REF_DISPERSION_MAX and not extrana,
             "objeto_en_referencia": extrana,
@@ -189,7 +190,7 @@ class SueloLibre:
         """Distancia al primer obstáculo del suelo en el camino del robot (m
         desde el CENTRO del robot), o None si no hay o el dato es viejo."""
         r = self.ultimo
-        if r is None or time.monotonic() - r["t"] > max_edad_s:
+        if r is None or self._reloj() - r["t"] > max_edad_s:
             return None
         if r.get("objeto_en_referencia"):
             # Algo ocupa la franja que el robot va a pisar, y la cámara no ve

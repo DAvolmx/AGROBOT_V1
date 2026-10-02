@@ -257,6 +257,13 @@ class Episodio:
 
         from costmap_local import CostmapLocal
         self.lidar = slam.LidarReactive()
+        # El freno ve también lo BAJO por cámara, como en el robot desde el
+        # 2026-10-02 (suelo_libre.py). Sin esto el simulador entrenaba con un
+        # freno que ya no es el del robot y la pesa invisible lo chocaba.
+        from suelo_libre import SueloLibre
+        self.suelo = SueloLibre(reloj=lambda: self.reloj.t)
+        self.lidar.hueco_camara = lambda: self.suelo.hueco_delante(
+            self.cfg["slam"]["robot_ancho_cm"] / 100.0)
         self.costmap = CostmapLocal()
         self.seguidor = sendero.SeguidorSendero(
             get_config=lambda: self.cfg["autonomia"],
@@ -302,6 +309,23 @@ class Episodio:
         accion, maniobra = self.filtrar(accion, maniobra)
         self.conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * escala,
                                omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
+
+    SUELO_PERIODO_S = 0.25     # 4 Hz de reloj virtual: renderizar cuesta
+
+    async def _bucle_suelo(self):
+        """Suelo libre por cámara, como `_bucle_suelo_libre` del backend:
+        solo con el servo quieto (si no, la geometría no vale)."""
+        while not self.parar_pedido:
+            await self.reloj._sleep(self.SUELO_PERIODO_S)
+            if not self.robot.servo_asentado:
+                self.suelo.ultimo = None
+                continue
+            try:
+                self.suelo.analizar(cv2, self.robot.frame(self.geometria()), self.geometria())
+            except Exception as exc:          # nunca debe tumbar el episodio
+                self.eventos.append({"t": round(self.reloj.t, 1), "evento": "suelo_error",
+                                     "error": f"{type(exc).__name__}: {exc}"})
+                await self.reloj._sleep(1.0)
 
     def pose_para_el_software(self) -> dict:
         """Lo que el robot cree. Con `usar_slam=False` se le da la verdad,
@@ -802,6 +826,7 @@ class Episodio:
             # La física arranca YA: la calibración necesita que el tiempo
             # corra, y en modo rápido el reloj solo avanza dentro de ese bucle.
             fisica = asyncio.create_task(self._fisica())
+            suelo = asyncio.create_task(self._bucle_suelo())
             # Calibración previa: antes de moverse, buscar desde qué
             # inclinación se ve el sendero en ESTE terreno. El ángulo bueno
             # depende del suelo y de la luz, no es una constante.
@@ -817,6 +842,7 @@ class Episodio:
                     raise RuntimeError(f"no arrancó la exploración: {msg}")
                 self.eventos.append({"t": round(self.reloj.t, 1), "evento": "inicio", "detalle": msg})
             await fisica
+            suelo.cancel()
             self.explorador.detener()
             await self.reloj._sleep(0)
         finally:

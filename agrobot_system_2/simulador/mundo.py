@@ -1179,8 +1179,8 @@ def pasillo_real():
 
     Pasillo de ~65 cm (el robot mide 35: ~15 cm por lado) que desemboca en
     un cuarto de ~2 × 1,3 m, con un poste de madera a la derecha de la salida
-    y objetos BAJOS que el LIDAR no ve y la cámara sí: una pesa, una chancla
-    y una cobija en el suelo. Es lo que más falló de verdad: el freno marcaba
+    y objetos BAJOS que el LIDAR no ve y la cámara sí: una pesa y una chancla
+    (la cobija se retiró). Es lo que más falló de verdad: el freno marcaba
     1-2 m libres con la pesa a 60 cm. Girar sobre el eje dentro del pasillo
     roza las paredes; hay que salir al cuarto para girar."""
     paredes = [
@@ -1197,10 +1197,17 @@ def pasillo_real():
         {"tipo": "maceta", "x": 0.95, "y": -0.27, "radio": 0.05, "altura": 1.5},   # poste de madera
         {"tipo": "maceta", "x": 2.1, "y": 0.75, "radio": 0.16, "altura": 0.35},    # balde
         {"tipo": "piedra", "x": 1.85, "y": 0.2, "radio": 0.13, "altura": 0.14},    # pesa (invisible al LIDAR)
-        {"tipo": "piedra", "x": 1.35, "y": 0.05, "radio": 0.25, "altura": 0.15},   # cobija en el suelo
+        # La cobija (1,35, 0,05) la retiró el usuario al pasar; no está.
         {"tipo": "planta", "x": 1.55, "y": 0.45, "radio": 0.08, "altura": 0.03},   # chancla (se pisa)
     ]
-    ruta = [(-0.4, 0.0), (0.9, 0.0), (1.55, 0.7), (1.55, 1.1)]
+    # Sale RECTO del pasillo y gira ya en el cuarto: girando antes, la
+    # carrocería corta la esquina de la salida (el freno no deja pasar).
+    # Al final, a media distancia entre la pared izquierda del cuarto
+    # (x = 1,1) y el balde: antes acababa a 35 cm de la pared y rozaba.
+    # En el pasillo, 5 cm a la izquierda del centro: por el centro el borde
+    # del poste queda a 22 cm del eje, dentro del corredor del robot (en el
+    # robot real pasó a 2 cm).
+    ruta = [(-0.4, 0.05), (1.42, 0.05), (1.48, 0.75)]
     return Mundo("pasillo_real", paredes, ruta, 0.45, 0.0, [], (-1.0, -1.0, 2.6, 1.8),
                  objetos=objetos), (-0.4, 0.0, 0.0)
 

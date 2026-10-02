@@ -86,6 +86,11 @@ def _dist_a_ruta(x, y, ruta) -> float:
     return float(np.hypot(x - a[:, 0] - t * ab[:, 0], y - a[:, 1] - t * ab[:, 1]).min())
 
 
+# Un episodio ideal con más choques que esto no entra al dataset.
+CHOQUES_MAX = 3
+CHOQUES_POR_M = 0.5
+
+
 def mundo_variado(nombre, rng):
     """Carga un escenario o un mapa dibujado y lo varía en cada episodio.
 
@@ -98,7 +103,13 @@ def mundo_variado(nombre, rng):
     if nombre in M.ESCENARIOS:
         m, _ = M.ESCENARIOS[nombre]()
         datos = {"ancho_sendero": m.ancho_sendero, "ancho_paja": m.ancho_paja}
-        base = [{"tipo": t, "x": float(o[0]), "y": float(o[1])} for o, t in zip(m.objetos, m.tipos)]
+        # Con su radio, altura y solidez: sin ellos cada objeto volvía a las
+        # medidas por defecto de su tipo, y en pasillo_real el poste de 5 cm
+        # pasaba a ser una maceta de 16 cm que tapaba la salida (episodios de
+        # 0 m) y la pesa de 14 cm, una piedra de 32 que el LIDAR SÍ veía.
+        base = [{"tipo": t, "x": float(o[0]), "y": float(o[1]), "radio": float(o[2]),
+                 "altura": float(o[3]), "solido": bool(o[4] > 0.5)}
+                for o, t in zip(m.objetos, m.tipos)]
     else:
         datos = json.loads((MUNDOS_DIR / f"{nombre}.json").read_text())
         m = M.Mundo.desde_dict(datos)
@@ -291,6 +302,13 @@ def recolectar(episodios, cfg, segundos=120, semilla0=0, escenarios=None,
                       f"{ep.robot.recorrido:.1f} m recorridos ({ep.robot.colisiones} choques)",
                       flush=True)
                 continue
+            if ep.robot.colisiones > max(CHOQUES_MAX, CHOQUES_POR_M * ep.robot.recorrido):
+                # Un recorrido "ideal" que choca enseña a chocar. Pasaba en
+                # pasillo_real (2026-10-02): el piloto gira en sitio donde la
+                # carrocería no cabe, y hasta 42 choques entraban al dataset.
+                print(f"  [{k+1}/{episodios}] {ep.mundo.nombre:22s} descartado: "
+                      f"{ep.robot.colisiones} choques en {ep.robot.recorrido:.1f} m", flush=True)
+                continue
             filas = 0
             for m in ep.registro_ideal:
                 fila = dict(zip(pol.ENTRADAS,
@@ -302,7 +320,9 @@ def recolectar(episodios, cfg, segundos=120, semilla0=0, escenarios=None,
                 # nueva). Se distingue de lo recolectado antes del 2026-09-30.
                 # "ideal_dr2" (2026-09-30, tarde): sensores calibrados con el
                 # robot real, cámara a 640x480 con JPEG, superficies y sol.
-                fila["origen"] = "ideal_dr2" if ep.condiciones else "ideal"
+                # "ideal_dr3" (2026-10-02): chasis calibrado con el pasillo real
+                # (calibracion_real.json) y freno con suelo libre por cámara.
+                fila["origen"] = "ideal_dr3" if ep.condiciones else "ideal"
                 w.writerow(fila)
                 filas += 1
             total += filas

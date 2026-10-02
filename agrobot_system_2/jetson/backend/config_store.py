@@ -82,6 +82,9 @@ DEFAULTS = {
         # Lo que sigue avanzando tras cortar motores (las ruedas quedan
         # sueltas). Se corta con esta antelación.
         "deslizamiento_cm": 40,
+        # El freno también usa el suelo libre por CÁMARA (suelo_libre.py):
+        # ve lo bajo que el LIDAR no. Falso para volver a solo LIDAR.
+        "freno_camara": True,
         # filtro complementario de pose: 0 = confía solo en la velocidad
         # comandada (dead-reckoning puro), 1 = confía solo en el giroscopio
         "pose_gyro_trust": 0.8,

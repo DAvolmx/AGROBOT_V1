@@ -93,6 +93,9 @@ class LidarReactive:
         self.last_scan: list[dict] = []  # [{angle_deg, distance_m}, ...]
         self.last_scan_at = None
         self._cache = None
+        # Hueco delante visto por la CÁMARA (suelo_libre), m desde el centro
+        # del robot o None. Cubre lo bajo que el LIDAR no ve (2026-10-02).
+        self.hueco_camara = None          # callable -> float | None
 
     def ingest_scan(self, points: list[dict]):
         self.last_scan = points
@@ -197,6 +200,13 @@ class LidarReactive:
 
         lado = "adelante" if v > 0 else "atras"
         hueco = self.distancias(cfg)[lado]
+        fuente = "lidar"
+        if lado == "adelante" and self.hueco_camara is not None and cfg.get("freno_camara", True):
+            cam = self.hueco_camara()
+            if cam is not None:
+                cam = max(0.0, cam - cfg["robot_largo_cm"] / 200.0)
+                if hueco is None or cam < hueco:
+                    hueco, fuente = cam, "camara"
         if hueco is None:
             return v, None
 
@@ -204,7 +214,7 @@ class LidarReactive:
         if hueco > umbral:
             return v, None
         return 0.0, {"motivo": "obstaculo", "lado": lado, "distancia_m": hueco,
-                     "umbral_m": round(umbral, 2)}
+                     "umbral_m": round(umbral, 2), "fuente": fuente}
 
 
 def _wrap180(angulo_deg: float) -> float:

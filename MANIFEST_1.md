@@ -4684,3 +4684,48 @@ Robot apagado (C3 y LoRa V3), Jetson encendida, en el mismo pasillo.
   ROS termine de arrancar, o que reinicie solo si ROS arrancó con el reloj
   en 1970.
 
+---
+
+## ENTRADA HISTORIAL: 2026-10-02 (3) — Suelo libre por cámara y evasión de obstáculos
+
+Pedido del usuario tras ver que el LIDAR no veía la cobija ni la pesa.
+
+- **`suelo_libre.py`** (detección por apariencia, Ulrich y Nourbakhsh 2000):
+  la franja de abajo-centro de la imagen es la referencia de "suelo";
+  backprojection de histograma HSV; columna a columna, la primera racha de
+  no-suelo es la base de un obstáculo; la fila se convierte en distancia
+  sobre el suelo con la geometría de `odometria_webcam` (inversa de
+  `sendero.Cenital`). Salida: scan virtual `[{angle_deg, distance_m}]`.
+  Persistencia de 2-3 fotogramas contra sombras sueltas.
+  - **Memoria del suelo** (EMA de histogramas): si la referencia deja de
+    parecerse al suelo recordado (Bhattacharyya > 0,55) hay algo pegado
+    delante → `objeto_en_referencia` → hueco 0 para el freno. Sin memoria, la
+    cobija del paso 1 se aprendía como suelo.
+  - Validado con las fotos reales del pasillo (cobija: referencia extraña,
+    diferencia 0,61 frente a < 0,14 del suelo normal; pesa a ~0,9-1 m) y con
+    la cámara simulada en `pasillo_real` (LIDAR 1,83 / 2,13 m; cámara 0,85 /
+    1,04 m; real 0,80 / 1,10). Geometría contrastada: pared a 1,17 m por
+    cámara frente a 1,24 por LIDAR.
+  - **Límite medido: con el servo a 98° (15,5° hacia abajo) la cámara no ve
+    el suelo de los primeros ~0,85 m desde el centro (~65 cm por delante del
+    frontal).** Para obstáculos conviene inclinarla más (servo ~76-80°);
+    pendiente decidir con el usuario porque cambia la vista del sendero.
+- **Freno** (`slam.LidarReactive.limitar_velocidad`): delante usa el mínimo
+  entre LIDAR y cámara (`slam.freno_camara`, por defecto true); el aviso
+  dice `fuente: lidar|camara`. Solo con la cámara al frente y quieta
+  (`_servo_al_frente`); con la C3 apagada no hay estado del servo y la
+  cámara no frena.
+- **`evasion.py`** (histograma polar estilo VFH): LIDAR + puntos de cámara,
+  cada 10°, hueco desde el frontal engordado media anchura + 5 cm; elige la
+  dirección libre más cercana al objetivo. **No propone girar si no cabe
+  girando** (media diagonal 27 cm + margen): en un pasillo estrecho solo
+  avanza o retrocede. 7 pruebas en `tests/test_evasion.py`.
+- **Modo evasión**: `POST /api/evasion/start {"segundos", "objetivo_deg"}`,
+  `/stop`, `GET /api/evasion`; decide con `evasion.py` y se mueve con
+  `paso_robotico` (pulsos medidos); para tras 2 giros sin progreso
+  (`no_gira`), `atascado` o `sin_lidar`. Registro en `~/.agrobot/evasion/`.
+  `/api/drive` parar o cualquier pulso manual lo cancela.
+- Diagnóstico: `GET /api/suelo` y `GET /api/suelo/vista.jpg` (verde =
+  suelo, rojo = base de obstáculos, recuadro = referencia).
+- Sin probar con el robot andando (C3 apagada en esta sesión).
+

@@ -54,6 +54,8 @@ from sendero import SeguidorSendero
 from navigation_logger import NavigationLogger, analizar_sesion
 from aprendizaje import Aprendizaje
 from paso_robotico import PasoRobotico
+from suelo_libre import SueloLibre
+import evasion as evasion_mod
 from cabeceo import CabeceoIMU
 from politica import Politica
 from deslizamiento import MonitorDeslizamiento
@@ -149,6 +151,10 @@ pose_estimator = PoseEstimator()
 # cargar la configuración.
 cabeceo_imu = CabeceoIMU()
 lidar_reactive = LidarReactive()
+# Suelo libre por cámara: lo bajo que el LIDAR no ve (cobija, pesa: 2026-10-02).
+suelo_libre = SueloLibre()
+lidar_reactive.hueco_camara = lambda: suelo_libre.hueco_delante(
+    state.config["slam"]["robot_ancho_cm"] / 100.0)
 costmap = CostmapLocal()
 map_manager = MapManager()
 
@@ -1130,6 +1136,169 @@ async def _vigia_lidar():
 # =============================================
 # ===== MANEJO MANUAL POR PULSOS =====
 # =============================================
+SUELO_HZ = 8.0
+
+
+async def _bucle_suelo_libre():
+    """Analiza el suelo delante con cada fotograma (~8 Hz). Solo con la
+    cámara al frente y quieta: con el servo girado la geometría no vale y un
+    obstáculo saldría a una distancia falsa."""
+    ultimo_n = None
+    while True:
+        await asyncio.sleep(1.0 / SUELO_HZ)
+        try:
+            if cv2 is None or camera is None:
+                continue
+            dato = camera.ultimo_frame()
+            if dato is None or dato[2] == ultimo_n:
+                continue
+            ultimo_n = dato[2]
+            al_frente, _ = _servo_al_frente()
+            if not al_frente:
+                suelo_libre.ultimo = None          # nada de datos con la cámara girada
+                continue
+            await asyncio.to_thread(suelo_libre.analizar, cv2, dato[0], _geometria_camara())
+        except Exception as exc:
+            print(f"[suelo] análisis falló: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(1.0)
+
+
+async def suelo_vista_handler(request: web.Request):
+    """GET /api/suelo/vista.jpg — suelo libre por cámara: verde = suelo,
+    rojo = base de obstáculos, recuadro = franja de referencia."""
+    if cv2 is None or camera is None:
+        return web.json_response({"error": "cámara no disponible"}, status=503)
+    dato = camera.ultimo_frame()
+    if dato is None:
+        return web.json_response({"error": "sin fotograma"}, status=503)
+    img = cv2.resize(suelo_libre.dibujar(cv2, dato[0]), (480, 360), interpolation=cv2.INTER_NEAREST)
+    ok, jpg = cv2.imencode(".jpg", img)
+    return web.Response(body=jpg.tobytes(), content_type="image/jpeg",
+                        headers={"Cache-Control": "no-store"})
+
+
+async def suelo_estado_handler(request: web.Request):
+    """GET /api/suelo — resumen del suelo libre (sin la máscara)."""
+    r = suelo_libre.ultimo
+    if r is None:
+        return web.json_response({"activo": False})
+    return web.json_response({
+        "activo": True, "edad_s": round(time.monotonic() - r["t"], 2),
+        "hueco_delante_m": suelo_libre.hueco_delante(state.config["slam"]["robot_ancho_cm"] / 100.0),
+        "obstaculos": len(r["puntos"]), "objeto_en_referencia": r["objeto_en_referencia"],
+        "referencia_dudosa": r["referencia_dudosa"], "suelo_pct": r["suelo_pct"],
+        "distancia_min_visible_m": r["distancia_min_visible_m"]})
+
+
+# ----- Evasión autónoma: decide con evasion.py, se mueve con paso_robotico -----
+evasion_estado = {"activo": False, "decisiones": 0, "ultima": None, "resultado": None}
+_evasion_tarea: asyncio.Task | None = None
+RUTA_EVASION = Path.home() / ".agrobot" / "evasion"
+
+
+def _puntos_camara() -> list[dict]:
+    r = suelo_libre.ultimo
+    if r is None or time.monotonic() - r["t"] > 0.6:
+        return []
+    puntos = list(r["puntos"])
+    if r.get("objeto_en_referencia"):
+        # Algo pegado delante que la cámara no alcanza a medir: se pone justo
+        # en el frontal para que ninguna decisión avance hacia ahí.
+        ml = state.config["slam"]["robot_largo_cm"] / 200.0
+        puntos += [{"angle_deg": a, "distance_m": ml + 0.05} for a in (-10.0, 0.0, 10.0)]
+    return puntos
+
+
+async def _bucle_evasion(segundos: float, objetivo_deg: float):
+    cfg_slam = state.config["slam"]
+    umbral = (cfg_slam["margen_parada_cm"] + cfg_slam["deslizamiento_cm"]) / 100.0
+    fin = time.monotonic() + segundos
+    giros_fallidos = 0
+    RUTA_EVASION.mkdir(parents=True, exist_ok=True)
+    archivo = RUTA_EVASION / time.strftime("evasion_%Y%m%d_%H%M%S.jsonl")
+    evasion_estado.update(activo=True, decisiones=0, ultima=None, resultado=None)
+    resultado = "tiempo"
+    try:
+        while time.monotonic() < fin:
+            if lidar_reactive.edad_scan_s() > 1.0:
+                resultado = "sin_lidar"
+                break
+            d = evasion_mod.decidir(lidar_reactive.last_scan, _puntos_camara(),
+                                    objetivo_deg=objetivo_deg, umbral_m=umbral,
+                                    robot_largo_m=cfg_slam["robot_largo_cm"] / 100.0,
+                                    robot_ancho_m=cfg_slam["robot_ancho_cm"] / 100.0)
+            resumen = {k: v for k, v in d.items() if k != "libre"}
+            evasion_estado["decisiones"] += 1
+            evasion_estado["ultima"] = resumen
+            await state.broadcast({"type": "evasion", "data": evasion_estado})
+            if d["accion"] == "atascado":
+                resultado = "atascado"
+                break
+            if d["accion"] == "avanzar":
+                res = await paso_robotico.avanzar(d["cm"] / 100.0)
+            elif d["accion"] == "retroceder":
+                res = await paso_robotico.avanzar(-d["cm"] / 100.0)
+            else:
+                res = await paso_robotico.girar(d["grados"])
+                # El giro en sitio rinde muy poco en este chasis (2026-10-02):
+                # si dos giros seguidos no progresan, se para y se avisa.
+                giros_fallidos = giros_fallidos + 1 if res["resultado"] == "sin_progreso" else 0
+            with open(archivo, "a") as f:
+                f.write(json.dumps({"t": time.strftime("%H:%M:%S"), "decision": resumen,
+                                    "paso": res, "camara_pts": len(_puntos_camara())},
+                                   ensure_ascii=False) + "\n")
+            if giros_fallidos >= 2:
+                resultado = "no_gira"
+                break
+            if res["resultado"] in ("sin_lidar",):
+                resultado = res["resultado"]
+                break
+    except asyncio.CancelledError:
+        resultado = "detenido"
+        raise
+    finally:
+        conductor.parar()
+        evasion_estado.update(activo=False, resultado=resultado)
+        _schedule(state.broadcast({"type": "evasion", "data": evasion_estado}))
+        print(f"[evasion] fin: {resultado} tras {evasion_estado['decisiones']} decisiones", flush=True)
+
+
+def _detener_evasion():
+    global _evasion_tarea
+    if _evasion_tarea is not None and not _evasion_tarea.done():
+        _evasion_tarea.cancel()
+    _evasion_tarea = None
+
+
+async def evasion_start_handler(request: web.Request):
+    """POST /api/evasion/start {"segundos": 120, "objetivo_deg": 0}"""
+    global _evasion_tarea
+    if paso_robotico is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    if (_evasion_tarea is not None and not _evasion_tarea.done()) \
+            or (patrol is not None and patrol.activo) or (explorador is not None and explorador.activo):
+        return web.json_response({"error": "ya hay autonomía en marcha"}, status=409)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    segundos = max(5.0, min(1800.0, float(body.get("segundos", 120))))
+    objetivo = float(body.get("objetivo_deg", 0.0))
+    _evasion_tarea = asyncio.create_task(_bucle_evasion(segundos, objetivo))
+    return web.json_response({"ok": True, "segundos": segundos, "objetivo_deg": objetivo})
+
+
+async def evasion_stop_handler(request: web.Request):
+    _detener_evasion()
+    if paso_robotico is not None:
+        paso_robotico.detener()
+    return web.json_response({"ok": True, **evasion_estado})
+
+
+async def evasion_get_handler(request: web.Request):
+    return web.json_response(evasion_estado)
+
+
 def _pulso_robotico(accion: str, escala: float, maniobra: bool):
     """Un pulso para paso_robotico, con el acelerador de la config."""
     ctrl = state.config["control"]
@@ -1191,6 +1360,7 @@ async def drive_handler(request: web.Request):
 
     if accion == "parar":
         # Parar lo para TODO: patrulla, exploración, pasos robóticos y pulsos.
+        _detener_evasion()
         if paso_robotico is not None and paso_robotico.estado.get("activo"):
             paso_robotico.detener()
         if explorador is not None and explorador.activo:
@@ -1209,7 +1379,8 @@ async def drive_handler(request: web.Request):
             {"error": "la patrulla autónoma está en marcha — detenela para manejar a mano"},
             status=409)
 
-    # El operador toma el mando: el paso robótico en curso se cancela.
+    # El operador toma el mando: la evasión y el paso robótico se cancelan.
+    _detener_evasion()
     if paso_robotico is not None and paso_robotico.estado.get("activo"):
         paso_robotico.detener()
     ctrl = state.config["control"]
@@ -2482,6 +2653,7 @@ async def start_background(app: web.Application):
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
     app["zupt_task"] = asyncio.create_task(_bucle_zupt())
     app["modo_seguro_task"] = asyncio.create_task(_bucle_modo_seguro())
+    app["suelo_libre_task"] = asyncio.create_task(_bucle_suelo_libre())
 
     # Patrulla autónoma. Se crea acá y no arriba porque sus callbacks
     # necesitan el `actuator_proto` que se acaba de construir.
@@ -2921,6 +3093,11 @@ def create_app() -> web.Application:
     app.router.add_get("/api/drive/mode", drive_mode_handler)
     app.router.add_post("/api/drive/mode", drive_mode_handler)
     app.router.add_get("/api/sendero/vista.jpg", sendero_vista_handler)
+    app.router.add_get("/api/suelo/vista.jpg", suelo_vista_handler)
+    app.router.add_get("/api/suelo", suelo_estado_handler)
+    app.router.add_post("/api/evasion/start", evasion_start_handler)
+    app.router.add_post("/api/evasion/stop", evasion_stop_handler)
+    app.router.add_get("/api/evasion", evasion_get_handler)
     app.router.add_post("/api/nav/reset_map", nav_reset_map_handler)
     app.router.add_get("/api/mapas", mapas_listar_handler)
     app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)

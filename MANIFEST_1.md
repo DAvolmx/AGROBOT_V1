@@ -4585,6 +4585,18 @@ LIDAR antes/después + eco de la C3 por paso en
 - Al girar sobre su eje en sitios estrechos la esquina trasera roza (poste
   a 2 cm): el giro en pasillos hay que hacerlo tras avanzar a un hueco.
 
+**10. Más potencia a los motores traseros (pedido del usuario).** El
+pivote no rotaba (1–4°/pulso; con el robot apoyado en un poste, 0,2° por
+ICP de scans, −0,7° por giróscopo, −0,3° por EKF: los tres coinciden). El
+usuario aclara que los pulsos se mantienen a propósito (rompen la inercia)
+y pide más potencia en los traseros. Firmware: `FACTOR_TRASERO_GIRO`
+0,85 → **1,00**, `PWM_TOPE_TRASERO` 215 → **255**, `FACTOR_TRASERO_RECTO`
+0,60 → **0,80**; la protección térmica estimada no cambia (60 s a fondo:
+carga 0,39, antes 0,23). Pruebas del .ino ajustadas a las constantes;
+`verificar.sh` OK. **Falta flashear** (junto con el arreglo de `setup()`
+del punto 8). El IMU (Y adelante, X a los lados) ya se remapea bien en
+`jetson_server.py` antes de publicar `/imu/data_raw`; el yaw sale de Z.
+
 **Estado que quedó cambiado:** modo de manejo `interior`
 (`POST /api/drive/mode`); modo seguro rearmado; aceleración 3 / 8 (la puso el
 usuario; queda en `agrobot_config.json`, sin commitear).

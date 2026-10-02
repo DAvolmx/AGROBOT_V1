@@ -64,7 +64,7 @@ int main() {
   avanzar(1500);
   int del = duty(ruedaR1), tra = duty(ruedaR2);
   std::printf("    delantera %d · trasera %d\n", del, tra);
-  check("en recta la trasera va al ~60 % de la delantera",
+  check("en recta la trasera va a FACTOR_TRASERO_RECTO de la delantera",
         tra > 0 && std::abs(tra - (int)lroundf(del * FACTOR_TRASERO_RECTO)) <= 2);
   check("izquierda y derecha simétricas", duty(ruedaL1) == del && duty(ruedaL2) == tra);
 
@@ -73,8 +73,8 @@ int main() {
   applyMotors(0.0f, 1.2f); avanzar(1500);
   int gd = ruedaR1.dutyPedido, gt = ruedaR2.dutyPedido;
   std::printf("    pedido delantera %d · trasera %d\n", gd, gt);
-  check("en giro la trasera aporta más (~85 %) pero con tope",
-        gt > 0 && gt <= PWM_TOPE_TRASERO && gt >= (int)(gd * 0.80f));
+  check("en giro la trasera aporta FACTOR_TRASERO_GIRO, con tope",
+        gt > 0 && gt <= PWM_TOPE_TRASERO && gt >= (int)(gd * FACTOR_TRASERO_GIRO) - 2);
   bool topeOk = true;
   for (int i = 0; i < 100; i++) { avanzar(10); topeOk = topeOk && duty(ruedaR2) <= PWM_TOPE_TRASERO; }
   check("los pulsos de giro de la trasera no pasan de PWM_TOPE_TRASERO", topeOk);

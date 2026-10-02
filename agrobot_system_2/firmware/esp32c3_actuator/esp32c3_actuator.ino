@@ -158,13 +158,19 @@ const bool FRENO_ACTIVO = true;
 // minuto de una delantera y de una trasera. FACTOR_TRASERO_RECTO ≈
 // rpm_delantera / rpm_trasera: así la trasera gira a la velocidad del suelo y
 // no pelea. Los valores de abajo son un punto de partida, no medidos.
-const float FACTOR_TRASERO_RECTO = 0.60f;
-const float FACTOR_TRASERO_GIRO  = 0.85f;
+//
+// 2026-10-02 (pedido del usuario): MÁS potencia a las traseras. Con 0,60 /
+// 0,85 y tope 215 el robot casi no pivotaba en cemento (1–4° por pulso de
+// giro, y retrocedía). En giro ahora van igual que las delanteras y a fondo;
+// en recta, 0,80. La protección térmica de abajo sigue igual: con más duty
+// actúa antes en usos largos y continuos (con pulsos la carga media es baja).
+const float FACTOR_TRASERO_RECTO = 0.80f;
+const float FACTOR_TRASERO_GIRO  = 1.00f;
 // Por debajo de esto la trasera no aporta nada útil: rueda LIBRE (no freno:
 // frenada mientras el robot avanza sería un ancla).
 const int   PWM_MIN_TRASERO      = 110;
-// Tope de los pulsos de giro en las traseras (los delanteros van a 255).
-const int   PWM_TOPE_TRASERO     = 215;
+// Tope de las traseras (antes 215; desde 2026-10-02 igual que las delanteras).
+const int   PWM_TOPE_TRASERO     = 255;
 // Protección térmica ESTIMADA (no hay sensor): media móvil del duty² de las
 // traseras con constante de tiempo TAU. Pasado CARGA_LIMITE, el aporte de las
 // traseras baja linealmente hasta cero en CARGA_CORTE.

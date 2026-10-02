@@ -26,10 +26,14 @@
 >   **0,1 / 0,2** desde `10f9694` (2026-09-19, cambio no explicado en el
 >   commit): un pulso manual no pasaba de 0,03 m/s ni 0,05 rad/s y el robot
 >   NO se movía ni giraba. El usuario los subió a **3 / 8** desde el dashboard.
-> - **SIN RESOLVER: con "adelante" el robot fue ~19 cm HACIA ATRÁS** según
->   LIDAR, rf2o y EKF (orden +0,27 m/s, rf2o −0,38 m/s). Falta que el usuario
->   confirme el sentido físico: motores invertidos (firmware del 2026-10-01)
->   o TF del LIDAR (`yaw=π`, de `a3ab408`) mal.
+> - **rf2o publica la velocidad lineal con el SIGNO INVERTIDO** (bug del
+>   paquete: `lin_speed` sale del desplazamiento en el marco del LÁSER, que
+>   está girado 180°). El EKF y el monitor de patinaje lo heredan: "patinaje
+>   100 %" y "robot atascado" enganchan el modo seguro con el robot avanzando.
+>   El TF del LIDAR (`yaw=π`) y los motores están BIEN (confirmado por el
+>   usuario con la cámara). Sin corregir todavía.
+> - Con la C3 aplicando v=0,54 (100 %) el robot no se mueve: fallo físico
+>   entre la C3 y las ruedas (alimentación/cables de motores).
 > - El modo seguro se engancha por un hueco de 1,7 s de la C3 y luego deja
 >   lanzar patrullas que no se mueven (factor 0).
 > - **La C3 y el LoRa V3 se reinician juntos** (cae la alimentación). Tras
@@ -4489,16 +4493,36 @@ la pared, a 0,34 m) y el EKF medía −0,2 rad/s: no giraba. Detenida con
 libre (a la derecha había 0,73 m) y dejar de insistir si el giro medido no
 acompaña al ordenado.
 
-**5. SIN RESOLVER — "adelante" mueve el robot HACIA ATRÁS (según sensores).**
-Pulso `adelante` escala 0,3: `/wheel_odom` +0,27 m/s; rf2o −0,38 m/s, EKF
-−0,34 m/s; el hueco trasero (en base_link) bajó de 2,08 a 1,89 m y el
-delantero subió de 0,59 a 0,78 m. El monitor de deslizamiento ya lo había
-visto (`v_orden 0.037`, `v_medida −0.394`). Dos explicaciones posibles:
-(a) motores invertidos por el firmware del 2026-10-01 (`5876029`, `d5054f9`,
-`101c6a7`) si ya se cargó en la C3; (b) el `yaw=π` del LIDAR
-(`agrobot_mapping.launch.py`, `a3ab408`) mal. Falta que el usuario confirme
-hacia qué lado se movió físicamente. Si es (b), el freno por LIDAR mira el
-lado equivocado y un robot que "avanza" no frena ante lo que tiene delante.
+**5. "Adelante" parecía ir HACIA ATRÁS: es rf2o, no el robot.** Pulso
+`adelante` escala 0,3: `/wheel_odom` +0,27 m/s; el LIDAR (en base_link) vio
+el hueco DELANTERO bajar de 2,08 a 1,89 m y el trasero subir de 0,59 a
+0,78 m, o sea que el robot AVANZÓ 19 cm, y el usuario confirmó que va hacia
+la cámara. Pero rf2o dio −0,38 m/s y el EKF −0,34. Causa en
+`rf2o_laser_odometry/src/CLaserOdometry2D.cpp:988`:
+`lin_speed = acu_trans(0,2) / time_inc_sec` usa el desplazamiento en el
+marco del LÁSER; la pose sí pasa por `laser_pose_on_robot_`, la velocidad
+no. Con el C1 girado 180° (`yaw=π`) el signo se invierte. Efectos: el EKF
+fusiona vx de rf2o con signo contrario, y `deslizamiento.py` ve "patinaje
+100 %" → "robot atascado" → modo SEGURO (pasó 2 veces en esta sesión).
+Arreglo propuesto: rotar `(acu_trans(0,2), acu_trans(1,2))` por el yaw del
+láser antes de calcular `lin_speed` (rf2o es de terceros, @ b38c68e: anotar
+el parche para no perderlo al reclonar).
+**Error de Claude en esta sesión:** leyó al revés las etiquetas de su propio
+registro, culpó al TF del LIDAR, cambió `yaw` a 0 en los dos launch y en
+`ros_bridge.py` y reinició ROS + backend. El backend pasó a ver "adelante
+27 cm / atrás 206" (al revés); se detectó, se revirtió con `git checkout` y
+se reinició de nuevo. No llegó a commitearse. Los mapas en memoria se
+perdieron con esos reinicios.
+
+**5b. Motores sin fuerza tras reconectar el cable.** Con la C3 recibiendo y
+aplicando v=0,54 m/s (100 % de `V_MAX`, `actuator_status.v_cmd`) por BLE y
+WiFi, sin failsafe, el LIDAR no vio ningún movimiento (dos pulsos, escala
+0,3 y 0,6). La cadena de software funciona hasta la C3: el fallo es físico
+(batería de motores, cable de potencia, driver).
+
+**5c. El backend no se cierra con SIGTERM ni SIGINT** (hizo falta SIGKILL
+para que systemd lo relanzara). Y el modo de manejo (`interior`) no se
+guarda: vuelve a `exterior` en cada arranque.
 
 **6. Otros.** `GET /api/obstacle_status` devuelve todos los sectores del
 LIDAR en `null` con el LIDAR a 50 Hz (consistente con que

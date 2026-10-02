@@ -15,11 +15,23 @@
 > Cualquier LLM o persona que retome este proyecto debe poder reconstruir
 > el estado completo del sistema leyendo solo este archivo.
 
-Última actualización: 2026-10-01
+Última actualización: 2026-10-02
 
 ---
 
 ## 0. ESTADO ACTUAL — 2026-09-17 (leer esto primero)
+
+> **Prueba de manejo en pasillo — 2026-10-02 (detalle en el Historial)**:
+> - `safety.max_linear_accel_mps2`/`max_angular_accel_rps2` estaban en
+>   **0,1 / 0,2** desde `10f9694` (2026-09-19, cambio no explicado en el
+>   commit): un pulso manual no pasaba de 0,03 m/s ni 0,05 rad/s y el robot
+>   NO se movía ni giraba. El usuario los subió a **3 / 8** desde el dashboard.
+> - **SIN RESOLVER: con "adelante" el robot fue ~19 cm HACIA ATRÁS** según
+>   LIDAR, rf2o y EKF (orden +0,27 m/s, rf2o −0,38 m/s). Falta que el usuario
+>   confirme el sentido físico: motores invertidos (firmware del 2026-10-01)
+>   o TF del LIDAR (`yaw=π`, de `a3ab408`) mal.
+> - El modo seguro se engancha por un hueco de 1,7 s de la C3 y luego deja
+>   lanzar patrullas que no se mueven (factor 0).
 
 > **Cambios vigentes del 2026-10-01 — RED** (detalle en
 > `agrobot_system_2/docs/RED_E_IPS.md` y en el Historial):
@@ -4432,3 +4444,65 @@ antiguo `LoRa_Wan` y no se unían a `LoRa-Wan`.
   no quedaba rastro.
 - Al matar el backend aparece un Traceback de `publish_imu` (publica cuando
   rclpy ya se cerró): inofensivo, solo en el apagado.
+
+---
+
+## ENTRADA HISTORIAL: 2026-10-02 (1) — Prueba de manejo en pasillo: fallos encontrados
+
+Robot en el suelo, en un pasillo (paredes a ~0,31–0,35 m del LIDAR a cada
+lado, frente libre ~1,8–2 m). Claude lo manejó por `POST /api/drive` y grabó
+`/scan`, `/odometry/filtered`, `/odom_rf2o` y `/wheel_odom` a 5 Hz. No se tocó
+código; solo estado en caliente.
+
+**1. Modo seguro enganchado por un hueco breve de la C3.** Durante una
+exploración (`[seguridad] normal -> seguro: sin estado de la C3 hace 1.7 s`)
+el enganche quedó puesto ~8 min con la C3 sana (BLE + WiFi). En SEGURO el
+manual va al 40 % (`FACTOR_MANUAL_EN_SEGURO`). Rearmado con
+`POST /api/seguridad/rearmar`. Pendiente: tolerar huecos cortos con dos vías
+vivas, o desenganchar solo si no hay autonomía en marcha.
+
+**2. Se pudo lanzar una patrulla estando en SEGURO.** El log muestra
+`[AUTO] patrulla iniciada` después del enganche; en SEGURO la autonomía tiene
+factor 0, así que la patrulla "corre" sin moverse y sin avisar. Pendiente:
+rechazar `/api/mission/start` y `/api/exploracion/start` con 409 en SEGURO.
+
+**3. Causa de "no se mueve ni gira con los botones": rampa de la Jetson.**
+`safety.max_linear_accel_mps2 = 0.1` y `max_angular_accel_rps2 = 0.2` (desde
+`10f9694`, 2026-09-19; antes 0,9 / 2,1; el mensaje del commit no lo
+menciona). Con pulsos de 0,8 s (interior) la rampa no supera 0,08 m/s, y el
+troceado `suavidad_duty` 0,6 lo deja en ~0,03 m/s en `/wheel_odom` (que
+publica lo comandado). En giro, 0,05 rad/s: por debajo del umbral
+`fabsf(omega) > 0.05f` del firmware, PWM 0. Medido: LIDAR sin cambio, robot
+quieto, con y sin modo seguro. Al subir el límite Claude fue bloqueado por el
+clasificador de permisos (afloja un límite de seguridad); **el usuario lo
+puso en 3 / 8 desde el dashboard**. El firmware ya tiene su propia rampa
+(0→100 % en 0,4 s, `RAMPA_V_PCT_S`).
+
+**4. Exploración atascada.** En la sesión anterior: 27 `desatasco` seguidos
+(coherente con el punto 3). Tras subir la aceleración: 3 `callejon`, 1
+`desatasco` y un `bucle`; ordenaba girar a la izquierda a 1,58 rad/s (hacia
+la pared, a 0,34 m) y el EKF medía −0,2 rad/s: no giraba. Detenida con
+`/api/exploracion/stop`. Pendiente: el explorador debería elegir el lado
+libre (a la derecha había 0,73 m) y dejar de insistir si el giro medido no
+acompaña al ordenado.
+
+**5. SIN RESOLVER — "adelante" mueve el robot HACIA ATRÁS (según sensores).**
+Pulso `adelante` escala 0,3: `/wheel_odom` +0,27 m/s; rf2o −0,38 m/s, EKF
+−0,34 m/s; el hueco trasero (en base_link) bajó de 2,08 a 1,89 m y el
+delantero subió de 0,59 a 0,78 m. El monitor de deslizamiento ya lo había
+visto (`v_orden 0.037`, `v_medida −0.394`). Dos explicaciones posibles:
+(a) motores invertidos por el firmware del 2026-10-01 (`5876029`, `d5054f9`,
+`101c6a7`) si ya se cargó en la C3; (b) el `yaw=π` del LIDAR
+(`agrobot_mapping.launch.py`, `a3ab408`) mal. Falta que el usuario confirme
+hacia qué lado se movió físicamente. Si es (b), el freno por LIDAR mira el
+lado equivocado y un robot que "avanza" no frena ante lo que tiene delante.
+
+**6. Otros.** `GET /api/obstacle_status` devuelve todos los sectores del
+LIDAR en `null` con el LIDAR a 50 Hz (consistente con que
+`obstacle_avoidance.py` es código muerto, §0). `/api/health` marca sesgo del
+giróscopo +0,71 °/s en reposo.
+
+**Estado que quedó cambiado:** modo de manejo `interior`
+(`POST /api/drive/mode`); modo seguro rearmado; aceleración 3 / 8 (la puso el
+usuario; queda en `agrobot_config.json`, sin commitear).
+

@@ -263,21 +263,71 @@ void readAmbiente() {
 // =============================================
 // ===== CONECTAR A WIFI =====
 // =============================================
+// WiFi con reintentos y DHCP timeout mejorado (2026-10-04)
+const unsigned long WIFI_DHCP_TIMEOUT_MS = 60000;    // 60s para DHCP
+const unsigned long WIFI_RETRY_INTERVAL_MS = 10000;  // 10s entre reintentos
+static unsigned long wifiLastRetry = 0;
+static uint8_t wifiRetryCount = 0;
+
 void connectToWiFi() {
-  if (wifi_connected) return;
+  if (wifi_connected && WiFi.status() == WL_CONNECTED) {
+    return;  // Ya conectado, no hacer nada
+  }
+
   if (WiFi.status() == WL_CONNECTED) {
     wifi_connected = true;
     Serial.println("✅ WiFi conectado!");
     Serial.print("   IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("   RSSI: ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
     return;
   }
-  static bool wifiStarted = false;
-  if (!wifiStarted) {
-    Serial.print("📶 Conectando a WiFi...");
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    wifiStarted = true;
+
+  // Si WiFi se perdió, intentar reconectar
+  if (wifi_connected && WiFi.status() != WL_CONNECTED) {
+    wifi_connected = false;
+    Serial.println("⚠️  WiFi desconectado - reintentando...");
+    wifiLastRetry = millis();
+    wifiRetryCount = 0;
+    return;
+  }
+
+  // Reintentos periódicos
+  unsigned long ahora = millis();
+  if (ahora - wifiLastRetry < WIFI_RETRY_INTERVAL_MS) {
+    return;  // Esperar antes de reintentar
+  }
+
+  wifiLastRetry = ahora;
+  wifiRetryCount++;
+
+  Serial.printf("📶 WiFi intento #%u...", wifiRetryCount);
+  WiFi.mode(WIFI_STA);
+  // Configurar timeout DHCP largo antes de conectar
+  WiFi.setAutoConnect(true);
+  WiFi.setAutoReconnect(true);
+  WiFi.setTimeout(WIFI_DHCP_TIMEOUT_MS);  // 60s timeout
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  // Esperar hasta WIFI_DHCP_TIMEOUT_MS ms
+  unsigned long wifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED &&
+         millis() - wifiStart < WIFI_DHCP_TIMEOUT_MS) {
+    delay(100);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    wifi_connected = true;
+    wifiRetryCount = 0;
+    Serial.println(" ✅ conectado!");
+    Serial.print("   IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    wifi_connected = false;
+    Serial.printf(" ❌ timeout (intento %u)\n", wifiRetryCount);
   }
 }
 // =============================================

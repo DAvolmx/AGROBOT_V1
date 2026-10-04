@@ -127,8 +127,11 @@ const bool INVERT_L2 = false;
 const bool CABLEADO_INVIERTE_AVANCE = true;
 const bool CABLEADO_INVIERTE_GIRO   = false;
 
-const uint32_t MOTOR_PWM_HZ = 1000;
-const uint8_t MOTOR_PWM_BITS = 8;
+// ON/OFF puro: no PWM variable. Control por duración de pulsos.
+// Los motores se encienden al 100% durante una duración calculada,
+// luego se apagan. La velocidad se controla alterando la duración ON/OFF.
+// #define MOTOR_PWM_HZ 1000;    // No usado: GPIO ON/OFF puro
+// #define MOTOR_PWM_BITS 8;     // No usado: GPIO ON/OFF puro
 
 // =============================================
 // ===== PARÁMETROS FÍSICOS =====
@@ -139,12 +142,16 @@ const float K_ROT        = TRACK_WIDTH / 2.0f;
 
 const float V_MAX        = 0.55f;   // m/s
 const float OMEGA_MAX    = 1.5f;    // rad/s
-const int   PWM_MAX      = 255;
+const int   PWM_MAX      = 100;     // Escala 0-100%, no 0-255 (más legible para ON/OFF)
 
 // =============================================
-// ===== ARRANQUE: ZONA MUERTA + PULSOS DE TORQUE =====
+// ===== CONTROL ON/OFF: DURACIÓN EN MILISEGUNDOS =====
 // =============================================
-const int PWM_MIN = 200;
+// Motor encendido 100% durante N ms, luego apagado.
+// PWM_MAX = 100 significa 100% duty (siempre encendido en pulsos)
+// PWM_MIN = 0 significa apagado
+// No hay dead zone (PWM_MIN_ANTIGUO = 200 ya no aplica)
+const int PWM_MIN = 0;   // ON/OFF puro: 0 = apagado, >0 = encendido
 
 // Rueda parada = FRENO (FI=BI=HIGH: el TA6586 pone en corto el motor), no
 // rueda libre (FI=BI=LOW). Sin freno el robot seguía rodando por inercia al
@@ -523,88 +530,113 @@ Rueda *RUEDAS[4]     = {&ruedaR1, &ruedaR2, &ruedaL1, &ruedaL2};
 Rueda *LADO_DER[2]   = {&ruedaR1, &ruedaR2};   // {delantera, trasera}
 Rueda *LADO_IZQ[2]   = {&ruedaL1, &ruedaL2};   // {delantera, trasera}
 
+// ON/OFF GPIO puro - sin PWM LEDC. Control por duración.
+static void motorSetup(uint8_t pinFI, uint8_t pinBI) {
+  pinMode(pinFI, OUTPUT);
+  pinMode(pinBI, OUTPUT);
+  digitalWrite(pinFI, LOW);
+  digitalWrite(pinBI, LOW);
+}
+
+static void motorON(uint8_t pinActivo) {
+  digitalWrite(pinActivo, HIGH);
+}
+
+static void motorOFF(uint8_t pinActivo) {
+  digitalWrite(pinActivo, LOW);
+}
+
+// Cambios de sentido: ambos pines a LOW (rueda libre) durante 50ms antes de cambiar
+static void motorFreno(uint8_t pinFI, uint8_t pinBI) {
+  digitalWrite(pinFI, LOW);
+  digitalWrite(pinBI, LOW);
+}
+
+// Funciones PWM comentadas (deprecated para ON/OFF puro)
+/*
 static void pwmAttach(uint8_t pin, uint8_t canal) {
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcAttachChannel(pin, MOTOR_PWM_HZ, MOTOR_PWM_BITS, canal);
-#else
-  ledcSetup(canal, MOTOR_PWM_HZ, MOTOR_PWM_BITS);
-  ledcAttachPin(pin, canal);
-#endif
+  // No usado: GPIO ON/OFF puro
 }
-
 static void pwmDetach(uint8_t pin) {
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcDetach(pin);
-#else
-  ledcDetachPin(pin);
-#endif
-  pinMode(pin, OUTPUT);
-  digitalWrite(pin, LOW);
+  // No usado: GPIO ON/OFF puro
 }
-
 static void pwmWriteCanal(uint8_t canal, uint32_t duty) {
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcWriteChannel(canal, duty);
-#else
-  ledcWrite(canal, duty);
-#endif
+  // No usado: GPIO ON/OFF puro
 }
+*/
+
+// ON/OFF puro: interpreta duty (0-100) como % de tiempo encendido en cada ciclo.
+// Período de ciclo fijo: MOTOR_PERIODO_MS
+// duty=100 -> siempre ON
+// duty=50 -> alternancia ON/OFF
+// duty=0 -> siempre OFF
+const unsigned long MOTOR_PERIODO_MS = 200;   // ciclo de 200ms para duty < 100%
 
 static void aplicarDuty(Rueda &r) {
+  unsigned long ahora = millis();
+
   if (r.sentido == 0) {
-    const uint8_t nivel = (FRENO_ACTIVO && !r.libre) ? HIGH : LOW;
-    digitalWrite(r.pinFI, nivel);
-    digitalWrite(r.pinBI, nivel);
+    // Parado: freno o rueda libre
+    motorFreno(r.pinFI, r.pinBI);
     r.dcCompleto = false;
     return;
   }
+
   int duty = r.dutyPedido;
   const int tope = r.apoyo ? PWM_TOPE_TRASERO : PWM_MAX;
+
+  // Aplicar KICK pulses (arranque de torque)
   if (r.kickRestantes > 0) {
     duty = r.kickAlto ? tope : 0;
-  } else if (giroActivo && giroAlto) {
+  }
+  // Aplicar pulsos de giro (drag en soft soil)
+  else if (giroActivo && giroAlto) {
     duty = max(duty, tope);
   }
 
   uint8_t pinActivo = (r.sentido > 0) ? r.pinFI : r.pinBI;
-  if (duty >= PWM_MAX) {
-    if (!r.dcCompleto) {
-      pwmDetach(pinActivo);
-      r.dcCompleto = true;
-    }
-    digitalWrite(pinActivo, HIGH);
+  uint8_t pinPasivo = (r.sentido > 0) ? r.pinBI : r.pinFI;
+
+  // duty 0-100 es porcentaje de tiempo ON en cada MOTOR_PERIODO_MS
+  // Inicializa fase si es necesario
+  if (!r.dcCompleto) {
+    r.dcCompleto = true;
+    r.kickFaseHasta = ahora;  // reutilizar campo para fase ON/OFF
+  }
+
+  if (duty >= 100) {
+    // Motor siempre ON (100% duty)
+    motorON(pinActivo);
+    motorOFF(pinPasivo);
+  } else if (duty <= 0) {
+    // Motor siempre OFF
+    motorOFF(pinActivo);
+    motorOFF(pinPasivo);
   } else {
-    if (r.dcCompleto) {
-      pwmAttach(pinActivo, r.canal);
-      r.dcCompleto = false;
+    // Alternancia ON/OFF: duty % del período
+    unsigned long faseLocal = (ahora % MOTOR_PERIODO_MS);
+    unsigned long duracionON = (MOTOR_PERIODO_MS * duty) / 100;
+
+    if (faseLocal < duracionON) {
+      motorON(pinActivo);
+      motorOFF(pinPasivo);
+    } else {
+      motorOFF(pinActivo);
+      motorOFF(pinPasivo);
     }
-    pwmWriteCanal(r.canal, duty);
   }
 }
 
 void setRueda(Rueda &r, int duty, int sentido) {
-  duty = constrain(duty, 0, PWM_MAX);
+  duty = constrain(duty, 0, PWM_MAX);   // 0-100% para ON/OFF puro
   if (r.invertida) sentido = -sentido;
   if (duty == 0) sentido = 0;
 
   if (sentido != r.sentido) {
-    if (r.sentido != 0) {
-      if (r.dcCompleto) {
-        digitalWrite(r.sentido > 0 ? r.pinFI : r.pinBI, LOW);
-        r.dcCompleto = false;
-      } else {
-        pwmWriteCanal(r.canal, 0);
-      }
-      pwmDetach(r.sentido > 0 ? r.pinFI : r.pinBI);
-    }
+    // Cambio de sentido: freno antes de invertir
+    motorFreno(r.pinFI, r.pinBI);
     if (sentido != 0) {
-      uint8_t pinPasivo = (sentido > 0) ? r.pinBI : r.pinFI;
-      pinMode(pinPasivo, OUTPUT);
-      digitalWrite(pinPasivo, LOW);
-      pwmAttach(sentido > 0 ? r.pinFI : r.pinBI, r.canal);
-
-      // Las traseras no reciben pulsos de arranque: el robot lo arrancan
-      // los delanteros, y los picos a fondo eran lo que más las calentaba.
+      // Nuevo sentido
       if (KICK_PULSOS > 0 && !r.apoyo && millis() - r.quietaDesde >= KICK_REARME_MS) {
         r.kickRestantes = KICK_PULSOS;
         r.kickAlto      = false;
@@ -1022,22 +1054,17 @@ void setup() {
   Serial.println("[foco] fin de la autoprueba, queda apagado");
 #endif
 
-  Serial.print("[PWM] motores a ");
-  Serial.print(MOTOR_PWM_HZ);
-  Serial.print(" Hz, ");
-  Serial.print(MOTOR_PWM_BITS);
-  Serial.println(" bits, 1 canal LEDC por motor");
+  Serial.println("[MOTORES] ON/OFF puro - GPIO directo, control por duración");
+  Serial.print("[MOTORES] período = ");
+  Serial.print(MOTOR_PERIODO_MS);
+  Serial.println(" ms, duty 0-100%");
   Serial.println("[CINEMATICA] diferencial / skid-steer: vx, omega");
-  Serial.print("[GIRO] piso PWM_MIN_GIRO=");
-  Serial.print(PWM_MIN_GIRO);
-  Serial.print(", pulsos ");
+  Serial.print("[GIRO] pulsos ");
   Serial.print(GIRO_ON_MS);
   Serial.print("/");
   Serial.print(GIRO_OFF_MS);
   Serial.println(" ms");
-  Serial.print("[ARRANQUE] zona muerta PWM_MIN=");
-  Serial.print(PWM_MIN);
-  Serial.print(", pulsos de torque: ");
+  Serial.print("[ARRANQUE] pulsos de torque: ");
   Serial.print(KICK_PULSOS);
   Serial.print(" x ");
   Serial.print(KICK_ON_MS);
@@ -1134,7 +1161,8 @@ void setup() {
 // WDT_LOOP_MS la placa se reinicia, y setup() frena los motores lo primero
 // (2026-10-02). Se activa al FINAL de setup(): la espera al Serial y el
 // arranque del BLE/WiFi tardan más que esto.
-const uint32_t WDT_LOOP_MS = 2000;
+// 2026-10-04: aumentado a 4000ms para dar más margen a C3 con BLE+WiFi dual activos.
+const uint32_t WDT_LOOP_MS = 4000;   // 4 segundos timeout
 
 void iniciarWatchdogLoop() {
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3

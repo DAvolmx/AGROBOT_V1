@@ -122,7 +122,7 @@ REDUNDANCIA DE REDES:
 
 ### 1️⃣ **JETSON_AP** (AP Local)
 - **SSID**: `JETSON_AP`
-- **Contraseña**: `agrobot123`
+- **Contraseña**: `12345678`
 - **IP**: `192.168.12.1`
 - **DHCP**: `192.168.12.50` — `192.168.12.200`
 - **Uso**: Robots locales, móviles, patrullaje

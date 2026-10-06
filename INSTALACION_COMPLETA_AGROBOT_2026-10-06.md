@@ -31,7 +31,7 @@ DIR-615 (Router Local)
 └─ LoRa Passerelle
     ↓
 JETSON NANO (Control Central)
-├─ AP: JETSON_AP (192.168.12.1) ← agrobot123
+├─ AP: JETSON_AP (192.168.12.1) ← 12345678
 ├─ Cliente: LoRa_Wan (opcional, redundancia)
 ├─ BT: RFCOMM puerto 1 (Bluetooth Gateway)
 ├─ DHCP: 192.168.12.50-200 (dnsmasq)
@@ -80,7 +80,7 @@ sudo bash install-services.sh
 ```
 
 Este script:
-- ✅ Copia hostapd.conf (contraseña: agrobot123)
+- ✅ Copia hostapd.conf (contraseña: 12345678)
 - ✅ Copia dnsmasq.conf (DHCP)
 - ✅ Instala 5 servicios systemd
 - ✅ Habilita autostart
@@ -160,7 +160,7 @@ ping 8.8.8.8
 ```bash
 # En el ESP32-C3 (código C):
 const char* ssid = "JETSON_AP";
-const char* password = "agrobot123";
+const char* password = "12345678";
 WiFi.begin(ssid, password);
 
 # Esperar 10 segundos
@@ -180,7 +180,7 @@ arp-scan -l | grep 192.168.12
 #### Tarea 3.3: Conectar Móvil a JETSON_AP
 - [ ] Abrir WiFi en móvil
 - [ ] Buscar "JETSON_AP"
-- [ ] Contraseña: `agrobot123`
+- [ ] Contraseña: `12345678`
 - [ ] Esperar conexión
 - [ ] Abrir navegador: `http://192.168.12.1:8000`
 - [ ] Dashboard debe cargar
@@ -267,7 +267,7 @@ sudo journalctl -u agrobot-wifi-auto.service -f
 - ✅ `INSTALACION_COMPLETA_AGROBOT_2026-10-06.md` — Este documento
 
 ### Archivos Modificados
-- ✅ `etc/hostapd/agrobot.conf` — Contraseña: `agrobot123` (era `CAMBIAR_AL_INSTALAR`)
+- ✅ `etc/hostapd/agrobot.conf` — Contraseña: `12345678` (era `CAMBIAR_AL_INSTALAR`)
 
 ---
 
@@ -303,7 +303,7 @@ INSTALACIÓN:
   ✅ Servicios systemd instalados y habilitados
   ✅ Configuración de hostapd en /etc/hostapd/
   ✅ Configuración de dnsmasq en /etc/dnsmasq.d/
-  ✅ Contraseña AP: agrobot123 (no default)
+  ✅ Contraseña AP: 12345678 (no default)
   ✅ Contraseña WiFi: 1850370113 (CNT-RUIZ)
   ✅ Canal AP: 1 (sincronizado)
 

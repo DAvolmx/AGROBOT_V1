@@ -178,6 +178,11 @@ DEFAULTS = {
         # ciclo y cero el resto. duty 1.0 = como antes, sin trocear.
         "suavidad_duty": 0.6,
         "suavidad_periodo_s": 0.30,
+        # Modo de manejo por pulsos (pulse_drive.MODOS). Tiene que estar aquí:
+        # load() descarta las claves que no están en DEFAULTS, y por eso el
+        # modo elegido se perdía en cada reinicio (2026-10-02). "preciso" =
+        # pulsos cortos, lo que pidió el usuario.
+        "modo_manejo": "preciso",
     },
     "safety": {
         "heartbeat_stale_warn_s": 5,

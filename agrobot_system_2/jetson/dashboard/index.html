@@ -743,6 +743,25 @@ input[type="text"], select { font-family: inherit; }
         </div>
       </div>
 
+      <!-- Panel Control v2.0 -->
+      <div class="card" style="background: linear-gradient(135deg, #f5faf7, #ffffff); border: 1px solid #cfe3d2;">
+        <h3 style="margin: 0 0 16px 0; font-size: 16px;">⚡ Control de Motores v2.0</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+          <button onclick="cambiarRed()" style="padding: 12px 16px; background: #00bd4f; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; grid-column: span 2;">🌐 Cambiar Red (Patrullaje ↔ Estación)</button>
+          <div>
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">⚡ Potencia Motor</label>
+            <input type="range" id="pwmSlider" min="0" max="100" value="75" onchange="cambiarPotencia(this.value)" style="width: 100%; cursor: pointer; accent-color: #00bd4f;">
+            <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: #4e6a58;">
+              <span>0%</span>
+              <span id="pwmValue">75%</span>
+              <span>100%</span>
+            </div>
+          </div>
+          <button onclick="motorParar()" style="padding: 12px 16px; background: #ff2d3f; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 700; font-size: 16px;">🛑 PARADA</button>
+          <button id="safeguard-btn" onclick="toggleSafeguard()" style="padding: 12px 16px; background: #ff9500; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; grid-column: span 2;" title="Desactiva el timeout de seguridad (100 ms sin comando = parada)">🔐 Modo demo (safeguard ON)</button>
+        </div>
+      </div>
+
       <!-- Controles -->
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
@@ -3247,6 +3266,98 @@ input[type="text"], select { font-family: inherit; }
     };
     await fetch("/api/calibration", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
   });
+
+  // --- FUNCIONES MOTOR v2.0 ---
+  async function cambiarPotencia(valor) {
+    document.getElementById('pwmValue').textContent = valor + '%';
+    try {
+      const response = await fetch('/api/motor/comando', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          v: 0.5,
+          omega: 0.0,
+          duty: parseInt(valor)
+        })
+      });
+      if (response.ok) {
+        toast("success", "Motor", "Potencia: " + valor + "%");
+      }
+    } catch(e) {
+      console.error('Error:', e);
+      toast("error", "Error", "No se pudo cambiar la potencia");
+    }
+  }
+
+  async function motorParar() {
+    try {
+      const response = await fetch('/api/motor/parar', {
+        method: 'POST'
+      });
+      if (response.ok) {
+        toast("warning", "PARADA", "🛑 Motor detenido");
+        document.getElementById('pwmSlider').value = 0;
+        document.getElementById('pwmValue').textContent = '0%';
+      }
+    } catch(e) {
+      console.error('Error:', e);
+      toast("error", "Error", "No se pudo detener el motor");
+    }
+  }
+
+  async function cambiarRed() {
+    const modo = prompt('Ingresa "patrullaje" o "estacion":');
+    if (!modo) return;
+
+    if (modo !== 'patrullaje' && modo !== 'estacion') {
+      toast("warning", "Modo inválido", 'Debe ser "patrullaje" o "estacion"');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/wifi/modo', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({modo: modo})
+      });
+
+      if (response.ok) {
+        toast("success", "WiFi", "✓ Cambiando a " + modo + "...");
+      } else {
+        toast("error", "Error", "No se pudo cambiar la red");
+      }
+    } catch(e) {
+      console.error('Error:', e);
+      toast("error", "Error de conexión", "No se pudo conectar con el servidor");
+    }
+  }
+
+  // ⭐ NUEVO: toggle safeguard (timeout de seguridad)
+  let safeguardEnabled = true;  // por defecto activo
+  async function toggleSafeguard() {
+    try {
+      const response = await fetch('/api/motor/toggle-safeguard', {
+        method: 'POST'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        safeguardEnabled = data.safeguard_enabled;
+        const btn = document.getElementById('safeguard-btn');
+        if (safeguardEnabled) {
+          btn.style.background = '#ff9500';
+          btn.textContent = '🔐 Modo demo (safeguard ON)';
+          toast("success", "Safeguard", "✓ Protección de seguridad activada");
+        } else {
+          btn.style.background = '#c4141f';
+          btn.textContent = '⚠️  Modo demo (safeguard OFF)';
+          toast("warning", "Safeguard", "⚠️ Protección desactivada — modo prueba");
+        }
+      }
+    } catch(e) {
+      console.error('Error:', e);
+      toast("error", "Error", "No se pudo cambiar el safeguard");
+    }
+  }
 
   log("Dashboard iniciado.");   // definido junto a setPill
 })();

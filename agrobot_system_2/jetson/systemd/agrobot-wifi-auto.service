@@ -1,0 +1,17 @@
+[Unit]
+Description=AgroBot — WiFi Auto-Connect (CNT-RUIZ + LoRa_Wan)
+After=agrobot-hostapd.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jetson
+WorkingDirectory=/home/jetson/Desktop/AGROBOT/agrobot_system_2/jetson/backend
+ExecStart=/usr/bin/python3 wifi_auto_connect.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

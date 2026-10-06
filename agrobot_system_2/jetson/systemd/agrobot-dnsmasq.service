@@ -1,0 +1,15 @@
+[Unit]
+Description=AgroBot — dnsmasq para AP JETSON_AP (DHCP + DNS)
+After=agrobot-ap0.service
+Requires=agrobot-ap0.service
+Before=agrobot-backend.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --conf-file=/etc/dnsmasq.d/agrobot-ap.conf --pid-file=/var/run/dnsmasq-agrobot.pid
+ExecReload=/usr/sbin/dnsmasq --conf-file=/etc/dnsmasq.d/agrobot-ap.conf --test
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

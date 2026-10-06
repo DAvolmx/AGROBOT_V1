@@ -68,6 +68,8 @@ class EnlaceC3:
 
     def send_command(self, v: float, omega: float, scan_cmd: int = 0):
         self.ble.send_command(v, -omega if INVERTIR_GIRO else omega, scan_cmd)
+        # ⭐ NUEVO: también envía por WiFi en el mismo ciclo, no solo en el bucle
+        self._enviar_wifi()
 
     def set_actuators(self, servo_angle: int | None = None, led: bool | None = None):
         self.ble.set_actuators(servo_angle, led)

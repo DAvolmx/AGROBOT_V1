@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Redes - AGROBOT</title>
+    <style>
+        :root {
+            --bg: #e6f2e9;
+            --panel: #ffffff;
+            --ink: #0d1f14;
+            --accent: #00bd4f;
+            --accent-2: #00b8a4;
+            --lora: #9333ff;
+            --warn: #ff9500;
+            --crit: #ff2d3f;
+            --info: #00a3ee;
+            --radius: 14px;
+            --ease: cubic-bezier(.4, 0, .2, 1);
+            --sombra: 0 1px 2px rgba(22, 40, 28, 0.04), 0 8px 24px -18px rgba(22, 40, 28, 0.35);
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; height: 100%; }
+        body {
+            background: var(--bg);
+            color: var(--ink);
+            font-family: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .contenedor {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--sombra);
+        }
+
+        h1 {
+            margin: 0 0 24px 0;
+            font-size: 24px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .redes {
+            display: grid;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .red {
+            background: #f5faf7;
+            border: 2px solid #e0e8e3;
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.3s var(--ease);
+            position: relative;
+        }
+
+        .red:hover {
+            border-color: var(--accent);
+            box-shadow: 0 4px 12px rgba(0, 189, 79, 0.15);
+        }
+
+        .red.activa {
+            background: linear-gradient(135deg, rgba(0, 189, 79, 0.1), rgba(0, 184, 164, 0.05));
+            border-color: var(--accent);
+        }
+
+        .red-nombre {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .red-icono {
+            font-size: 20px;
+            width: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .red-titulo {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .red-status {
+            font-size: 12px;
+            font-weight: 500;
+            padding: 4px 8px;
+            border-radius: 6px;
+            margin-left: auto;
+        }
+
+        .status-conectado {
+            background: rgba(0, 189, 79, 0.2);
+            color: #067a35;
+        }
+
+        .status-desconectado {
+            background: rgba(255, 149, 0, 0.2);
+            color: #9c5400;
+        }
+
+        .red-detalles {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            font-size: 13px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .detalle {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .detalle-label {
+            color: #4e6a58;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .detalle-valor {
+            font-weight: 600;
+            font-family: "IBM Plex Mono", monospace;
+        }
+
+        .botones {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        button {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s var(--ease);
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            grid-column: span 2;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #00a244;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0, 189, 79, 0.3);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #f1f9f2;
+            color: var(--ink);
+            border: 2px solid #cfe3d2;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #e8f5f0;
+            border-color: var(--accent);
+        }
+
+        .btn-danger {
+            background: rgba(255, 45, 63, 0.1);
+            color: #c4141f;
+            border: 1px solid rgba(255, 45, 63, 0.2);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: rgba(255, 45, 63, 0.15);
+            border-color: #ff2d3f;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .estado-conexion {
+            background: #f1f9f2;
+            border: 1px solid #cfe3d2;
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 20px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .estado-icono {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex: none;
+        }
+
+        .estado-icono.online {
+            background: var(--accent);
+            animation: pulso 2s infinite;
+        }
+
+        .estado-icono.offline {
+            background: var(--warn);
+        }
+
+        @keyframes pulso {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .alerta {
+            background: #ffeecd;
+            border: 1px solid #ff9500;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #9c5400;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .alerta-icono {
+            flex: none;
+            font-size: 16px;
+        }
+
+        @media (max-width: 600px) {
+            .contenedor {
+                padding: 12px;
+            }
+
+            .panel {
+                padding: 16px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+
+            .red-detalles {
+                grid-template-columns: 1fr;
+            }
+
+            .botones {
+                grid-template-columns: 1fr;
+            }
+
+            .btn-primary {
+                grid-column: span 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="contenedor">
+        <div class="panel">
+            <h1>🌐 Control de Redes</h1>
+
+            <div id="alerta" class="alerta" style="display: none;">
+                <div class="alerta-icono">⚠️</div>
+                <div id="alerta-texto"></div>
+            </div>
+
+            <div class="redes" id="redes-contenedor">
+                <!-- Se llena dinámicamente -->
+            </div>
+
+            <div class="estado-conexion">
+                <div id="estado-icono" class="estado-icono offline"></div>
+                <div>
+                    Estado: <strong id="estado-texto">Cargando...</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        const REDES = {
+            'patrullaje': {
+                nombre: 'Patrullaje (C3)',
+                icono: '🤖',
+                ssid: 'JETSON_AP',
+                ip_esperada: '192.168.12.x',
+                descripcion: 'Conectado al AP de la C3 (192.168.12.1)',
+                color: '--accent'
+            },
+            'estacion': {
+                nombre: 'Estación Base',
+                icono: '🏠',
+                ssid: 'Lora_Wan',
+                ip_esperada: '192.168.0.x',
+                descripcion: 'Conectado a LoRa_Wan (192.168.0.1)',
+                color: '--lora'
+            }
+        };
+
+        let modoActual = null;
+        let conectando = false;
+
+        async function obtenerEstado() {
+            try {
+                const response = await fetch(`${API_URL}/api/comunicacion/estado`);
+                if (response.ok) {
+                    return await response.json();
+                }
+            } catch (e) {
+                console.error('Error obteniendo estado:', e);
+            }
+            return null;
+        }
+
+        async function cambiarModo(nuevoModo) {
+            if (conectando || modoActual === nuevoModo) return;
+
+            conectando = true;
+            actualizarUI();
+
+            try {
+                const response = await fetch(`${API_URL}/api/wifi/modo`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ modo: nuevoModo })
+                });
+
+                if (response.ok) {
+                    modoActual = nuevoModo;
+                    mostrarAlerta(`Cambiando a ${REDES[nuevoModo].nombre}...`, 'info');
+                    await new Promise(r => setTimeout(r, 2000));
+                } else {
+                    mostrarAlerta(`Error cambiando modo: ${response.statusText}`, 'error');
+                }
+            } catch (e) {
+                mostrarAlerta(`Error de conexión: ${e.message}`, 'error');
+            } finally {
+                conectando = false;
+                actualizarUI();
+            }
+        }
+
+        function mostrarAlerta(texto, tipo = 'warning') {
+            const alerta = document.getElementById('alerta');
+            const alertaTexto = document.getElementById('alerta-texto');
+            alertaTexto.textContent = texto;
+            alerta.style.display = 'flex';
+            alerta.className = `alerta alerta-${tipo}`;
+
+            if (tipo !== 'error') {
+                setTimeout(() => {
+                    alerta.style.display = 'none';
+                }, 4000);
+            }
+        }
+
+        function actualizarUI() {
+            const contenedor = document.getElementById('redes-contenedor');
+            contenedor.innerHTML = '';
+
+            for (const [modo, config] of Object.entries(REDES)) {
+                const esActiva = modoActual === modo;
+                const div = document.createElement('div');
+                div.className = `red ${esActiva ? 'activa' : ''}`;
+                div.innerHTML = `
+                    <div class="red-nombre">
+                        <div class="red-icono">${config.icono}</div>
+                        <div class="red-titulo">${config.nombre}</div>
+                        <div class="red-status ${esActiva ? 'status-conectado' : 'status-desconectado'}">
+                            ${esActiva ? '✓ Activa' : 'Inactiva'}
+                        </div>
+                    </div>
+                    <div class="red-detalles">
+                        <div class="detalle">
+                            <div class="detalle-label">SSID</div>
+                            <div class="detalle-valor">${config.ssid}</div>
+                        </div>
+                        <div class="detalle">
+                            <div class="detalle-label">IP</div>
+                            <div class="detalle-valor">${config.ip_esperada}</div>
+                        </div>
+                    </div>
+                    <div class="botones">
+                        <button class="btn-secondary" onclick="cambiarModo('${modo}')"
+                                ${conectando || esActiva ? 'disabled' : ''}>
+                            ${conectando && esActiva ? '<span class="loading"></span>' : ''}
+                            ${esActiva ? 'Activa' : 'Conectar'}
+                        </button>
+                    </div>
+                `;
+                contenedor.appendChild(div);
+            }
+        }
+
+        async function actualizarEstado() {
+            const estado = await obtenerEstado();
+            const estadoIcono = document.getElementById('estado-icono');
+            const estadoTexto = document.getElementById('estado-texto');
+
+            if (estado && estado.modo) {
+                modoActual = estado.modo;
+                estadoIcono.className = 'estado-icono online';
+                estadoTexto.textContent = `${REDES[estado.modo].nombre}`;
+            } else {
+                estadoIcono.className = 'estado-icono offline';
+                estadoTexto.textContent = 'Desconectado';
+            }
+
+            actualizarUI();
+        }
+
+        // Inicializar
+        actualizarEstado();
+        setInterval(actualizarEstado, 5000); // Actualizar cada 5 segundos
+    </script>
+</body>
+</html>

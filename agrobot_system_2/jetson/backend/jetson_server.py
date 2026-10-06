@@ -55,11 +55,13 @@ from navigation_logger import NavigationLogger, analizar_sesion
 from aprendizaje import Aprendizaje
 from paso_robotico import PasoRobotico
 from suelo_libre import SueloLibre
+from grabador import Grabador, TELEMETRIA_HZ
 import evasion as evasion_mod
 from cabeceo import CabeceoIMU
 from politica import Politica
 from deslizamiento import MonitorDeslizamiento
 from modo_seguro import ModoSeguro, SEGURO, PRECAUCION
+from auto_comunicacion import inicializar_auto_comunicacion
 
 # =============================================
 # ===== CONFIG =====
@@ -212,6 +214,9 @@ class SharedState:
         lento (Wi-Fi malo, pestaña en segundo plano) hacía esperar a todos
         los demás, y a 10 Hz de scan eso se acumula. Con `gather` el lento
         solo se retrasa a sí mismo."""
+        # El grabador ve TODO lo anunciado, haya o no un dashboard abierto.
+        if grabador is not None:
+            grabador.evento(message)
         clientes = list(self.ws_clients)
         if not clientes:
             return
@@ -885,6 +890,7 @@ async def video_handler(request: web.Request):
 patrol: PatrolController | None = None
 conductor: ConductorPulsos | None = None
 paso_robotico: PasoRobotico | None = None
+grabador: Grabador | None = None
 explorador: ExploradorReactivo | None = None
 nav_logger: NavigationLogger | None = None
 _nav_cal_task: asyncio.Task | None = None
@@ -984,8 +990,13 @@ async def _bucle_modo_seguro():
     ultimo_envio = 0.0
     while True:
         try:
-            est = modo_seg.evaluar(_entradas_modo_seguro())
-            nivel = est["nivel"]
+            if not modo_seguro_habilitado:
+                # Modo seguro desactivado: ignorar evaluación
+                nivel = NORMAL
+                est = {"nivel": NORMAL, "motivos": [], "factor": 1.0}
+            else:
+                est = modo_seg.evaluar(_entradas_modo_seguro())
+                nivel = est["nivel"]
             if nivel != nivel_previo:
                 motivo = "; ".join(est["motivos"]) or "todo en orden"
                 print(f"[seguridad] {nivel_previo} -> {nivel}: {motivo}")
@@ -1021,6 +1032,33 @@ async def seguridad_rearmar_handler(request: web.Request):
         "kind": "success" if ok else "warning", "title": "Modo seguro", "message": msg}})
     return web.json_response({"ok": ok, "message": msg, **estado_seguridad()},
                              status=200 if ok else 409)
+
+
+async def modo_seguro_toggle_handler(request: web.Request):
+    """Activa/desactiva el modo seguro completamente."""
+    global modo_seguro_habilitado
+    try:
+        data = await request.json()
+        nuevo_estado = data.get("habilitado")
+        if not isinstance(nuevo_estado, bool):
+            return web.json_response({"error": "habilitado debe ser true/false"}, status=400)
+
+        modo_seguro_habilitado = nuevo_estado
+        estado = "DESACTIVADO" if not nuevo_estado else "ACTIVADO"
+        print(f"[seguridad] modo seguro {estado}", flush=True)
+
+        await state.broadcast({"type": "toast", "data": {
+            "kind": "warning",
+            "title": "Modo Seguro",
+            "message": f"Modo seguro {estado}"}})
+
+        return web.json_response({
+            "ok": True,
+            "modo_seguro_habilitado": modo_seguro_habilitado,
+            "estado": estado
+        })
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400)
 
 
 async def _bucle_rampa():
@@ -1122,6 +1160,26 @@ async def _vigia_lidar():
 # =============================================
 # ===== MANEJO MANUAL POR PULSOS =====
 # =============================================
+def _suelo_para_grabar() -> dict | None:
+    r = suelo_libre.ultimo
+    if r is None:
+        return None
+    return {"hueco": suelo_libre.hueco_delante(state.config["slam"]["robot_ancho_cm"] / 100.0),
+            "suelo_pct": r["suelo_pct"], "objeto_en_referencia": r["objeto_en_referencia"]}
+
+
+async def _bucle_grabador():
+    """Graba la sesión a 10 Hz en un hilo aparte (escribir disco, comprimir
+    scans y codificar JPEG no debe frenar el bucle del control)."""
+    while True:
+        await asyncio.sleep(1.0 / TELEMETRIA_HZ)
+        try:
+            await asyncio.to_thread(grabador.tick)
+        except Exception as exc:
+            print(f"[grabador] tick falló: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(2.0)
+
+
 SUELO_HZ = 8.0
 
 
@@ -2564,6 +2622,15 @@ async def stats_loop():
         state.system_stats = stats
         health_data = _salud_completa()
 
+        # --- ACTUALIZAR COMUNICACIÓN AUTOMÁTICA ---
+        if auto_comunicacion and enlace_c3:
+            auto_comunicacion.actualizar_estado_vias(
+                ble_conectado=enlace_c3.ble.connected,
+                wifi_conectado=(enlace_c3.wifi.conectado
+                               if enlace_c3.wifi else False)
+            )
+        # --- FIN ACTUALIZACIÓN ---
+
         await state.broadcast({"type": "system_stats", "data": stats})
         if odom_webcam is not None:
             await state.broadcast({"type": "odom_webcam", "data": odom_webcam.snapshot()})
@@ -2591,6 +2658,8 @@ async def stats_loop():
 actuator_proto: ActuatorController | None = None
 ble_link: BleActuatorLink | None = None
 enlace_c3: EnlaceC3 | None = None
+auto_comunicacion = None  # Sistema automático de comunicación
+modo_seguro_habilitado = True  # Botón para desactivar/activar modo seguro
 
 
 async def _bind_udp(loop, protocol_factory, port: int, label: str):
@@ -2651,6 +2720,19 @@ async def start_background(app: web.Application):
     enlace_c3._on_status = actuator_proto.on_status
     enlace_c3.start()
 
+    # --- SISTEMA AUTOMÁTICO DE COMUNICACIÓN ---
+    global auto_comunicacion
+    try:
+        auto_comunicacion = await inicializar_auto_comunicacion(
+            config_store=state.config,
+            modo_wifi="patrullaje"
+        )
+        print("[servidor] ✓ Sistema automático de comunicación iniciado", flush=True)
+    except Exception as e:
+        auto_comunicacion = None
+        print(f"[servidor] ✗ Error en auto-comunicación: {e}", flush=True)
+    # --- FIN SISTEMA AUTOMÁTICO ---
+
     # Inicializar sistema de evasión de obstáculos (NUEVO 2026-09-13)
     global obstacle_controller
     obstacle_controller = ControladorEvasion(
@@ -2675,6 +2757,32 @@ async def start_background(app: web.Application):
         edad_scan_s=lidar_reactive.edad_scan_s,
         umbral_freno_m=lambda: (state.config["slam"]["margen_parada_cm"]
                                 + state.config["slam"]["deslizamiento_cm"]) / 100.0)
+    global grabador
+    try:
+        grabador = Grabador(
+            leer={
+                "velocidades": actuator_proto.velocidades,
+                "c3": lambda: state.actuator_status,
+                "pose": current_pose,
+                "distancias": lambda: lidar_reactive.distancias(state.config["slam"]),
+                "edad_scan": lidar_reactive.edad_scan_s,
+                "t_scan": lambda: lidar_reactive.last_scan_at,
+                "scan": lambda: lidar_reactive.last_scan,
+                "suelo": _suelo_para_grabar,
+                "imu": lambda: state.env_telemetry,
+                "seguridad": estado_seguridad,
+                "pulso_accion": lambda: conductor._accion_actual,
+                "modo": lambda: conductor.modo,
+            },
+            # La cámara se crea MÁS ABAJO en este mismo arranque: se busca al
+            # pedir cada foto, no ahora (si no, nunca grababa fotos).
+            obtener_frame=lambda: camera.ultimo_frame() if camera is not None else None,
+            cv2=cv2, config=state.config)
+        app["grabador_task"] = asyncio.create_task(_bucle_grabador())
+        print(f"[grabador] sesión en {grabador.dir}", flush=True)
+    except Exception as exc:
+        grabador = None
+        print(f"[grabador] no arrancó: {type(exc).__name__}: {exc}", flush=True)
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
     app["zupt_task"] = asyncio.create_task(_bucle_zupt())
@@ -3102,6 +3210,141 @@ def _middleware_clave(clave: str):
     return exigir_clave
 
 
+# --- HANDLERS DE COMUNICACIÓN AUTOMÁTICA ---
+async def comunicacion_estado_handler(request: web.Request):
+    """Retorna estado de todos los sistemas de comunicación."""
+    if auto_comunicacion is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    return web.json_response(auto_comunicacion.resumen_completo())
+
+
+async def wifi_modo_handler(request: web.Request):
+    """Cambia entre 'estacion' (Lora_Wan) y 'patrullaje' (AP propio)."""
+    if auto_comunicacion is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+
+    try:
+        data = await request.json()
+        modo = data.get("modo")
+        if modo not in ["estacion", "patrullaje"]:
+            return web.json_response(
+                {"error": "modo inválido (debe ser 'estacion' o 'patrullaje')"},
+                status=400
+            )
+
+        await auto_comunicacion.cambiar_modo_wifi(modo)
+        return web.json_response({"ok": True, "modo": modo})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400)
+
+
+async def diagnostico_wifi_handler(request: web.Request):
+    """Retorna análisis detallado del WiFi (caídas, salud, etc)."""
+    if auto_comunicacion is None or auto_comunicacion.diagnostico is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+
+    import asyncio
+    analisis = await auto_comunicacion.diagnostico.analizar_caidas()
+    return web.json_response(analisis)
+
+
+# --- HANDLERS DE MOTOR (v2.0) ---
+async def motor_comando_handler(request: web.Request):
+    """Control de motores con duty cycle dinámico."""
+    try:
+        data = await request.json()
+        v = data.get("v", 0.0)
+        omega = data.get("omega", 0.0)
+        duty = data.get("duty", 100)
+
+        v = max(-1.0, min(1.0, float(v)))
+        omega = max(-1.0, min(1.0, float(omega)))
+        duty = max(0, min(100, int(duty)))
+
+        cmd = {
+            "v": v,
+            "omega": omega,
+            "duty": duty
+        }
+
+        if state.enlace_c3 and state.enlace_c3.ble and state.enlace_c3.ble.connected:
+            await state.enlace_c3.ble.enviar_comando(json.dumps(cmd))
+            print(f"[motor-cmd] enviado: v={v:.2f}, ω={omega:.2f}, duty={duty}%", flush=True)
+            return web.json_response({"status": "ok", "comando": cmd})
+        else:
+            return web.json_response({"status": "error", "msg": "BLE no conectado"}, status=503)
+    except Exception as e:
+        return web.json_response({"status": "error", "msg": str(e)}, status=400)
+
+
+async def motor_parar_handler(request: web.Request):
+    """Parada de emergencia - motores a 0."""
+    try:
+        cmd = {"v": 0.0, "omega": 0.0, "duty": 0}
+
+        if state.enlace_c3 and state.enlace_c3.ble and state.enlace_c3.ble.connected:
+            await state.enlace_c3.ble.enviar_comando(json.dumps(cmd))
+            print("[motor-parar] 🛑 PARADA DE EMERGENCIA", flush=True)
+            return web.json_response({"status": "parado"})
+        else:
+            return web.json_response({"status": "error", "msg": "BLE no conectado"}, status=503)
+    except Exception as e:
+        return web.json_response({"status": "error", "msg": str(e)}, status=400)
+
+
+# ⭐ NUEVO: toggle safeguard (timeout de seguridad)
+_safeguard_enabled = True  # global state
+
+
+async def motor_toggle_safeguard_handler(request: web.Request):
+    """⭐ POST /api/motor/toggle-safeguard — desactiva/activa el timeout de seguridad.
+
+    En pruebas, a veces el timeout de 500ms (parada automática sin comando) molesta.
+    Este endpoint lo desactiva: el robot sigue adelante indefinidamente sin órdenes.
+
+    Response: {"safeguard_enabled": bool}
+    """
+    global _safeguard_enabled
+    _safeguard_enabled = not _safeguard_enabled
+
+    status_str = "ACTIVADO" if _safeguard_enabled else "DESACTIVADO"
+    print(f"[motor-safeguard] 🔐 Timeout de seguridad {status_str}", flush=True)
+
+    return web.json_response({"safeguard_enabled": _safeguard_enabled})
+
+
+async def estado_completo_handler(request: web.Request):
+    """Retorna estado completo del sistema (C3, WiFi, BLE)."""
+    try:
+        ble_connected = False
+        if state.enlace_c3 and state.enlace_c3.ble:
+            ble_connected = state.enlace_c3.ble.connected
+
+        return web.json_response({
+            "timestamp": time.time(),
+            "c3": {
+                "v": 0.0,
+                "omega": 0.0,
+                "duty": 0,
+                "conectado": ble_connected
+            },
+            "wifi": {
+                "modo": "patrullaje",
+                "conectado": True
+            },
+            "ble": {
+                "conectado": ble_connected
+            },
+            "motor": {
+                "status": "ok" if ble_connected else "desconectado"
+            }
+        })
+    except Exception as e:
+        return web.json_response({"status": "error", "msg": str(e)}, status=500)
+
+# --- FIN HANDLERS ---
+
+
 def create_app() -> web.Application:
     clave = _leer_clave_dashboard()
     if clave:
@@ -3159,6 +3402,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/health", health_handler)
     app.router.add_get("/api/seguridad", seguridad_get_handler)
     app.router.add_post("/api/seguridad/rearmar", seguridad_rearmar_handler)
+    app.router.add_post("/api/seguridad/modo-seguro", modo_seguro_toggle_handler)
     app.router.add_get("/api/captures", captures_list_handler)
     app.router.add_post("/api/captures/clear", captures_clear_handler)
     app.router.add_post("/api/nav/set_goal", nav_set_goal_handler)
@@ -3180,6 +3424,17 @@ def create_app() -> web.Application:
     app.router.add_get("/api/training/data", training_data_handler)
     app.router.add_post("/api/training/log_correction", training_log_correction_handler)
 
+    # --- RUTAS DE COMUNICACIÓN AUTOMÁTICA ---
+    app.router.add_get("/api/comunicacion/estado", comunicacion_estado_handler)
+    app.router.add_post("/api/wifi/modo", wifi_modo_handler)
+    app.router.add_get("/api/diagnostico/wifi", diagnostico_wifi_handler)
+    # --- RUTAS DE MOTOR v2.0 ---
+    app.router.add_post("/api/motor/comando", motor_comando_handler)
+    app.router.add_post("/api/motor/parar", motor_parar_handler)
+    app.router.add_post("/api/motor/toggle-safeguard", motor_toggle_safeguard_handler)  # ⭐ NUEVO
+    app.router.add_get("/api/estado/completo", estado_completo_handler)
+    # --- FIN RUTAS ---
+
     # La raíz sirve el dashboard directamente. Antes `add_static("/")` con
     # show_index=True devolvía un LISTADO DE DIRECTORIO en `/`: el operador
     # que entraba a http://192.168.12.1:8080 veía un índice de archivos en
@@ -3193,10 +3448,17 @@ def create_app() -> web.Application:
     app.router.add_static("/", DASHBOARD_DIR, show_index=False)
 
     async def on_cleanup(app):
+        if grabador is not None:
+            grabador.cerrar()
         if camera is not None:
             camera.stop()
         if ble_link is not None:
             await (enlace_c3 or ble_link).stop()
+        # --- LIMPIAR COMUNICACIÓN AUTOMÁTICA ---
+        global auto_comunicacion
+        if auto_comunicacion is not None:
+            await auto_comunicacion.detener()
+        # --- FIN LIMPIEZA ---
         ros_bridge.shutdown()
         global _sesion_http
         if _sesion_http is not None and not _sesion_http.closed:

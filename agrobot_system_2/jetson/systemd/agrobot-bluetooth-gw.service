@@ -1,0 +1,17 @@
+[Unit]
+Description=AgroBot — Bluetooth Gateway (Dashboard por BT)
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+User=jetson
+WorkingDirectory=/home/jetson/Desktop/AGROBOT/agrobot_system_2/jetson/backend
+ExecStart=/usr/bin/python3 bluetooth_gateway.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

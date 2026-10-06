@@ -207,7 +207,17 @@
       "Bash(chmod +x /home/jetson/Desktop/AGROBOT/agrobot_system_2/jetson/systemd/install-services.sh)",
       "Bash(chmod +x /home/jetson/Desktop/AGROBOT/agrobot_system_2/jetson/backend/wifi_auto_connect.py)",
       "Bash(chmod +x /home/jetson/Desktop/AGROBOT/agrobot_system_2/jetson/backend/bluetooth_gateway.py)",
-      "Bash(chmod +x /home/jetson/Desktop/AGROBOT/INSTALAR_AGROBOT.sh)"
+      "Bash(chmod +x /home/jetson/Desktop/AGROBOT/INSTALAR_AGROBOT.sh)",
+      "Bash(sudo bash INSTALAR_AGROBOT.sh)",
+      "Bash(chmod +x /home/jetson/Desktop/AGROBOT/INSTALAR_AGROBOT_SIMPLE.sh)",
+      "Bash(sudo bash /home/jetson/Desktop/AGROBOT/INSTALAR_AGROBOT_SIMPLE.sh)",
+      "Bash(sudo systemctl status agrobot-dnsmasq.service)",
+      "Bash(sudo dnsmasq --conf-file=/etc/dnsmasq.d/agrobot-ap.conf --test)",
+      "Bash(sudo pkill -9 dnsmasq)",
+      "Bash(sudo systemctl restart agrobot-dnsmasq.service)",
+      "Bash(sudo sed -i 's/Type=simple/Type=forking/' /etc/systemd/system/agrobot-dnsmasq.service)",
+      "Bash(sudo systemctl status agrobot-ap0.service agrobot-hostapd.service agrobot-dnsmasq.service agrobot-wifi-auto.service agrobot-bluetooth-gw.service)",
+      "Bash(sudo ps aux)"
     ]
   }
 }

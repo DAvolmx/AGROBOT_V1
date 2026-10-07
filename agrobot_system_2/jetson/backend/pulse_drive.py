@@ -38,10 +38,10 @@ MODOS = {
     "interior": {
         "pulso_recto_s": 0.8,
         "pulso_giro_s": 0.4,
-        "maniobra_v": 0.0,
+        "maniobra_v": 0.0,      # SIN retroceso: solo giro puro (omega)
         "maniobra_omega": 1.0,
         "maniobra_medio_s": 0.4,
-        "vel_factor": 0.6,
+        "vel_factor": 1.0,      # 100% velocidad máxima (antes era 0.6)
     },
     # Pulsos CORTOS (2026-10-02, pedido del usuario): la mitad de largos
     # que en interior. Con el firmware nuevo cada pulso recto de 0,8 s
@@ -50,10 +50,10 @@ MODOS = {
     "preciso": {
         "pulso_recto_s": 0.4,
         "pulso_giro_s": 0.25,
-        "maniobra_v": 0.0,
+        "maniobra_v": 0.0,      # SIN retroceso: solo giro puro (omega)
         "maniobra_omega": 1.0,
         "maniobra_medio_s": 0.25,
-        "vel_factor": 0.6,
+        "vel_factor": 1.0,      # 100% velocidad máxima (antes era 0.6)
     },
     "exterior": {
         "pulso_recto_s": 1.0,

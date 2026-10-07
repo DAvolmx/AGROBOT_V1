@@ -437,7 +437,9 @@ void applyMotors(float vx, float omega) {
   const float wRef = V_MAX / WHEEL_RADIUS;
   float wPico = fmaxf(fabs(wIzq), fabs(wDer));
   float escala = 1.0f;
-  if (wPico > wRef && wPico > 0.0f) escala = wRef / wPico;
+  // CAMBIO 2026-10-07: NO normalizar para permitir motores al máximo incluso en giros
+  // Esto permite precisión máxima sin perder potencia
+  // if (wPico > wRef && wPico > 0.0f) escala = wRef / wPico;
 
   bool giroAntes = giroActivo;
   giroActivo = (fabsf(K_ROT * omega) >= GIRO_UMBRAL * fabsf(vx)) && (fabsf(omega) > 0.05f);

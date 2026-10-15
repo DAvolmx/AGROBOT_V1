@@ -1,0 +1,15 @@
+{
+  "compiled": true,
+  "method": "new sketch object, linked with unchanged Arduino 3.3.12 core and WiFi/WebServer/Preferences dependencies from v62 cache",
+  "fqbn": "esp32:esp32:esp32c3",
+  "core": "3.3.12",
+  "binary_bytes": 1049120,
+  "hardware_flashed": false,
+  "physical_calibration_verified": false,
+  "binary_sha256": "f59ae682f56a46e193b7a4c911c6e56c1bde729bd0238a642c12134733f1d8cd",
+  "source_sha256": {
+    "agrobot_c3_demo_trasero.ino": "99ce7c5c1f8103dc3fd1d6e8b493bfeaa6ae9cd80e544de0672ba344489d62a9",
+    "control_model.h": "a5be3d4bb8b92e49f9f799c7ab18cc223e282809dbcba757a2cf1720a3a5a1d6",
+    "web_panel.h": "b80de1844ce3bb0a4b27bb715deb7ab0212a55d9b1fc57fa26cdf9e9bc40e4e5"
+  }
+}

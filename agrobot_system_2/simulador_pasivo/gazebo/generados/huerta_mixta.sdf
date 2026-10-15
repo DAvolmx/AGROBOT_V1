@@ -1,0 +1,4724 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.9">
+  <world name="huerta_ruda">
+    <!-- escenario=mixto; semilla=20261012; friccion_base=0.52 -->
+    <gravity>0 0 -9.81</gravity>
+    <physics name="default" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>0.65</real_time_factor>
+      <real_time_update_rate>500</real_time_update_rate>
+    </physics>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics" />
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands" />
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster" />
+    <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact" />
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <light name="sun" type="directional">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 12 0.2 0.4 0</pose>
+      <diffuse>0.65 0.624 0.559 1</diffuse>
+      <direction>-0.35 0.1 -0.92</direction>
+    </light>
+    <model name="suelo">
+      <pose>0 0 0 0 0 0</pose>
+      <static>true</static>
+      <link name="ground">
+        <collision name="ground_collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>30 12</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.52</mu>
+                <mu2>0.41</mu2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="ground_visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>30 12</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.420 0.341 0.231 1</ambient>
+            <diffuse>0.420 0.341 0.231 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="agrobot" canonical_link="base_link">
+      <pose>-2 0 0.31 0 0 0</pose>
+      <link name="base_link">
+        <inertial>
+          <mass>8.8</mass>
+          <inertia>
+            <ixx>0.30</ixx>
+            <iyy>0.38</iyy>
+            <izz>0.42</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="chassis_collision">
+          <geometry>
+            <box>
+              <size>0.50 0.33 0.16</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="chassis_frame_visual">
+          <pose>0 0 -0.075 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.50 0.33 0.035</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.800 0.043 0.024 1</ambient>
+            <diffuse>0.800 0.043 0.024 1</diffuse>
+          </material>
+        </visual>
+        <visual name="electronics_case_visual">
+          <pose>-0.005 0 0.055 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.39 0.29 0.16</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.129 0.149 0.161 1</ambient>
+            <diffuse>0.129 0.149 0.161 1</diffuse>
+          </material>
+        </visual>
+        <visual name="electronics_lid_visual">
+          <pose>-0.005 0 0.139 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.395 0.295 0.012</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.420 0.459 0.471 0.52</ambient>
+            <diffuse>0.420 0.459 0.471 0.52</diffuse>
+          </material>
+        </visual>
+        <visual name="front_red_sensor_bumper">
+          <pose>0.255 0 0.005 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.045 0.35 0.075</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.780 0.035 0.024 1</ambient>
+            <diffuse>0.780 0.035 0.024 1</diffuse>
+          </material>
+        </visual>
+        <visual name="rear_red_mount">
+          <pose>-0.255 0 0.005 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.04 0.37 0.055</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.722 0.031 0.020 1</ambient>
+            <diffuse>0.722 0.031 0.020 1</diffuse>
+          </material>
+        </visual>
+        <sensor name="lidar_2d" type="gpu_lidar">
+          <pose>0.05 0 0.28 0 0 0</pose>
+          <always_on>true</always_on>
+          <update_rate>3</update_rate>
+          <topic>/agrobot/scan</topic>
+          <lidar>
+            <scan>
+              <horizontal>
+                <samples>120</samples>
+                <resolution>1</resolution>
+                <min_angle>-3.14159</min_angle>
+                <max_angle>3.14159</max_angle>
+              </horizontal>
+            </scan>
+            <range>
+              <min>0.08</min>
+              <max>8</max>
+              <resolution>0.01</resolution>
+            </range>
+          </lidar>
+        </sensor>
+        <sensor name="camara_rgb" type="camera">
+          <pose>0.235 0 0.18 0 0.25 0</pose>
+          <always_on>true</always_on>
+          <update_rate>3</update_rate>
+          <topic>/agrobot/camera/image_raw</topic>
+          <camera>
+            <horizontal_fov>1.22</horizontal_fov>
+            <image>
+              <width>240</width>
+              <height>180</height>
+              <format>R8G8B8</format>
+            </image>
+            <clip>
+              <near>0.08</near>
+              <far>8</far>
+            </clip>
+          </camera>
+        </sensor>
+        <sensor name="contacto_chasis" type="contact">
+          <always_on>true</always_on>
+          <update_rate>30</update_rate>
+          <topic>/agrobot/contact</topic>
+          <contact>
+            <collision>chassis_collision</collision>
+          </contact>
+        </sensor>
+        <visual name="front_yoke_visual">
+          <pose>0.185 0 -0.115 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.08 0.18 0.035</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.678 0.024 0.020 1</ambient>
+            <diffuse>0.678 0.024 0.020 1</diffuse>
+          </material>
+        </visual>
+        <visual name="left_spring_body_visual">
+          <pose>0.17 0.038 -0.015 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.035 0.035 0.14</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.698 0.035 0.024 1</ambient>
+            <diffuse>0.698 0.035 0.024 1</diffuse>
+          </material>
+        </visual>
+        <visual name="right_spring_body_visual">
+          <pose>0.17 -0.038 -0.015 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.035 0.035 0.14</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.698 0.035 0.024 1</ambient>
+            <diffuse>0.698 0.035 0.024 1</diffuse>
+          </material>
+        </visual>
+        <visual name="front_crossmember_visual">
+          <pose>0.18 0 -0.105 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.055 0.20 0.035</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.620 0.024 0.020 1</ambient>
+            <diffuse>0.620 0.024 0.020 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="front_axle">
+        <pose>0.185 0 -0.20 0 0 0</pose>
+        <inertial>
+          <mass>0.6</mass>
+          <inertia>
+            <ixx>0.018</ixx>
+            <iyy>0.018</iyy>
+            <izz>0.012</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="axle_collision">
+          <geometry>
+            <box>
+              <size>0.08 0.134 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+      <joint name="front_pivot" type="revolute">
+        <parent>base_link</parent>
+        <child>front_axle</child>
+        <pose>0 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit>
+            <lower>-0.349066</lower>
+            <upper>0.349066</upper>
+            <effort>20</effort>
+            <velocity>1.2</velocity>
+          </limit>
+          <dynamics>
+            <damping>0.35</damping>
+            <friction>0.08</friction>
+          </dynamics>
+        </axis>
+      </joint>
+      <link name="front_left_wheel">
+        <pose>0.185 0.067 -0.205 0 0 0</pose>
+        <inertial>
+          <mass>0.65</mass>
+          <inertia>
+            <ixx>0.003</ixx>
+            <iyy>0.003</iyy>
+            <izz>0.004</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="tire_collision">
+          <pose>0 0 0 1.5708 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.11</radius>
+              <length>0.052</length>
+            </cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.85</mu>
+                <mu2>0.65</mu2>
+                <slip1>0.03</slip1>
+                <slip2>0.03</slip2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="tire_visual">
+          <pose>0 0 0 1.5708 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.11</radius>
+              <length>0.052</length>
+            </cylinder>
+          </geometry>
+        </visual>
+        <sensor name="contact_front_left" type="contact">
+          <always_on>true</always_on>
+          <update_rate>30</update_rate>
+          <topic>/agrobot/contact/front_left</topic>
+          <contact>
+            <collision>tire_collision</collision>
+          </contact>
+        </sensor>
+      </link>
+      <joint name="front_left_wheel_joint" type="revolute">
+        <parent>front_axle</parent>
+        <child>front_left_wheel</child>
+        <pose>0 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit>
+            <effort>30</effort>
+            <velocity>12</velocity>
+          </limit>
+          <dynamics>
+            <damping>0.02</damping>
+          </dynamics>
+        </axis>
+      </joint>
+      <link name="front_right_wheel">
+        <pose>0.185 -0.067 -0.205 0 0 0</pose>
+        <inertial>
+          <mass>0.65</mass>
+          <inertia>
+            <ixx>0.003</ixx>
+            <iyy>0.003</iyy>
+            <izz>0.004</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="tire_collision">
+          <pose>0 0 0 1.5708 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.11</radius>
+              <length>0.052</length>
+            </cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.85</mu>
+                <mu2>0.65</mu2>
+                <slip1>0.03</slip1>
+                <slip2>0.03</slip2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="tire_visual">
+          <pose>0 0 0 1.5708 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.11</radius>
+              <length>0.052</length>
+            </cylinder>
+          </geometry>
+        </visual>
+        <sensor name="contact_front_right" type="contact">
+          <always_on>true</always_on>
+          <update_rate>30</update_rate>
+          <topic>/agrobot/contact/front_right</topic>
+          <contact>
+            <collision>tire_collision</collision>
+          </contact>
+        </sensor>
+      </link>
+      <joint name="front_right_wheel_joint" type="revolute">
+        <parent>front_axle</parent>
+        <child>front_right_wheel</child>
+        <pose>0 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit>
+            <effort>30</effort>
+            <velocity>12</velocity>
+          </limit>
+          <dynamics>
+            <damping>0.02</damping>
+          </dynamics>
+        </axis>
+      </joint>
+      <link name="rear_left_wheel">
+        <pose>-0.185 0.157 -0.20 0 0 0</pose>
+        <inertial>
+          <mass>0.65</mass>
+          <inertia>
+            <ixx>0.003</ixx>
+            <iyy>0.003</iyy>
+            <izz>0.004</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="tire_collision">
+          <pose>0 0 0 1.5708 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.11</radius>
+              <length>0.052</length>
+            </cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.85</mu>
+                <mu2>0.65</mu2>
+                <slip1>0.03</slip1>
+                <slip2>0.03</slip2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="tire_visual">
+          <pose>0 0 0 1.5708 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.11</radius>
+              <length>0.052</length>
+            </cylinder>
+          </geometry>
+        </visual>
+        <sensor name="contact_rear_left" type="contact">
+          <always_on>true</always_on>
+          <update_rate>30</update_rate>
+          <topic>/agrobot/contact/rear_left</topic>
+          <contact>
+            <collision>tire_collision</collision>
+          </contact>
+        </sensor>
+      </link>
+      <joint name="rear_left_wheel_joint" type="revolute">
+        <parent>base_link</parent>
+        <child>rear_left_wheel</child>
+        <pose>0 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit>
+            <effort>30</effort>
+            <velocity>12</velocity>
+          </limit>
+          <dynamics>
+            <damping>0.02</damping>
+          </dynamics>
+        </axis>
+      </joint>
+      <link name="rear_right_wheel">
+        <pose>-0.185 -0.157 -0.20 0 0 0</pose>
+        <inertial>
+          <mass>0.65</mass>
+          <inertia>
+            <ixx>0.003</ixx>
+            <iyy>0.003</iyy>
+            <izz>0.004</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="tire_collision">
+          <pose>0 0 0 1.5708 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.11</radius>
+              <length>0.052</length>
+            </cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.85</mu>
+                <mu2>0.65</mu2>
+                <slip1>0.03</slip1>
+                <slip2>0.03</slip2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="tire_visual">
+          <pose>0 0 0 1.5708 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.11</radius>
+              <length>0.052</length>
+            </cylinder>
+          </geometry>
+        </visual>
+        <sensor name="contact_rear_right" type="contact">
+          <always_on>true</always_on>
+          <update_rate>30</update_rate>
+          <topic>/agrobot/contact/rear_right</topic>
+          <contact>
+            <collision>tire_collision</collision>
+          </contact>
+        </sensor>
+      </link>
+      <joint name="rear_right_wheel_joint" type="revolute">
+        <parent>base_link</parent>
+        <child>rear_right_wheel</child>
+        <pose>0 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit>
+            <effort>30</effort>
+            <velocity>12</velocity>
+          </limit>
+          <dynamics>
+            <damping>0.02</damping>
+          </dynamics>
+        </axis>
+      </joint>
+      <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+        <left_joint>front_left_wheel_joint</left_joint>
+        <left_joint>rear_left_wheel_joint</left_joint>
+        <right_joint>front_right_wheel_joint</right_joint>
+        <right_joint>rear_right_wheel_joint</right_joint>
+        <wheel_separation>0.224</wheel_separation>
+        <wheel_radius>0.11</wheel_radius>
+        <topic>/agrobot/cmd_vel</topic>
+        <odom_topic>/agrobot/odom</odom_topic>
+        <tf_topic>/agrobot/tf</tf_topic>
+        <frame_id>odom</frame_id>
+        <child_frame_id>base_link</child_frame_id>
+        <odom_publish_frequency>30</odom_publish_frequency>
+        <max_linear_velocity>0.45</max_linear_velocity>
+        <max_angular_velocity>1.4</max_angular_velocity>
+      </plugin>
+    </model>
+    <model name="surco_izq_00">
+      <static>true</static>
+      <pose>-2.811 -0.339 0.037 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.650 0.083 0.046</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.650 0.083 0.046</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="surco_der_00">
+      <static>true</static>
+      <pose>-2.796 0.332 0.033 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.672 0.076 0.046</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.672 0.076 0.046</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="surco_izq_01">
+      <static>true</static>
+      <pose>-0.053 -0.337 0.044 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.657 0.081 0.056</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.657 0.081 0.056</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="surco_der_01">
+      <static>true</static>
+      <pose>-0.108 0.338 0.050 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.663 0.082 0.063</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.663 0.082 0.063</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="surco_izq_02">
+      <static>true</static>
+      <pose>2.611 -0.338 0.036 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.695 0.082 0.046</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.695 0.082 0.046</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="surco_der_02">
+      <static>true</static>
+      <pose>2.551 0.335 0.046 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.696 0.079 0.062</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.696 0.079 0.062</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="surco_izq_03">
+      <static>true</static>
+      <pose>5.275 -0.331 0.035 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.679 0.075 0.048</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.679 0.075 0.048</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="surco_der_03">
+      <static>true</static>
+      <pose>5.303 0.335 0.037 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.721 0.079 0.046</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.721 0.079 0.046</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="surco_izq_04">
+      <static>true</static>
+      <pose>7.945 -0.335 0.042 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.744 0.079 0.059</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.744 0.079 0.059</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="surco_der_04">
+      <static>true</static>
+      <pose>7.978 0.339 0.040 0 0 0.0000</pose>
+      <link name="tierra">
+        <collision name="collision">
+          <geometry>
+            <ellipsoid>
+              <radii>1.656 0.083 0.052</radii>
+            </ellipsoid>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <ellipsoid>
+              <radii>1.656 0.083 0.052</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.19 0.12 1</ambient>
+            <diffuse>0.34 0.27 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_00_izq">
+      <static>true</static>
+      <pose>-0.732 -0.421 0 0 0 0.1326</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.002 0.149 0 0 -0.0263</pose>
+          <geometry>
+            <box>
+              <size>0.278 0.179 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.002 0.149 0 0 -0.0263</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.139 0.089 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.030 0.063 0.133 0 0 1.1310</pose>
+          <geometry>
+            <box>
+              <size>0.227 0.181 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.030 0.063 0.133 0 0 1.1310</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.113 0.090 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.061 0.035 0.177 0 0 2.6206</pose>
+          <geometry>
+            <box>
+              <size>0.298 0.158 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.061 0.035 0.177 0 0 2.6206</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.149 0.079 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.059 -0.037 0.212 0 0 3.6967</pose>
+          <geometry>
+            <box>
+              <size>0.296 0.159 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.059 -0.037 0.212 0 0 3.6967</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.148 0.080 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.012 -0.069 0.203 0 0 4.8859</pose>
+          <geometry>
+            <box>
+              <size>0.266 0.164 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.012 -0.069 0.203 0 0 4.8859</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.133 0.082 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_00_der">
+      <static>true</static>
+      <pose>-0.785 0.417 0 0 0 -0.1742</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.069 0.010 0.220 0 0 0.1373</pose>
+          <geometry>
+            <box>
+              <size>0.280 0.196 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.069 0.010 0.220 0 0 0.1373</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.140 0.098 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.022 0.067 0.189 0 0 1.2557</pose>
+          <geometry>
+            <box>
+              <size>0.293 0.187 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.022 0.067 0.189 0 0 1.2557</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.147 0.093 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.052 0.046 0.212 0 0 2.4152</pose>
+          <geometry>
+            <box>
+              <size>0.273 0.186 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.052 0.046 0.212 0 0 2.4152</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.137 0.093 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.056 -0.042 0.175 0 0 3.7774</pose>
+          <geometry>
+            <box>
+              <size>0.240 0.203 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.056 -0.042 0.175 0 0 3.7774</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.120 0.102 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.031 -0.063 0.209 0 0 5.1699</pose>
+          <geometry>
+            <box>
+              <size>0.247 0.156 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.031 -0.063 0.209 0 0 5.1699</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.124 0.078 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_01_izq">
+      <static>true</static>
+      <pose>-0.263 -0.439 0 0 0 0.0658</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 0.006 0.205 0 0 0.0813</pose>
+          <geometry>
+            <box>
+              <size>0.285 0.169 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 0.006 0.205 0 0 0.0813</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.143 0.085 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.013 0.069 0.216 0 0 1.3779</pose>
+          <geometry>
+            <box>
+              <size>0.292 0.190 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.013 0.069 0.216 0 0 1.3779</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.146 0.095 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.055 0.043 0.198 0 0 2.4831</pose>
+          <geometry>
+            <box>
+              <size>0.223 0.202 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.055 0.043 0.198 0 0 2.4831</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.111 0.101 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.051 -0.048 0.177 0 0 3.8913</pose>
+          <geometry>
+            <box>
+              <size>0.234 0.164 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.051 -0.048 0.177 0 0 3.8913</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.117 0.082 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.026 -0.065 0.206 0 0 5.0997</pose>
+          <geometry>
+            <box>
+              <size>0.229 0.174 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.026 -0.065 0.206 0 0 5.0997</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.115 0.087 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_01_der">
+      <static>true</static>
+      <pose>-0.297 0.418 0 0 0 0.0366</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.007 0.190 0 0 -0.0990</pose>
+          <geometry>
+            <box>
+              <size>0.225 0.158 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.007 0.190 0 0 -0.0990</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.113 0.079 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.025 0.066 0.186 0 0 1.2110</pose>
+          <geometry>
+            <box>
+              <size>0.259 0.152 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.025 0.066 0.186 0 0 1.2110</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.130 0.076 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.055 0.043 0.167 0 0 2.4717</pose>
+          <geometry>
+            <box>
+              <size>0.237 0.191 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.055 0.043 0.167 0 0 2.4717</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.118 0.096 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.056 -0.042 0.200 0 0 3.7876</pose>
+          <geometry>
+            <box>
+              <size>0.242 0.181 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.056 -0.042 0.200 0 0 3.7876</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.121 0.090 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.031 -0.063 0.164 0 0 5.1693</pose>
+          <geometry>
+            <box>
+              <size>0.247 0.160 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.031 -0.063 0.164 0 0 5.1693</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.123 0.080 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_02_izq">
+      <static>true</static>
+      <pose>0.254 -0.440 0 0 0 0.1377</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 0.007 0.228 0 0 0.0968</pose>
+          <geometry>
+            <box>
+              <size>0.230 0.191 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 0.007 0.228 0 0 0.0968</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.115 0.095 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.019 0.067 0.212 0 0 1.3004</pose>
+          <geometry>
+            <box>
+              <size>0.233 0.176 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.019 0.067 0.212 0 0 1.3004</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.116 0.088 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.051 0.048 0.161 0 0 2.3873</pose>
+          <geometry>
+            <box>
+              <size>0.268 0.186 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.051 0.048 0.161 0 0 2.3873</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.134 0.093 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.059 -0.038 0.157 0 0 3.7213</pose>
+          <geometry>
+            <box>
+              <size>0.230 0.200 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.059 -0.038 0.157 0 0 3.7213</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.115 0.100 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.026 -0.065 0.175 0 0 5.0961</pose>
+          <geometry>
+            <box>
+              <size>0.226 0.157 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.026 -0.065 0.175 0 0 5.0961</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.113 0.079 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_02_der">
+      <static>true</static>
+      <pose>0.229 0.419 0 0 0 0.0137</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.002 0.204 0 0 -0.0258</pose>
+          <geometry>
+            <box>
+              <size>0.260 0.180 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.002 0.204 0 0 -0.0258</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.130 0.090 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.026 0.065 0.163 0 0 1.1866</pose>
+          <geometry>
+            <box>
+              <size>0.226 0.199 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.026 0.065 0.163 0 0 1.1866</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.113 0.100 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.060 0.036 0.188 0 0 2.6074</pose>
+          <geometry>
+            <box>
+              <size>0.252 0.179 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.060 0.036 0.188 0 0 2.6074</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.126 0.090 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.061 -0.035 0.162 0 0 3.6599</pose>
+          <geometry>
+            <box>
+              <size>0.245 0.188 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.061 -0.035 0.162 0 0 3.6599</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.122 0.094 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.021 -0.067 0.178 0 0 5.0145</pose>
+          <geometry>
+            <box>
+              <size>0.289 0.202 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.021 -0.067 0.178 0 0 5.0145</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.144 0.101 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_03_izq">
+      <static>true</static>
+      <pose>0.696 -0.443 0 0 0 0.1058</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 0.002 0.177 0 0 0.0233</pose>
+          <geometry>
+            <box>
+              <size>0.232 0.183 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 0.002 0.177 0 0 0.0233</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.116 0.091 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.029 0.064 0.154 0 0 1.1428</pose>
+          <geometry>
+            <box>
+              <size>0.287 0.172 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.029 0.064 0.154 0 0 1.1428</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.143 0.086 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.062 0.033 0.190 0 0 2.6500</pose>
+          <geometry>
+            <box>
+              <size>0.295 0.189 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.062 0.033 0.190 0 0 2.6500</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.148 0.094 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.059 -0.038 0.139 0 0 3.7190</pose>
+          <geometry>
+            <box>
+              <size>0.246 0.172 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.059 -0.038 0.139 0 0 3.7190</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.123 0.086 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.022 -0.066 0.226 0 0 5.0346</pose>
+          <geometry>
+            <box>
+              <size>0.287 0.158 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.022 -0.066 0.226 0 0 5.0346</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.144 0.079 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_03_der">
+      <static>true</static>
+      <pose>0.732 0.433 0 0 0 0.0608</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.069 0.009 0.159 0 0 0.1242</pose>
+          <geometry>
+            <box>
+              <size>0.237 0.186 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.069 0.009 0.159 0 0 0.1242</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.118 0.093 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.014 0.069 0.206 0 0 1.3648</pose>
+          <geometry>
+            <box>
+              <size>0.269 0.193 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.014 0.069 0.206 0 0 1.3648</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.134 0.096 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.062 0.033 0.143 0 0 2.6496</pose>
+          <geometry>
+            <box>
+              <size>0.227 0.160 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.062 0.033 0.143 0 0 2.6496</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.113 0.080 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.055 -0.043 0.206 0 0 3.8023</pose>
+          <geometry>
+            <box>
+              <size>0.268 0.203 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.055 -0.043 0.206 0 0 3.8023</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.134 0.101 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.025 -0.065 0.226 0 0 5.0784</pose>
+          <geometry>
+            <box>
+              <size>0.251 0.190 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.025 -0.065 0.226 0 0 5.0784</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.125 0.095 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_04_izq">
+      <static>true</static>
+      <pose>1.188 -0.416 0 0 0 -0.0926</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.069 0.010 0.228 0 0 0.1452</pose>
+          <geometry>
+            <box>
+              <size>0.272 0.163 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.069 0.010 0.228 0 0 0.1452</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.136 0.082 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.021 0.067 0.229 0 0 1.2632</pose>
+          <geometry>
+            <box>
+              <size>0.220 0.176 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.021 0.067 0.229 0 0 1.2632</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.110 0.088 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.059 0.038 0.185 0 0 2.5640</pose>
+          <geometry>
+            <box>
+              <size>0.234 0.176 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.059 0.038 0.185 0 0 2.5640</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.117 0.088 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.059 -0.038 0.140 0 0 3.7103</pose>
+          <geometry>
+            <box>
+              <size>0.294 0.163 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.059 -0.038 0.140 0 0 3.7103</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.147 0.082 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.016 -0.068 0.226 0 0 4.9392</pose>
+          <geometry>
+            <box>
+              <size>0.282 0.151 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.016 -0.068 0.226 0 0 4.9392</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.141 0.076 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_04_der">
+      <static>true</static>
+      <pose>1.184 0.430 0 0 0 0.0520</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.069 0.009 0.208 0 0 0.1228</pose>
+          <geometry>
+            <box>
+              <size>0.228 0.195 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.069 0.009 0.208 0 0 0.1228</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.114 0.097 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.013 0.069 0.204 0 0 1.3775</pose>
+          <geometry>
+            <box>
+              <size>0.233 0.197 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.013 0.069 0.204 0 0 1.3775</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.116 0.098 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.053 0.046 0.222 0 0 2.4300</pose>
+          <geometry>
+            <box>
+              <size>0.297 0.152 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.053 0.046 0.222 0 0 2.4300</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.149 0.076 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.054 -0.045 0.153 0 0 3.8312</pose>
+          <geometry>
+            <box>
+              <size>0.257 0.188 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.054 -0.045 0.153 0 0 3.8312</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.128 0.094 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.013 -0.069 0.170 0 0 4.9013</pose>
+          <geometry>
+            <box>
+              <size>0.236 0.189 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.013 -0.069 0.170 0 0 4.9013</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.118 0.095 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_05_izq">
+      <static>true</static>
+      <pose>1.648 -0.427 0 0 0 -0.1765</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 0.001 0.189 0 0 0.0164</pose>
+          <geometry>
+            <box>
+              <size>0.262 0.153 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 0.001 0.189 0 0 0.0164</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.131 0.076 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.024 0.066 0.190 0 0 1.2153</pose>
+          <geometry>
+            <box>
+              <size>0.234 0.198 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.024 0.066 0.190 0 0 1.2153</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.117 0.099 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.059 0.037 0.197 0 0 2.5778</pose>
+          <geometry>
+            <box>
+              <size>0.229 0.154 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.059 0.037 0.197 0 0 2.5778</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.114 0.077 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.058 -0.039 0.220 0 0 3.7297</pose>
+          <geometry>
+            <box>
+              <size>0.229 0.154 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.058 -0.039 0.220 0 0 3.7297</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.115 0.077 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.013 -0.069 0.217 0 0 4.8950</pose>
+          <geometry>
+            <box>
+              <size>0.297 0.200 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.013 -0.069 0.217 0 0 4.8950</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.148 0.100 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_05_der">
+      <static>true</static>
+      <pose>1.687 0.417 0 0 0 -0.1229</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 0.008 0.190 0 0 0.1161</pose>
+          <geometry>
+            <box>
+              <size>0.256 0.206 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 0.008 0.190 0 0 0.1161</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.128 0.103 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.025 0.065 0.189 0 0 1.2075</pose>
+          <geometry>
+            <box>
+              <size>0.264 0.196 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.025 0.065 0.189 0 0 1.2075</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.132 0.098 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.052 0.047 0.184 0 0 2.4061</pose>
+          <geometry>
+            <box>
+              <size>0.221 0.193 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.052 0.047 0.184 0 0 2.4061</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.110 0.097 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.052 -0.047 0.189 0 0 3.8688</pose>
+          <geometry>
+            <box>
+              <size>0.267 0.162 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.052 -0.047 0.189 0 0 3.8688</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.133 0.081 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.027 -0.065 0.228 0 0 5.1062</pose>
+          <geometry>
+            <box>
+              <size>0.296 0.178 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.027 -0.065 0.228 0 0 5.1062</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.148 0.089 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_06_izq">
+      <static>true</static>
+      <pose>2.136 -0.436 0 0 0 -0.1297</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 0.007 0.184 0 0 0.1046</pose>
+          <geometry>
+            <box>
+              <size>0.281 0.182 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 0.007 0.184 0 0 0.1046</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.141 0.091 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.013 0.069 0.192 0 0 1.3870</pose>
+          <geometry>
+            <box>
+              <size>0.231 0.175 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.013 0.069 0.192 0 0 1.3870</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.115 0.087 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.055 0.044 0.170 0 0 2.4669</pose>
+          <geometry>
+            <box>
+              <size>0.256 0.210 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.055 0.044 0.170 0 0 2.4669</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.128 0.105 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.060 -0.036 0.141 0 0 3.6828</pose>
+          <geometry>
+            <box>
+              <size>0.291 0.183 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.060 -0.036 0.141 0 0 3.6828</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.145 0.091 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.018 -0.068 0.131 0 0 4.9779</pose>
+          <geometry>
+            <box>
+              <size>0.258 0.206 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.018 -0.068 0.131 0 0 4.9779</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.129 0.103 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_06_der">
+      <static>true</static>
+      <pose>2.175 0.434 0 0 0 -0.0597</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.000 0.181 0 0 -0.0041</pose>
+          <geometry>
+            <box>
+              <size>0.252 0.152 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.000 0.181 0 0 -0.0041</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.126 0.076 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.017 0.068 0.201 0 0 1.3185</pose>
+          <geometry>
+            <box>
+              <size>0.226 0.191 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.017 0.068 0.201 0 0 1.3185</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.113 0.096 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.056 0.042 0.202 0 0 2.4927</pose>
+          <geometry>
+            <box>
+              <size>0.285 0.169 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.056 0.042 0.202 0 0 2.4927</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.142 0.084 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.058 -0.039 0.156 0 0 3.7313</pose>
+          <geometry>
+            <box>
+              <size>0.280 0.179 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.058 -0.039 0.156 0 0 3.7313</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.140 0.089 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.012 -0.069 0.213 0 0 4.8805</pose>
+          <geometry>
+            <box>
+              <size>0.231 0.152 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.012 -0.069 0.213 0 0 4.8805</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.116 0.076 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_07_izq">
+      <static>true</static>
+      <pose>2.574 -0.419 0 0 0 0.0057</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.007 0.145 0 0 -0.0957</pose>
+          <geometry>
+            <box>
+              <size>0.279 0.204 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.007 0.145 0 0 -0.0957</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.139 0.102 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.031 0.063 0.210 0 0 1.1077</pose>
+          <geometry>
+            <box>
+              <size>0.251 0.190 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.031 0.063 0.210 0 0 1.1077</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.126 0.095 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.058 0.039 0.203 0 0 2.5459</pose>
+          <geometry>
+            <box>
+              <size>0.272 0.166 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.058 0.039 0.203 0 0 2.5459</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.136 0.083 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.059 -0.037 0.141 0 0 3.6975</pose>
+          <geometry>
+            <box>
+              <size>0.268 0.194 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.059 -0.037 0.141 0 0 3.6975</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.134 0.097 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.019 -0.067 0.180 0 0 4.9866</pose>
+          <geometry>
+            <box>
+              <size>0.281 0.204 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.019 -0.067 0.180 0 0 4.9866</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.140 0.102 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_07_der">
+      <static>true</static>
+      <pose>2.627 0.436 0 0 0 -0.1017</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.069 0.009 0.153 0 0 0.1220</pose>
+          <geometry>
+            <box>
+              <size>0.268 0.180 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.069 0.009 0.153 0 0 0.1220</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.134 0.090 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.015 0.068 0.200 0 0 1.3583</pose>
+          <geometry>
+            <box>
+              <size>0.224 0.173 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.015 0.068 0.200 0 0 1.3583</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.112 0.087 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.062 0.033 0.136 0 0 2.6472</pose>
+          <geometry>
+            <box>
+              <size>0.294 0.173 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.062 0.033 0.136 0 0 2.6472</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.147 0.086 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.060 -0.036 0.171 0 0 3.6739</pose>
+          <geometry>
+            <box>
+              <size>0.243 0.209 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.060 -0.036 0.171 0 0 3.6739</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.121 0.105 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.022 -0.066 0.169 0 0 5.0373</pose>
+          <geometry>
+            <box>
+              <size>0.281 0.204 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.022 -0.066 0.169 0 0 5.0373</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.140 0.102 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_08_izq">
+      <static>true</static>
+      <pose>3.058 -0.422 0 0 0 0.0215</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.004 0.211 0 0 -0.0642</pose>
+          <geometry>
+            <box>
+              <size>0.225 0.158 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.004 0.211 0 0 -0.0642</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.113 0.079 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.019 0.067 0.212 0 0 1.2968</pose>
+          <geometry>
+            <box>
+              <size>0.273 0.168 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.019 0.067 0.212 0 0 1.2968</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.136 0.084 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.062 0.033 0.206 0 0 2.6499</pose>
+          <geometry>
+            <box>
+              <size>0.225 0.166 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.062 0.033 0.206 0 0 2.6499</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.112 0.083 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.054 -0.045 0.141 0 0 3.8373</pose>
+          <geometry>
+            <box>
+              <size>0.265 0.202 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.054 -0.045 0.141 0 0 3.8373</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.132 0.101 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.026 -0.065 0.183 0 0 5.0878</pose>
+          <geometry>
+            <box>
+              <size>0.288 0.194 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.026 -0.065 0.183 0 0 5.0878</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.144 0.097 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_08_der">
+      <static>true</static>
+      <pose>3.129 0.421 0 0 0 0.0088</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 0.006 0.164 0 0 0.0875</pose>
+          <geometry>
+            <box>
+              <size>0.228 0.196 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 0.006 0.164 0 0 0.0875</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.114 0.098 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.016 0.068 0.220 0 0 1.3442</pose>
+          <geometry>
+            <box>
+              <size>0.233 0.209 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.016 0.068 0.220 0 0 1.3442</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.117 0.105 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.052 0.047 0.204 0 0 2.4075</pose>
+          <geometry>
+            <box>
+              <size>0.244 0.195 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.052 0.047 0.204 0 0 2.4075</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.122 0.097 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.059 -0.038 0.160 0 0 3.7073</pose>
+          <geometry>
+            <box>
+              <size>0.291 0.169 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.059 -0.038 0.160 0 0 3.7073</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.146 0.085 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.020 -0.067 0.145 0 0 4.9964</pose>
+          <geometry>
+            <box>
+              <size>0.277 0.193 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.020 -0.067 0.145 0 0 4.9964</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.139 0.096 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_09_izq">
+      <static>true</static>
+      <pose>3.610 -0.426 0 0 0 0.1456</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.006 0.140 0 0 -0.0788</pose>
+          <geometry>
+            <box>
+              <size>0.290 0.157 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.006 0.140 0 0 -0.0788</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.145 0.078 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.028 0.064 0.133 0 0 1.1626</pose>
+          <geometry>
+            <box>
+              <size>0.234 0.189 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.028 0.064 0.133 0 0 1.1626</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.117 0.094 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.053 0.046 0.175 0 0 2.4296</pose>
+          <geometry>
+            <box>
+              <size>0.266 0.184 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.053 0.046 0.175 0 0 2.4296</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.133 0.092 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.060 -0.035 0.173 0 0 3.6700</pose>
+          <geometry>
+            <box>
+              <size>0.222 0.163 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.060 -0.035 0.173 0 0 3.6700</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.111 0.081 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.029 -0.064 0.210 0 0 5.1335</pose>
+          <geometry>
+            <box>
+              <size>0.292 0.166 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.029 -0.064 0.210 0 0 5.1335</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.146 0.083 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_09_der">
+      <static>true</static>
+      <pose>3.568 0.442 0 0 0 0.0516</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.069 -0.009 0.188 0 0 -0.1357</pose>
+          <geometry>
+            <box>
+              <size>0.289 0.176 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.069 -0.009 0.188 0 0 -0.1357</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.145 0.088 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.026 0.065 0.206 0 0 1.1929</pose>
+          <geometry>
+            <box>
+              <size>0.257 0.168 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.026 0.065 0.206 0 0 1.1929</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.128 0.084 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.056 0.041 0.141 0 0 2.5096</pose>
+          <geometry>
+            <box>
+              <size>0.293 0.195 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.056 0.041 0.141 0 0 2.5096</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.146 0.097 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.059 -0.038 0.213 0 0 3.7189</pose>
+          <geometry>
+            <box>
+              <size>0.270 0.205 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.059 -0.038 0.213 0 0 3.7189</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.135 0.103 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.013 -0.069 0.160 0 0 4.8957</pose>
+          <geometry>
+            <box>
+              <size>0.252 0.183 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.013 -0.069 0.160 0 0 4.8957</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.126 0.091 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_10_izq">
+      <static>true</static>
+      <pose>4.072 -0.428 0 0 0 0.0582</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.008 0.138 0 0 -0.1143</pose>
+          <geometry>
+            <box>
+              <size>0.220 0.195 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.008 0.138 0 0 -0.1143</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.110 0.097 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.027 0.064 0.136 0 0 1.1699</pose>
+          <geometry>
+            <box>
+              <size>0.281 0.161 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.027 0.064 0.136 0 0 1.1699</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.141 0.081 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.058 0.039 0.201 0 0 2.5430</pose>
+          <geometry>
+            <box>
+              <size>0.264 0.169 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.058 0.039 0.201 0 0 2.5430</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.132 0.084 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.056 -0.042 0.218 0 0 3.7861</pose>
+          <geometry>
+            <box>
+              <size>0.274 0.158 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.056 -0.042 0.218 0 0 3.7861</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.137 0.079 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.022 -0.066 0.204 0 0 5.0394</pose>
+          <geometry>
+            <box>
+              <size>0.265 0.203 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.022 -0.066 0.204 0 0 5.0394</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.132 0.102 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_10_der">
+      <static>true</static>
+      <pose>4.095 0.445 0 0 0 -0.0329</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 0.000 0.182 0 0 0.0046</pose>
+          <geometry>
+            <box>
+              <size>0.260 0.181 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 0.000 0.182 0 0 0.0046</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.130 0.090 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.013 0.069 0.219 0 0 1.3806</pose>
+          <geometry>
+            <box>
+              <size>0.282 0.185 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.013 0.069 0.219 0 0 1.3806</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.141 0.093 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.051 0.048 0.210 0 0 2.3807</pose>
+          <geometry>
+            <box>
+              <size>0.298 0.168 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.051 0.048 0.210 0 0 2.3807</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.149 0.084 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.055 -0.043 0.192 0 0 3.7989</pose>
+          <geometry>
+            <box>
+              <size>0.253 0.171 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.055 -0.043 0.192 0 0 3.7989</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.127 0.085 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.027 -0.065 0.229 0 0 5.1042</pose>
+          <geometry>
+            <box>
+              <size>0.293 0.169 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.027 -0.065 0.229 0 0 5.1042</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.146 0.084 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_11_izq">
+      <static>true</static>
+      <pose>4.500 -0.420 0 0 0 -0.1486</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.006 0.174 0 0 -0.0826</pose>
+          <geometry>
+            <box>
+              <size>0.240 0.210 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.006 0.174 0 0 -0.0826</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.120 0.105 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.029 0.064 0.167 0 0 1.1437</pose>
+          <geometry>
+            <box>
+              <size>0.274 0.153 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.029 0.064 0.167 0 0 1.1437</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.137 0.076 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.055 0.043 0.141 0 0 2.4847</pose>
+          <geometry>
+            <box>
+              <size>0.272 0.174 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.055 0.043 0.141 0 0 2.4847</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.136 0.087 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.051 -0.048 0.213 0 0 3.9041</pose>
+          <geometry>
+            <box>
+              <size>0.264 0.202 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.051 -0.048 0.213 0 0 3.9041</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.132 0.101 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.020 -0.067 0.191 0 0 5.0085</pose>
+          <geometry>
+            <box>
+              <size>0.252 0.195 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.020 -0.067 0.191 0 0 5.0085</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.126 0.098 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_11_der">
+      <static>true</static>
+      <pose>4.496 0.440 0 0 0 -0.0136</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.069 -0.009 0.197 0 0 -0.1289</pose>
+          <geometry>
+            <box>
+              <size>0.270 0.177 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.069 -0.009 0.197 0 0 -0.1289</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.135 0.089 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.026 0.065 0.187 0 0 1.1889</pose>
+          <geometry>
+            <box>
+              <size>0.255 0.176 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.026 0.065 0.187 0 0 1.1889</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.127 0.088 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.058 0.040 0.169 0 0 2.5417</pose>
+          <geometry>
+            <box>
+              <size>0.275 0.173 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.058 0.040 0.169 0 0 2.5417</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.137 0.086 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.058 -0.040 0.215 0 0 3.7470</pose>
+          <geometry>
+            <box>
+              <size>0.226 0.186 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.058 -0.040 0.215 0 0 3.7470</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.113 0.093 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.015 -0.068 0.145 0 0 4.9237</pose>
+          <geometry>
+            <box>
+              <size>0.229 0.157 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.015 -0.068 0.145 0 0 4.9237</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.114 0.079 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_12_izq">
+      <static>true</static>
+      <pose>4.971 -0.423 0 0 0 -0.1606</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.004 0.203 0 0 -0.0639</pose>
+          <geometry>
+            <box>
+              <size>0.288 0.181 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.004 0.203 0 0 -0.0639</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.144 0.090 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.029 0.064 0.221 0 0 1.1424</pose>
+          <geometry>
+            <box>
+              <size>0.282 0.187 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.029 0.064 0.221 0 0 1.1424</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.141 0.093 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.052 0.047 0.177 0 0 2.4087</pose>
+          <geometry>
+            <box>
+              <size>0.244 0.178 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.052 0.047 0.177 0 0 2.4087</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.122 0.089 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.061 -0.035 0.131 0 0 3.6583</pose>
+          <geometry>
+            <box>
+              <size>0.245 0.189 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.061 -0.035 0.131 0 0 3.6583</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.122 0.094 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.024 -0.066 0.142 0 0 5.0583</pose>
+          <geometry>
+            <box>
+              <size>0.257 0.177 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.024 -0.066 0.142 0 0 5.0583</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.128 0.089 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_12_der">
+      <static>true</static>
+      <pose>5.021 0.423 0 0 0 0.1070</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 0.003 0.189 0 0 0.0415</pose>
+          <geometry>
+            <box>
+              <size>0.271 0.161 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 0.003 0.189 0 0 0.0415</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.135 0.080 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.025 0.065 0.178 0 0 1.2079</pose>
+          <geometry>
+            <box>
+              <size>0.276 0.161 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.025 0.065 0.178 0 0 1.2079</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.138 0.080 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.060 0.036 0.217 0 0 2.5997</pose>
+          <geometry>
+            <box>
+              <size>0.260 0.192 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.060 0.036 0.217 0 0 2.5997</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.130 0.096 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.056 -0.042 0.142 0 0 3.7787</pose>
+          <geometry>
+            <box>
+              <size>0.270 0.180 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.056 -0.042 0.142 0 0 3.7787</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.135 0.090 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.031 -0.063 0.148 0 0 5.1639</pose>
+          <geometry>
+            <box>
+              <size>0.225 0.173 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.031 -0.063 0.148 0 0 5.1639</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.113 0.086 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_13_izq">
+      <static>true</static>
+      <pose>5.447 -0.426 0 0 0 -0.0063</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.070 -0.004 0.210 0 0 -0.0564</pose>
+          <geometry>
+            <box>
+              <size>0.231 0.208 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.070 -0.004 0.210 0 0 -0.0564</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.116 0.104 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.012 0.069 0.155 0 0 1.3993</pose>
+          <geometry>
+            <box>
+              <size>0.272 0.179 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.012 0.069 0.155 0 0 1.3993</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.136 0.090 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.059 0.037 0.211 0 0 2.5824</pose>
+          <geometry>
+            <box>
+              <size>0.231 0.170 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.059 0.037 0.211 0 0 2.5824</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.116 0.085 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.051 -0.047 0.206 0 0 3.8867</pose>
+          <geometry>
+            <box>
+              <size>0.296 0.170 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.051 -0.047 0.206 0 0 3.8867</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.148 0.085 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.024 -0.066 0.167 0 0 5.0664</pose>
+          <geometry>
+            <box>
+              <size>0.224 0.186 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.024 -0.066 0.167 0 0 5.0664</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.112 0.093 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="cultivo_13_der">
+      <static>true</static>
+      <pose>5.502 0.444 0 0 0 -0.1462</pose>
+      <link name="plant">
+        <visual name="stem">
+          <pose>0 0 0.105 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.018</radius>
+              <length>0.21</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.22 0.34 0.08 1</ambient>
+            <diffuse>0.22 0.34 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_0">
+          <pose>0.069 -0.009 0.166 0 0 -0.1261</pose>
+          <geometry>
+            <box>
+              <size>0.241 0.196 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_0">
+          <pose>0.069 -0.009 0.166 0 0 -0.1261</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.121 0.098 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_1">
+          <pose>0.017 0.068 0.215 0 0 1.3293</pose>
+          <geometry>
+            <box>
+              <size>0.253 0.198 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_1">
+          <pose>0.017 0.068 0.215 0 0 1.3293</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.126 0.099 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_2">
+          <pose>-0.057 0.041 0.209 0 0 2.5193</pose>
+          <geometry>
+            <box>
+              <size>0.282 0.151 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_2">
+          <pose>-0.057 0.041 0.209 0 0 2.5193</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.141 0.076 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_3">
+          <pose>-0.055 -0.043 0.146 0 0 3.8091</pose>
+          <geometry>
+            <box>
+              <size>0.241 0.201 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_3">
+          <pose>-0.055 -0.043 0.146 0 0 3.8091</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.120 0.101 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.25 0.50 0.12 1</ambient>
+            <diffuse>0.25 0.50 0.12 1</diffuse>
+          </material>
+        </visual>
+        <collision name="leaf_collision_4">
+          <pose>0.024 -0.066 0.174 0 0 5.0689</pose>
+          <geometry>
+            <box>
+              <size>0.293 0.151 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="leaf_visual_4">
+          <pose>0.024 -0.066 0.174 0 0 5.0689</pose>
+          <geometry>
+            <ellipsoid>
+              <radii>0.146 0.076 0.012</radii>
+            </ellipsoid>
+          </geometry>
+          <material>
+            <ambient>0.16 0.39 0.08 1</ambient>
+            <diffuse>0.16 0.39 0.08 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="rama_baja_0">
+      <static>true</static>
+      <pose>2.855 -0.214 0.030 0 0 0.5342</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.284 0.048 0.059</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.284 0.048 0.059</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.19 0.09 1</ambient>
+            <diffuse>0.31 0.19 0.09 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="rama_baja_1">
+      <static>true</static>
+      <pose>4.407 0.299 0.022 0 0 0.0787</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.256 0.054 0.045</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.256 0.054 0.045</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.19 0.09 1</ambient>
+            <diffuse>0.31 0.19 0.09 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="rama_baja_2">
+      <static>true</static>
+      <pose>0.451 -0.309 0.029 0 0 0.1805</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.252 0.042 0.058</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.252 0.042 0.058</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.19 0.09 1</ambient>
+            <diffuse>0.31 0.19 0.09 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="rama_baja_3">
+      <static>true</static>
+      <pose>4.334 -0.308 0.029 0 0 0.0294</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.376 0.049 0.058</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.376 0.049 0.058</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.19 0.09 1</ambient>
+            <diffuse>0.31 0.19 0.09 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="rama_baja_4">
+      <static>true</static>
+      <pose>3.092 -0.247 0.025 0 0 -0.1189</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.431 0.027 0.049</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.431 0.027 0.049</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.19 0.09 1</ambient>
+            <diffuse>0.31 0.19 0.09 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="rama_baja_5">
+      <static>true</static>
+      <pose>-0.262 0.300 0.025 0 0 0.0484</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.297 0.049 0.051</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.297 0.049 0.051</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.19 0.09 1</ambient>
+            <diffuse>0.31 0.19 0.09 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="rama_baja_6">
+      <static>true</static>
+      <pose>4.054 -0.265 0.021 0 0 -0.5319</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.423 0.043 0.043</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.423 0.043 0.043</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.19 0.09 1</ambient>
+            <diffuse>0.31 0.19 0.09 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="piedra_baja_0">
+      <static>true</static>
+      <pose>2.135 0.173 0.036 0 0 -0.3622</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.130 0.165 0.072</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.130 0.165 0.072</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.40 0.38 0.34 1</ambient>
+            <diffuse>0.40 0.38 0.34 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="piedra_baja_1">
+      <static>true</static>
+      <pose>4.162 0.229 0.029 0 0 -0.3555</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.186 0.130 0.057</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.186 0.130 0.057</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.40 0.38 0.34 1</ambient>
+            <diffuse>0.40 0.38 0.34 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="piedra_baja_2">
+      <static>true</static>
+      <pose>-0.054 0.200 0.020 0 0 -0.2697</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.168 0.161 0.040</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.168 0.161 0.040</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.40 0.38 0.34 1</ambient>
+            <diffuse>0.40 0.38 0.34 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="piedra_baja_3">
+      <static>true</static>
+      <pose>1.557 0.222 0.021 0 0 -0.4276</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.147 0.152 0.042</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.147 0.152 0.042</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.40 0.38 0.34 1</ambient>
+            <diffuse>0.40 0.38 0.34 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_00">
+      <static>true</static>
+      <pose>2.628 -0.169 0.006 0 0 -0.1036</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.172 0.124 0.012</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.172 0.124 0.012</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_01">
+      <static>true</static>
+      <pose>2.306 0.194 0.015 0 0 -0.2926</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.153 0.133 0.030</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.153 0.133 0.030</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_02">
+      <static>true</static>
+      <pose>2.189 0.142 0.012 0 0 0.0089</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.090 0.113 0.023</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.090 0.113 0.023</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_03">
+      <static>true</static>
+      <pose>2.365 0.140 0.015 0 0 -0.0778</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.083 0.126 0.029</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.083 0.126 0.029</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_04">
+      <static>true</static>
+      <pose>0.079 -0.129 0.017 0 0 -0.1239</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.090 0.140 0.033</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.090 0.140 0.033</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_05">
+      <static>true</static>
+      <pose>0.426 0.179 0.011 0 0 0.1409</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.164 0.115 0.022</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.164 0.115 0.022</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_06">
+      <static>true</static>
+      <pose>2.909 -0.131 0.006 0 0 -0.0189</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.125 0.123 0.012</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.125 0.123 0.012</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_07">
+      <static>true</static>
+      <pose>0.755 -0.142 0.018 0 0 -0.1310</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.174 0.084 0.036</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.174 0.084 0.036</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_08">
+      <static>true</static>
+      <pose>1.494 0.116 0.019 0 0 -0.1547</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.142 0.146 0.038</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.142 0.146 0.038</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_09">
+      <static>true</static>
+      <pose>0.512 0.169 0.012 0 0 0.0792</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.100 0.105 0.023</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.100 0.105 0.023</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_10">
+      <static>true</static>
+      <pose>2.730 0.144 0.018 0 0 -0.2968</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.119 0.120 0.035</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.119 0.120 0.035</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_11">
+      <static>true</static>
+      <pose>3.728 -0.156 0.012 0 0 -0.0020</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.139 0.154 0.025</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.139 0.154 0.025</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_12">
+      <static>true</static>
+      <pose>1.355 0.191 0.016 0 0 -0.1982</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.173 0.117 0.033</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.173 0.117 0.033</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="bache_13">
+      <static>true</static>
+      <pose>-0.420 0.187 0.021 0 0 -0.1254</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.162 0.130 0.042</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.162 0.130 0.042</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.31 0.25 0.17 1</ambient>
+            <diffuse>0.31 0.25 0.17 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

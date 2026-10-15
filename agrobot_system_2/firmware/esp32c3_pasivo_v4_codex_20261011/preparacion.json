@@ -1,0 +1,22 @@
+{
+  "scope": "read-only; no flash or actuator commands",
+  "files": {
+    "esp32c3_pasivo_v4_codex_20261011.ino": "8c7a467b62f63b7c1cabf3545302e196a2113e9900096e167e6bcf01e7eac865"
+  },
+  "usb_ports": [],
+  "network": {
+    "exit": 0,
+    "stdout": "lo               UNKNOWN        127.0.0.1/8 ::1/128 \nwlP1p1s0         DOWN           \ncan0             DOWN           \nenP8p1s0         UP             192.168.0.181/24 fd01::1c5f:bcf9:8387:4f53/64 fd01::1c65:a3b5:e87b:4810/64 fe80::8877:fffc:da1:a2d/64 \nl4tbr0           DOWN           192.168.55.1/24 fe80::1/64 \nusb0             DOWN           \nusb1             DOWN           \nap0              UP             192.168.12.1/24 fe80::7470:fdff:fee3:ec70/64 \ntailscale0       UNKNOWN        100.82.220.28/32 fe80::e05d:db84:8d17:4f89/64 \n",
+    "stderr": ""
+  },
+  "disk": {
+    "exit": 0,
+    "stdout": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1  233G   41G  181G  19% /\n",
+    "stderr": ""
+  },
+  "backend": {
+    "exit": 0,
+    "stdout": "2409 python3 -u jetson/backend/jetson_server.py\n",
+    "stderr": ""
+  }
+}

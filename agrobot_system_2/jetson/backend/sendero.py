@@ -37,6 +37,9 @@ los motores no bajan del 78 % de potencia (PWM 200..255), así que "gira un
 poquito" no existe — se gira un pulso corto y se vuelve a medir.
 """
 import math
+from collections import deque
+
+import geometria_robot
 
 ANCHO_ANALISIS, ALTO_ANALISIS = 320, 240
 
@@ -90,7 +93,12 @@ MIN_PUNTOS = 60           # celdas de borde mínimas para intentar nada
 # Una columna del perfil es "borde" si esta fracción del suelo visible ahí
 # es paja/planta (con piso relativo al máximo del perfil).
 BORDE_ABS, BORDE_REL = 0.10, 0.45
-# Ancho plausible del sendero (m).
+# Ancho PLAUSIBLE del sendero (m). Es el rango en el que una medida se cree,
+# NO el rango por el que el robot cabe: un sendero de 25 cm es una medida
+# perfectamente real y el robot (37 cm de eje trasero) no pasa. Esas dos cosas
+# estaban confundidas antes del 2026-10-14; la transitabilidad la decide
+# geometria_robot.cabe() y se reporta aparte, para que la autonomía PUEDA
+# frenar ante un sendero demasiado estrecho en vez de ignorar la medida.
 ANCHO_MIN_M, ANCHO_MAX_M = 0.20, 1.50
 # Si el sendero anterior quedó en un borde, se busca un hueco libre a esta
 # distancia como mucho.
@@ -341,6 +349,21 @@ def _perfiles_por_angulo(X, Y, peso, nbins, rango, kernel):
     return sum(pad[:, j:j + nbins] * kernel[j] for j in range(len(kernel)))
 
 
+def _angulo_optimo(perfiles, angulo_previo: float | None = None):
+    """Elige orientación de bordes con regularización temporal y a recto.
+
+    Las hileras de cultivo pueden producir más energía que el sendero.
+    Normalizamos la evidencia y penalizamos giros de perspectiva abruptos para
+    impedir que la búsqueda se pegue a ±40° por seguir una hilera lateral.
+    """
+    import numpy as np
+    energia = (perfiles ** 2).sum(axis=1)
+    escala = max(float(energia.max()), 1e-9)
+    referencia = 0.0 if angulo_previo is None else float(angulo_previo)
+    penalizacion = 0.70 * np.abs(np.asarray(ANGULOS_DEG) - referencia) / 40.0
+    return int(np.argmax(energia / escala - penalizacion))
+
+
 def _hueco(libre, inicio: int, max_salto: int):
     """Tramo libre que contiene `inicio` (o el más cercano a él), como
     (desde, hasta) en índices, o None."""
@@ -359,9 +382,26 @@ def _hueco(libre, inicio: int, max_salto: int):
     return a, z
 
 
+def _ancho_valido(ancho: float, cfg: dict) -> bool:
+    minimo = max(ANCHO_MIN_M, float(cfg.get("sendero_ancho_min_cm", 0)) / 100.0)
+    return minimo <= ancho <= ANCHO_MAX_M
+
+
+def _ancho_con_prior(borde_der: float, borde_izq: float, ancho_ref: float | None):
+    """Limita el ancho aparente sin desplazar el centro del hueco detectado."""
+    ancho = borde_izq - borde_der
+    medio = (borde_izq + borde_der) / 2
+    ajustado = bool(ancho_ref and ancho > 1.5 * ancho_ref)
+    if ajustado:
+        ancho = ancho_ref
+        borde_der, borde_izq = medio - ancho / 2, medio + ancho / 2
+    return borde_der, borde_izq, ancho, ajustado
+
+
 def detectar(cv2, frame, cfg, geo: dict, cenital: "Cenital",
              centro_previo: float = 0.0, ancho_previo: float | None = None,
-             modelo: "ModeloSendero | None" = None) -> dict:
+             modelo: "ModeloSendero | None" = None,
+             angulo_previo: float | None = None) -> dict:
     """Análisis de un fotograma. No guarda estado.
 
     lateral_m: centro del sendero respecto del centro del robot (+ = a la
@@ -400,7 +440,7 @@ def detectar(cv2, frame, cfg, geo: dict, cenital: "Cenital",
     kernel = np.array([1, 2, 3, 2, 1], np.float32) / 9
 
     perfiles = _perfiles_por_angulo(X, Y, peso, nbins, rango, kernel)
-    k = int(np.argmax((perfiles ** 2).sum(axis=1)))     # el primero de los mejores
+    k = _angulo_optimo(perfiles, angulo_previo)
     angulo, hist = ANGULOS_DEG[k], perfiles[k]
     bins = np.linspace(rango[0], rango[1], nbins + 1)
     t = math.radians(angulo)
@@ -427,10 +467,19 @@ def detectar(cv2, frame, cfg, geo: dict, cenital: "Cenital",
 
     if not abierto_der and not abierto_izq:
         ancho = borde_izq - borde_der
-        if not ANCHO_MIN_M <= ancho <= ANCHO_MAX_M:
-            res["estado"] = f"hueco de {ancho*100:.0f} cm: no parece un sendero"
+        ancho_ref_cm = float(cfg.get("sendero_ancho_referencia_cm", 0) or 0)
+        ancho_ref = ancho_ref_cm / 100.0 if ancho_ref_cm > 0 else None
+        if ancho < max(ANCHO_MIN_M, float(cfg.get("sendero_ancho_min_cm", 0)) / 100.0):
+            res["estado"] = f"hueco de {ancho*100:.0f} cm: más estrecho que el sendero esperado"
             return res
+        borde_der, borde_izq, ancho, ajustado = _ancho_con_prior(
+            borde_der, borde_izq, ancho_ref)
         medio = (borde_izq + borde_der) / 2
+        if not ajustado and not _ancho_valido(ancho, cfg):
+            res["estado"] = f"hueco de {ancho*100:.0f} cm: ancho no plausible"
+            return res
+        if ajustado:
+            res["ancho_ajustado_prior"] = True
         res["ancho_m"] = ancho
     elif ancho_previo and not abierto_izq:
         medio = borde_izq - ancho_previo / 2
@@ -442,13 +491,18 @@ def detectar(cv2, frame, cfg, geo: dict, cenital: "Cenital",
         return res
 
     res["bordes_m"] = (None if abierto_izq else borde_izq, None if abierto_der else borde_der)
+    max_lateral_cm = float(cfg.get("sendero_max_lateral_cm", 60))
+    if abs(medio) > max_lateral_cm / 100.0:
+        res["estado"] = "candidato de sendero demasiado lateral; rechazo"
+        return res
     res["lateral_m"] = medio
     res["angulo_deg"] = float(angulo)
     res["error_m"] = medio + MIRADA_M * math.sin(t)
     # Confianza: contraste entre los bordes y el sendero.
     dentro = float(densidad[a:z + 1].mean())
     fuera = float(densidad[visto].max())
-    res["confianza"] = float(np.clip((fuera - dentro) / (fuera + 1e-9), 0, 1))
+    factor_ancho = 0.75 if res.get("ancho_ajustado_prior") else 1.0
+    res["confianza"] = float(np.clip((fuera - dentro) / (fuera + 1e-9), 0, 1) * factor_ancho)
     res["estado"] = (f"sendero a {medio*100:+.0f} cm, rumbo {angulo:+.0f}°"
                      + (f", ancho {res['ancho_m']*100:.0f} cm" if res["ancho_m"] else ", un borde + ancho previo"))
     return res
@@ -503,10 +557,15 @@ class VisionSendero:
         self.angulo_deg = None
         self.error_m = None
         self.ancho_m = None
+        self.margen_m = None        # holgura por lado; negativa = no cabe
+        self.cabe = None            # None = sin medida de ancho
         self.confianza = 0.0
         self.estado = "sin datos"
         self._cenital: Cenital | None = None
         self.modelo = ModeloSendero()
+        self._historial_error = deque(maxlen=5)
+        self._error_filtrado = None
+        self._perdidas = 0
 
     def cenital(self, geo) -> Cenital:
         clave = tuple(geo[k] for k in Cenital.CLAVES)
@@ -517,25 +576,53 @@ class VisionSendero:
     def detectar(self, cv2, frame, cfg, geo) -> dict:
         return detectar(cv2, frame, cfg, geo, self.cenital(geo),
                         centro_previo=self.lateral_m or 0.0, ancho_previo=self.ancho_m,
-                        modelo=self.modelo)
+                        modelo=self.modelo, angulo_previo=self.angulo_deg)
 
     def analizar(self, cv2, frame, cfg, geo) -> float | None:
         """Desvío en metros MIRADA_M adelante (+ = corregir a la izquierda)."""
         res = self.detectar(cv2, frame, cfg, geo)
-        self.confianza = res["confianza"]
+        confianza = float(res.get("confianza", 0.0) or 0.0)
         self.estado = res["estado"]
+        if self.ancho_m is None and cfg.get("sendero_ancho_referencia_cm"):
+            self.ancho_m = float(cfg["sendero_ancho_referencia_cm"]) / 100.0
         if res["ancho_m"] is not None:
             self.ancho_m = res["ancho_m"] if self.ancho_m is None else 0.8 * self.ancho_m + 0.2 * res["ancho_m"]
+        # ¿Cabe la envolvente COMPLETA (eje trasero, 37 cm)? Se evalúa sobre el
+        # ancho suavizado: un fotograma suelto no declara un sendero intransitable.
+        if self.ancho_m is None:
+            self.margen_m = self.cabe = None
+        else:
+            holgura = float(cfg.get("sendero_holgura_lateral_cm",
+                                    geometria_robot.HOLGURA_LATERAL_M * 100)) / 100.0
+            self.margen_m = geometria_robot.margen(self.ancho_m)
+            self.cabe = geometria_robot.cabe(self.ancho_m, holgura)
         if res["error_m"] is None:
-            self.lateral_m = self.angulo_deg = self.error_m = None
+            self._perdidas += 1
+            self.confianza *= 0.65
+            # Sostén el último rumbo durante un dropout breve; después declara
+            # pérdida para que la autonomía pueda iniciar su búsqueda de sendero.
+            if self._error_filtrado is not None and self._perdidas <= 3:
+                self.error_m = self._error_filtrado
+                self.estado = f"sendero intermitente ({self._perdidas}/3); mantengo corrección"
+                return self.error_m
+            self.error_m = None
             return None
 
-        def _ema(previo, nuevo):
-            return nuevo if previo is None else SUAVIZADO * nuevo + (1 - SUAVIZADO) * previo
-
-        self.lateral_m = _ema(self.lateral_m, res["lateral_m"])
-        self.angulo_deg = _ema(self.angulo_deg, res["angulo_deg"])
-        self.error_m = self.lateral_m + MIRADA_M * math.sin(math.radians(self.angulo_deg))
+        import numpy as np
+        self._perdidas = 0
+        self.confianza = max(0.0, min(1.0, confianza))
+        self._historial_error.append(float(res["error_m"]))
+        # Mediana de ventana: rechaza saltos aislados por brillo/paja antes de
+        # la EMA. La ganancia aumenta con confianza y queda limitada a 0.5.
+        observado = float(np.median(self._historial_error))
+        alpha = 0.15 + 0.35 * self.confianza
+        if self._error_filtrado is None:
+            self._error_filtrado = observado
+        else:
+            self._error_filtrado += alpha * (observado - self._error_filtrado)
+        self.lateral_m = self._error_filtrado - MIRADA_M * math.sin(math.radians(float(res["angulo_deg"])))
+        self.angulo_deg = float(res["angulo_deg"]) if self.angulo_deg is None else alpha * float(res["angulo_deg"]) + (1 - alpha) * self.angulo_deg
+        self.error_m = self._error_filtrado
         return self.error_m
 
 
@@ -565,6 +652,12 @@ class SeguidorSendero:
         self.error_costmap_val = None
         self.ancho_costmap = None
         self.estado = "inactivo"
+        # Parada por incertidumbre: ciclos consecutivos sin NINGUNA referencia
+        # del sendero (ni hileras, ni hueco del costmap, ni cámara con
+        # confianza). Antes del 2026-10-14 esto devolvía None igual que
+        # "centrado" y el explorador seguía recto a ciegas.
+        self.ciclos_sin_referencia = 0
+        self.sin_referencia = False
 
     def correccion(self, cv2, distancias: dict) -> str | None:
         """Devuelve "izquierda", "derecha" o None (seguir de frente)."""
@@ -572,6 +665,8 @@ class SeguidorSendero:
         if not cfg["sendero_activo"]:
             self.estado = "inactivo"
             self.error_lidar = self.error_vision = self.error_costmap_val = None
+            self.ciclos_sin_referencia = 0
+            self.sin_referencia = False
             return None
 
         self.error_lidar = error_lidar(distancias, cfg)
@@ -600,12 +695,19 @@ class SeguidorSendero:
             terminos.append((1.0 - peso_vision, self.error_costmap_val / tol_m))
         elif self.error_lidar is not None:
             terminos.append(((1.0 - peso_vision), self.error_lidar / tol_m))
-        if self.error_vision is not None:
-            terminos.append((peso_vision, self.error_vision / tol_m))
+        if self.error_vision is not None and self.vision.confianza >= cfg.get("sendero_confianza_min", 0.15):
+            calidad = min(1.0, self.vision.confianza / 0.65)
+            terminos.append((peso_vision * calidad, self.error_vision / tol_m))
 
         if not terminos:
-            self.estado = "sin referencia (ni hileras ni sendero visible)"
+            self.ciclos_sin_referencia += 1
+            self.sin_referencia = True
+            self.estado = ("sin referencia (ni hileras ni sendero visible) "
+                           f"x{self.ciclos_sin_referencia}")
             return None
+
+        self.ciclos_sin_referencia = 0
+        self.sin_referencia = False
 
         total_peso = sum(w for w, _ in terminos) or 1.0
         error = sum(w * e for w, e in terminos) / total_peso
@@ -616,10 +718,55 @@ class SeguidorSendero:
         self.estado = f"corrigiendo a la {'izquierda' if error > 0 else 'derecha'} (error {error:+.2f})"
         return "izquierda" if error > 0 else "derecha"
 
+    def estrecho(self, cfg: dict) -> str:
+        """¿Cabe el robot en el sendero medido? Devuelve qué hacer al respecto.
+
+        Punto ciego corregido el 2026-10-14: seguir el centro de la mancha no
+        basta. El morro mide 19 cm y el eje trasero 37; por un hueco de 30 cm
+        el robot entra y el trasero pisa la hilera.
+
+        Devuelve:
+          ""         cabe, no se midió, o la comprobación está apagada.
+          "aviso"    no cabe: se registra y se cuenta, pero se sigue.
+          "frenar"   no cabe: se para.
+
+        Modo por defecto "aviso" (decisión del operador, 2026-10-14). La
+        holgura medida son 19 cm por lado -> corredor de 75 cm, y sus senderos
+        miden 60-80: frenar de entrada dejaría el robot clavado a menudo por un
+        número que sale del SIMULADOR, no del robot. Así se recoge cuántas
+        veces se habría frenado antes de decidir. Ver
+        `geometria_robot.HOLGURA_PROCEDENCIA`.
+
+        Sin medida de ancho devuelve "": no saber no es lo mismo que no caber,
+        y de eso ya se encarga `incierto()`.
+        """
+        if not cfg.get("sendero_activo"):
+            return ""
+        modo = cfg.get("sendero_si_no_cabe", "aviso")
+        if modo not in ("aviso", "frenar"):
+            return ""
+        return modo if self.vision.cabe is False else ""
+
+    def incierto(self, cfg: dict) -> bool:
+        """¿Llevamos demasiados ciclos sin saber dónde está el sendero?
+
+        Con `sendero_activo` y el seguimiento como única referencia de rumbo,
+        avanzar sin medida es avanzar a ciegas: en la huerta eso es pisar la
+        hilera. Se exige una racha (no un solo fotograma malo) para no frenar
+        por un reflejo o una sombra suelta.
+        """
+        if not cfg.get("sendero_activo"):
+            return False
+        limite = int(cfg.get("sendero_parada_incierta_ciclos", 0) or 0)
+        if limite <= 0:                       # 0 = desactivado
+            return False
+        return self.ciclos_sin_referencia >= limite
+
     def snapshot(self) -> dict:
         v = self.vision
         return {
             "estado": self.estado,
+            "ciclos_sin_referencia": self.ciclos_sin_referencia,
             "error_lidar_cm": None if self.error_lidar is None else round(self.error_lidar * 100),
             "error_costmap_cm": None if self.error_costmap_val is None else round(self.error_costmap_val * 100),
             "ancho_costmap_cm": None if self.ancho_costmap is None else round(self.ancho_costmap * 100),
@@ -627,6 +774,8 @@ class SeguidorSendero:
             "sendero_lateral_cm": None if v.lateral_m is None else round(v.lateral_m * 100),
             "sendero_rumbo_deg": None if v.angulo_deg is None else round(v.angulo_deg),
             "sendero_ancho_cm": None if v.ancho_m is None else round(v.ancho_m * 100),
+            "sendero_margen_cm": None if v.margen_m is None else round(v.margen_m * 100),
+            "sendero_cabe": v.cabe,
             "confianza": round(v.confianza, 2),
             "vision": v.estado,
         }

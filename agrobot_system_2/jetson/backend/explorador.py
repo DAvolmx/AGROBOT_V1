@@ -64,11 +64,15 @@ COMPROMISO_PULSOS = 5
 # Recentrarse en el sendero es corregir el RUMBO: con pivote el robot no
 # traslada (y en el campo no pisa las plantas). Ver la comparación del
 # 2026-09-20 en el simulador antes de cambiarlo.
-MANIOBRA_EN_CORRECCION = False
+MANIOBRA_EN_CORRECCION = True
 # No corregir dos veces seguidas: entre corrección y corrección va al menos un
 # pulso de avance. Si no, el robot se pasa el rato pivotando sin recorrer
 # (102 correcciones y la mitad de distancia en el simulador, 2026-09-20).
 PULSOS_ENTRE_CORRECCIONES = 1
+# Parada por incertidumbre: cuánto se espera antes de volver a medir el
+# sendero. Lo bastante para que la cámara dé fotogramas nuevos y el LIDAR un
+# barrido, sin dejar el robot clavado si la referencia vuelve enseguida.
+ESPERA_INCERTIDUMBRE_S = 1.0
 # Un callejón es que NO se pueda seguir, no que haya poco sitio: en un pasillo
 # estrecho los dos lados siempre están cerca y se confundía con un callejón.
 FRENTE_CALLEJON_M = 0.45
@@ -105,6 +109,9 @@ class ExploradorReactivo:
         self.desatascos = 0
         self.escaneos = 0
         self.correcciones = 0
+        self.paradas_inciertas = 0
+        self.paradas_estrechas = 0
+        self.avisos_estrechos = 0
         self._tarea: asyncio.Task | None = None
         self._ultimo_escaneo = 0.0
         self._ultimo_lado = "izquierda"
@@ -130,6 +137,9 @@ class ExploradorReactivo:
         self.activo = True
         self.pulsos = self.giros = self.desatascos = self.escaneos = 0
         self.correcciones = self.bucles = self.callejones = self.aprendidas = 0
+        self.paradas_inciertas = 0
+        self.paradas_estrechas = 0
+        self.avisos_estrechos = 0
         self.pulsos_politica = 0
         self._memoria.clear()
         self._forzar_lado, self._compromiso = None, 0
@@ -152,6 +162,9 @@ class ExploradorReactivo:
         d = {"activo": self.activo, "estado": self.estado, "pulsos": self.pulsos,
              "giros": self.giros, "desatascos": self.desatascos,
              "escaneos": self.escaneos, "correcciones": self.correcciones,
+             "paradas_inciertas": self.paradas_inciertas,
+             "paradas_estrechas": self.paradas_estrechas,
+             "avisos_estrechos": self.avisos_estrechos,
              "bucles": self.bucles, "callejones": self.callejones,
              "aprendidas": self.aprendidas, "pulsos_politica": self.pulsos_politica}
         if self._seguidor is not None:
@@ -222,6 +235,21 @@ class ExploradorReactivo:
         """La maniobra traslada el robot hacia delante y hacia atrás."""
         return (self._hueco(d, "adelante") >= MARGEN_MANIOBRA_M
                 and self._hueco(d, "atras") >= MARGEN_MANIOBRA_M)
+
+    def _giro_con_arco_seguro(self, d) -> bool:
+        """En chasis de eje pasivo, evita el giro ficticio con v=0.
+
+        El pulso exterior intenta avance+retroceso; el freno conserva cada
+        tramo seguro. Si no hay margen delantero, no se autoriza un pivote.
+        Esta política se habilita solo desde la config del simulador.
+        """
+        if self._hay_sitio_para_maniobra(d):
+            return True
+        cfg = self._get_config()
+        if not cfg.get("arco_frontal_si_giro_pasivo_bloqueado", False):
+            return False
+        return (self._hueco(d, "adelante")
+                >= float(cfg.get("margen_arco_frontal_eje_pasivo_m", 0.56)))
 
     def _lado_costmap(self) -> str | None:
         """Hacia dónde girar según el costmap: el centro del hueco libre."""
@@ -306,9 +334,27 @@ class ExploradorReactivo:
         for _ in range(GIROS_CALLEJON):
             if not self.activo:
                 return
-            if self._hueco(self._distancias(), "adelante") >= avance_libre:
+            d_actual = self._distancias()
+            frente = self._hueco(d_actual, "adelante")
+            if frente >= avance_libre:
                 return
-            self._conducir(lado, maniobra=False)     # pivote: no empuja contra la pared
+            cfg = self._get_config()
+            if cfg.get("arco_frontal_si_giro_pasivo_bloqueado", False):
+                if self._hueco(d_actual, "atras") >= max(
+                        self._get_config()["retroceso_libre_cm"] / 100.0,
+                        float(cfg.get("espacio_giro_eje_pasivo_m", 0.65))):
+                    self.estado = "callejón: retrocediendo con LIDAR trasero libre"
+                    self._conducir("atras", maniobra=False)
+                elif self._giro_con_arco_seguro(d_actual):
+                    self.estado = f"callejón: arco hacia {lado}"
+                    self._conducir(lado, maniobra=True)
+                else:
+                    self.estado = "detenido: sin espacio seguro para girar el eje pasivo"
+                    self._parar()
+                    await asyncio.sleep(0.4)
+                    continue
+            else:
+                self._conducir(lado, maniobra=False)
             self.giros += 1
             await asyncio.sleep(PAUSA_GIRO_S)
 
@@ -367,7 +413,48 @@ class ExploradorReactivo:
 
                 d = self._distancias()
                 frente = self._hueco(d, "adelante")
+                atras = self._hueco(d, "atras")
                 izq, der = self._hueco(d, "izquierda"), self._hueco(d, "derecha")
+                # En el eje pasivo no existe giro sobre el sitio: retrocede en
+                # un pulso protegido por el LIDAR hasta dejar hueco para un arco.
+                margen_giro = float(cfg.get("espacio_giro_eje_pasivo_m", 0.65))
+                if (cfg.get("retroceso_previo_giro_eje_pasivo", False)
+                        and frente < margen_giro and atras >= max(retro_libre, margen_giro)):
+                    self.estado = f"retrocediendo para liberar giro ({frente:.2f} m delante)"
+                    self._conducir("atras", maniobra=False)
+                    await asyncio.sleep(1.05)  # un pulso exterior; luego vuelve a medir
+                    continue
+
+                # En evaluación aislada, dejar que la política aprendida decida
+                # primero en espacio libre. El LIDAR/freno sigue teniendo prioridad
+                # en obstáculo; el seguidor clásico queda como fallback si el modelo
+                # duda. Esta opción solo se activa desde entrenar.py --solo-politica.
+                if (cfg.get("politica_prioritaria_segura", False)
+                        and frente >= avance_libre
+                        and self._politica is not None and self._politica.disponible):
+                    accion, seguridad = self._politica.decidir(self._percepcion())
+                    if accion in ("adelante", "izquierda", "derecha"):
+                        self.estado = f"política: {accion} ({seguridad:.2f})"
+                        self._conducir(accion, maniobra=False)
+                        self.pulsos_politica += 1
+                        self.pulsos += 1
+                        self._sin_corregir += 1
+                        continue
+
+                # Seguimiento preventivo en el margen seguro: recentra antes de
+                # alcanzar el umbral de avance libre, sin anular el freno cercano.
+                umbral_visual = float(cfg.get("espacio_giro_eje_pasivo_m", 0.65))
+                if (cfg.get("correccion_sendero_preventiva", False)
+                        and frente >= umbral_visual
+                        and self._sin_corregir >= PULSOS_ENTRE_CORRECCIONES):
+                    correccion = self._correccion_sendero()
+                    if correccion is not None:
+                        self.estado = f"sendero: {self._seguidor.estado}"
+                        self._conducir(correccion, maniobra=bool(cfg.get(
+                            "correccion_eje_pasivo_arcos", MANIOBRA_EN_CORRECCION)))
+                        self.correcciones += 1
+                        self._sin_corregir = 0
+                        continue
 
                 if frente >= avance_libre:
                     # Lo enseñado por el operador manda sobre la regla, también
@@ -384,10 +471,53 @@ class ExploradorReactivo:
                         # Recentrarse es corregir el RUMBO: pivote, que no
                         # traslada. Con la maniobra el robot se salía del
                         # sendero (y en el campo pisa las plantas).
-                        self._conducir(correccion, maniobra=MANIOBRA_EN_CORRECCION)
+                        maniobra_correccion = bool(cfg.get(
+                            "correccion_eje_pasivo_arcos", MANIOBRA_EN_CORRECCION))
+                        self._conducir(correccion, maniobra=maniobra_correccion)
                         self.correcciones += 1
                         self._sin_corregir = 0
                         continue
+
+                    # Parada por incertidumbre (2026-10-14). Con el sendero
+                    # como referencia de rumbo, una racha de ciclos sin
+                    # NINGUNA medida —ni hileras, ni costmap, ni cámara con
+                    # confianza— no es "centrado": es no saber. Antes se caía
+                    # aquí y se avanzaba recto, que en la huerta es pisar la
+                    # hilera. Se para y se avisa; no se escanea ni se gira a
+                    # ciegas, porque no hay nada que diga hacia dónde.
+                    # El sendero se ve, se mide, y NO cabe el robot. Seguir
+                    # el centro de la mancha metería el eje trasero (37 cm)
+                    # en un hueco de 30. En modo "aviso" se cuenta y se sigue;
+                    # en "frenar" se para (abrirse paso no es una decisión que
+                    # pueda tomar la autonomía).
+                    estrechez = self._seguidor.estrecho(cfg)
+                    if estrechez:
+                        snap = self._seguidor.snapshot()
+                        self._emitir(evento="sendero_estrecho", modo=estrechez,
+                                     ancho_cm=snap.get("sendero_ancho_cm"),
+                                     margen_cm=snap.get("sendero_margen_cm"))
+                        if estrechez == "frenar":
+                            self.estado = ("parado: sendero de "
+                                           f"{snap.get('sendero_ancho_cm')} cm, "
+                                           "no cabe el eje trasero")
+                            self._parar()
+                            self.paradas_estrechas += 1
+                            await asyncio.sleep(ESPERA_INCERTIDUMBRE_S)
+                            continue
+                        # Modo aviso: se registra cuántas veces se habría
+                        # frenado y se sigue adelante.
+                        self.avisos_estrechos += 1
+
+                    if self._seguidor.incierto(cfg):
+                        self.estado = f"parado: {self._seguidor.estado}"
+                        self._parar()
+                        self.paradas_inciertas += 1
+                        self._emitir(evento="sendero_incierto",
+                                     detalle=self._seguidor.estado,
+                                     ciclos=self._seguidor.ciclos_sin_referencia)
+                        await asyncio.sleep(ESPERA_INCERTIDUMBRE_S)
+                        continue
+
                     accion_politica = None
                     if self._politica is not None and self._politica.disponible:
                         accion_politica, seguridad = self._politica.decidir(self._percepcion())
@@ -419,9 +549,15 @@ class ExploradorReactivo:
                 if self._hueco(d, lado) < lado_libre:
                     lado = "izquierda" if izq >= der else "derecha"
                 if self._hueco(d, lado) >= lado_libre:
-                    maniobra = self._hay_sitio_para_maniobra(d)
+                    maniobra = self._giro_con_arco_seguro(d)
+                    if (not maniobra and cfg.get(
+                            "arco_frontal_si_giro_pasivo_bloqueado", False)):
+                        self.estado = "detenido: sin espacio seguro para girar el eje pasivo"
+                        self._parar()
+                        await asyncio.sleep(0.4)
+                        continue
                     self.estado = (f"girando a la {lado} (frente {frente:.2f} m"
-                                   + ("" if maniobra else ", pivote") + ")")
+                                   + (" · arco" if maniobra else ", pivote") + ")")
                     self._ultimo_lado = lado
                     self._conducir(lado, maniobra=maniobra)
                     self.giros += 1
@@ -433,6 +569,11 @@ class ExploradorReactivo:
                     continue
 
                 if await self._probar_aprendido():
+                    continue
+                if cfg.get("arco_frontal_si_giro_pasivo_bloqueado", False):
+                    self.estado = "detenido: sin ruta libre; requiere intervención"
+                    self._parar()
+                    await asyncio.sleep(0.4)
                     continue
                 self.estado = "encerrado: girando en el sitio"
                 self._conducir(self._ultimo_lado, maniobra=False)

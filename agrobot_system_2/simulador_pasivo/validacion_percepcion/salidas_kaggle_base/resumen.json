@@ -1,0 +1,45 @@
+{
+  "model": "/home/jetson/.agrobot/kaggle_notebook972b3bbf33/modelo_agrobot_unet.pth",
+  "architecture": "segmentation_models_pytorch.Unet(timm-mobilenetv3_large_100)",
+  "input": {
+    "width": 512,
+    "height": 384,
+    "channels": [
+      "R/255",
+      "G/255",
+      "B/255",
+      "Lab-a/255",
+      "ExGR remapped 0..1",
+      "morph top-hat + black-hat /255"
+    ]
+  },
+  "classes": [
+    "fondo",
+    "sendero",
+    "cultivo",
+    "bancal",
+    "obstaculo"
+  ],
+  "device": "cpu",
+  "frames": 6,
+  "mean_inference_ms": 1158.5,
+  "predicted_pixel_share_pct": {
+    "fondo": 39.38,
+    "sendero": 16.27,
+    "cultivo": 31.26,
+    "bancal": 13.09,
+    "obstaculo": 0.0
+  },
+  "kaggle_validation_reference": {
+    "baseline_mIoU_val": 0.7104,
+    "baseline_mIoU_real": 0.7386,
+    "baseline_mIoU_synth": 0.5645,
+    "v3_mIoU_val": 0.3877
+  },
+  "limitations": [
+    "Sim frames have no semantic ground truth: this is visual inspection, not IoU.",
+    "The obstacle class had no labeled pixels in Kaggle validation; do not use it as a collision detector.",
+    "Keep LIDAR veto and low-object camera checks active; do not deploy model outputs as motor commands."
+  ],
+  "outputs": "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_pasivo/validacion_percepcion/salidas_kaggle_base"
+}

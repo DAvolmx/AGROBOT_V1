@@ -1,0 +1,3408 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgroBot — Command Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2300bd4f'/%3E%3Cpath d='M9 21c0-6 4-10 13-11-1 8-5 12-11 12m-2-1 5-5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+/* ============================================================
+   AgroBot · Command — tema "Agricultura 5.0".
+   Sin dependencias externas a propósito: este dashboard corre
+   dentro de la red aislada del AP (192.168.12.x), sin salida a
+   internet. Nada de CDN de fuentes ni de frameworks — todo el
+   CSS/JS vive en este archivo, fuentes del sistema como fallback.
+
+   Paleta CLARA. Un panel de campo se mira a pleno sol desde una
+   tablet: sobre fondo oscuro la pantalla actúa de espejo y no se
+   lee nada. El fondo claro además deja que el verde del cultivo y
+   el rojo de las alarmas sean lo único saturado en pantalla, así
+   una alerta salta a la vista sin depender de que parpadee.
+   ============================================================ */
+:root {
+  /* superficies */
+  --bg: #e6f2e9;
+  --panel: #ffffff;
+  --panel-2: #f1f9f2;
+  --panel-3: #e3f3e7;
+  --line: #cfe3d2;
+  --line-fuerte: #a8ccae;
+
+  /* texto */
+  --ink: #0d1f14;
+  --ink-soft: #4e6a58;
+
+  /* verde de cultivo — `--accent` para gráficos y fondos,
+     `--accent-ink` para TEXTO: el verde brillante sobre blanco no
+     llega al contraste mínimo en tamaños chicos. */
+  --accent: #00bd4f;
+  --accent-ink: #067a35;
+  --accent-2: #00b8a4;
+  --accent-glow: rgba(0, 189, 79, 0.42);
+  --accent-soft: #ccfadd;
+
+  /* estados */
+  --warn: #ff9500;
+  --warn-soft: #ffeecd;
+  --crit: #ff2d3f;
+  --crit-ink: #c4141f;
+  --warn-ink: #9c5400;
+  --crit-soft: #ffe0e2;
+  --info: #00a3ee;
+  --info-soft: #d4eefd;
+  --lora: #9333ff;
+  --lora-soft: #efe0ff;
+
+  --radius: 14px;
+  --ease: cubic-bezier(.4, 0, .2, 1);
+  --sombra: 0 1px 2px rgba(22, 40, 28, 0.04), 0 8px 24px -18px rgba(22, 40, 28, 0.35);
+  --sombra-alta: 0 2px 4px rgba(22, 40, 28, 0.05), 0 18px 40px -24px rgba(22, 40, 28, 0.45);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background:
+    radial-gradient(1200px 560px at -8% -14%, #cdeedb88, transparent 62%),
+    radial-gradient(900px 500px at 106% -6%, #d7e9fb88, transparent 58%),
+    var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  display: flex;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line-fuerte); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+.mono { font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+button { font-family: inherit; }
+code { background: var(--panel-3); padding: 1px 5px; border-radius: 4px; font-size: 0.94em; }
+
+/* ---------- layout shell ---------- */
+nav.sidebar {
+  width: 276px; flex: none;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  padding: 20px 0;
+}
+/* ---------- barra lateral ocultable ----------
+   En un teléfono de 375 px la barra fija se comía 240 px y dejaba 135 px
+   de contenido: las tarjetas salían en una columna ilegible. Acá pasa a
+   ser un cajón que se desliza por encima, y en escritorio se puede
+   colapsar a solo iconos para ganar ancho en los mapas y el video. */
+.sidebar-toggle {
+  display: none;                /* solo aparece en móvil */
+  align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: none; margin-right: 10px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); color: var(--ink); cursor: pointer;
+}
+.sidebar-toggle svg { width: 20px; height: 20px; }
+.nav-colapsar {
+  display: flex; align-items: center; gap: 8px;
+  margin: 6px 10px 0; padding: 8px 12px;
+  border: none; border-top: 1px solid var(--line); border-radius: 0;
+  background: transparent; color: var(--ink-soft);
+  font-size: 13px; cursor: pointer;
+}
+.nav-colapsar:hover { color: var(--ink); }
+.nav-colapsar svg { width: 15px; height: 15px; transition: transform 200ms var(--ease); }
+body.nav-colapsada .nav-colapsar svg { transform: rotate(180deg); }
+.scrim { display: none; }
+
+/* Colapsada en escritorio: sobreviven los iconos, se va el texto. */
+body.nav-colapsada nav.sidebar { width: 68px; }
+body.nav-colapsada .nav-btn { font-size: 0; justify-content: center; padding: 11px 0; gap: 0; }
+body.nav-colapsada .nav-btn .ic { width: auto; }
+body.nav-colapsada .brand { padding: 0 8px 12px; }
+body.nav-colapsada .brand h1,
+body.nav-colapsada .brand .sub,
+body.nav-colapsada .brand .status { display: none; }
+body.nav-colapsada .brand .badge { margin: 0 auto 4px; }
+body.nav-colapsada .nav-colapsar { justify-content: center; font-size: 0; gap: 0; }
+
+@media (max-width: 768px) {
+  .sidebar-toggle { display: flex; }
+
+  nav.sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 60;
+    width: 262px; padding: 12px 0;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 0 40px -10px rgba(0, 0, 0, 0.35);
+    transform: translateX(-100%);
+    transition: transform 220ms var(--ease);
+  }
+  body.nav-abierta nav.sidebar { transform: translateX(0); }
+
+  .scrim {
+    display: block; position: fixed; inset: 0; z-index: 50;
+    background: rgba(15, 30, 20, 0.42);
+    opacity: 0; pointer-events: none;
+    transition: opacity 220ms var(--ease);
+  }
+  body.nav-abierta .scrim { opacity: 1; pointer-events: auto; }
+
+  /* El colapso es de escritorio: dentro del cajón el texto siempre va. */
+  body.nav-colapsada nav.sidebar { width: 262px; }
+  body.nav-colapsada .nav-btn { font-size: 15px; justify-content: flex-start; padding: 11px 12px; gap: 11px; }
+  body.nav-colapsada .brand h1,
+  body.nav-colapsada .brand .sub,
+  body.nav-colapsada .brand .status { display: block; }
+  .nav-colapsar { display: none; }
+
+  .brand { padding: 0 14px 12px; margin-bottom: 8px; }
+  .brand h1 { font-size: 18px; }
+  .nav-tabs { padding: 0 8px; gap: 2px; }
+  /* 44 px de alto: es el mínimo táctil cómodo, antes eran 32 px. */
+  .nav-btn { padding: 11px 12px; font-size: 15px; gap: 11px; }
+  .tab { padding: 14px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  nav.sidebar, .scrim { transition: none; }
+}
+.brand { padding: 0 20px 18px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.brand .badge {
+  width: 44px; height: 44px; border-radius: 14px;
+  background: linear-gradient(150deg, var(--accent), var(--accent-2));
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 12px; box-shadow: 0 8px 18px -8px var(--accent-glow);
+}
+.brand .badge svg { stroke: #fff; }
+.brand h1 { font-size: 22px; margin: 0; letter-spacing: -0.015em; font-weight: 700; color: var(--ink); }
+.brand .sub { font-size: 12px; color: var(--ink-soft); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 2px; }
+.brand .status { font-size: 13.5px; color: var(--ink-soft); margin-top: 9px; display: flex; align-items: center; gap: 6px; }
+.brand .status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); animation: blink 2s infinite; }
+
+.nav-tabs { display: flex; flex-direction: column; gap: 3px; padding: 0 10px; flex: 1; }
+.nav-btn {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 10px; border: none;
+  background: transparent; color: var(--ink-soft);
+  font-size: 16px; text-align: left; cursor: pointer;
+  transition: background 150ms var(--ease), color 150ms var(--ease);
+}
+.nav-btn:hover { background: var(--panel-2); color: var(--ink); }
+.nav-btn.active { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+.nav-btn .ic { width: 18px; display: flex; align-items: center; justify-content: center; }
+.nav-btn .ic svg { width: 16px; height: 16px; }
+
+/* ---------- main ---------- */
+main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+header.topbar {
+  height: 72px; flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82); backdrop-filter: blur(10px);
+}
+header.topbar h2 { font-size: 18px; margin: 0; color: var(--ink); letter-spacing: 0.04em; font-weight: 700; }
+@media (max-width: 768px) {
+  /* Altura libre: con 60 px fijos las píldoras, al partirse en dos líneas,
+     tapaban el título (2026-09-30). Ahora van en su propia fila, que se
+     desliza de lado si no caben. */
+  header.topbar {
+    height: auto; min-height: 56px;
+    flex-wrap: wrap; row-gap: 6px;
+    padding: 8px 12px;
+  }
+  header.topbar h2 { font-size: 16px; white-space: nowrap; }
+  header.topbar h2 .largo { display: none; }
+  .pills {
+    order: 3; width: 100%; gap: 6px;
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .pills::-webkit-scrollbar { display: none; }
+  .pill { font-size: 12.5px; padding: 4px 9px; flex: none; }
+  #clock { margin-left: auto; flex: none; }
+}
+.pills { display: flex; gap: 8px; align-items: center; }
+.pill {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13.5px; padding: 5px 11px; border-radius: 20px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink-soft);
+  transition: border-color 200ms var(--ease), color 200ms var(--ease), background 200ms var(--ease);
+}
+.pill.ok { border-color: #b6e3c6; background: var(--accent-soft); color: var(--accent-ink); }
+.pill.warn { border-color: #f2d69e; background: var(--warn-soft); color: var(--warn-ink); }
+.pill.crit { border-color: #f4b9b9; background: var(--crit-soft); color: var(--crit-ink); }
+/* Estado desconocido: círculo HUECO. Un punto relleno, del color que
+   sea, se lee como "hay señal"; el hueco dice "todavía no llegó nada". */
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: transparent;
+             border: 1.5px solid #a9b4ac; }
+.pill.ok .dot, .pill.warn .dot, .pill.crit .dot { border: none; }
+.pill.ok .dot { background: var(--accent); animation: blink 2s infinite; }
+.pill.warn .dot { background: var(--warn); }
+.pill.crit .dot { background: var(--crit); }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+::-webkit-scrollbar {
+  width: 12px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent-ink);
+  background-clip: content-box;
+}
+.tab {
+  display: none;
+  max-width: 1400px;
+  margin: 0 auto;
+  height: 100%;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  padding: 22px;
+  /* Hueco al final para el botón STOP flotante: sin él tapaba lo último
+     de cada pestaña y no se podía llegar a tocarlo. */
+  padding-bottom: 130px;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+.tab.active {
+  display: block;
+  animation: fadeIn 300ms var(--ease);
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Distancias del LIDAR a cada cara del robot. */
+.dist-lidar {
+  display: grid; grid-template-columns: 1fr 1.1fr 1fr; grid-template-rows: auto auto auto;
+  gap: 8px; align-items: stretch; max-width: 420px; margin: 0 auto;
+}
+.dist-celda {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2);
+  padding: 8px 6px; text-align: center; transition: background 150ms, border-color 150ms;
+}
+.dist-celda .k { font-size: 12px; color: var(--ink-soft); letter-spacing: 0.06em; text-transform: uppercase; }
+.dist-celda .v { font-size: 20px; font-weight: 600; margin-top: 2px; }
+.dist-celda.ok     { background: var(--accent-soft); border-color: #b6e3c6; color: var(--accent-ink); }
+.dist-celda.aviso  { background: var(--warn-soft);   border-color: #f2d69e; color: var(--warn-ink); }
+.dist-celda.peligro{ background: var(--crit-soft);   border-color: #f4b9b9; color: var(--crit-ink); }
+.dist-celda[data-lado="adelante"]  { grid-column: 2; grid-row: 1; }
+.dist-celda[data-lado="izquierda"] { grid-column: 1; grid-row: 2; }
+.dist-celda[data-lado="derecha"]   { grid-column: 3; grid-row: 2; }
+.dist-celda[data-lado="atras"]     { grid-column: 2; grid-row: 3; }
+.dist-robot { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: center; }
+.dist-robot svg { width: 46px; height: 58px; }
+.dist-estado { text-align: center; font-size: 13px; margin-top: 10px; min-height: 18px; color: var(--ink-soft); }
+.dist-estado.frenando { color: var(--crit-ink); font-weight: 600; }
+
+/* Selector de los dos únicos modos de navegación: manual y autónomo. */
+.modo-sel { display: flex; gap: 8px; margin-bottom: 16px; }
+.modo-btn {
+  flex: 1; padding: 13px 14px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink-soft); font-size: 15px; font-family: inherit;
+  cursor: pointer; transition: all 160ms var(--ease);
+}
+.modo-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.modo-btn.active {
+  background: var(--accent-ink); border-color: var(--accent);
+  color: #fff; font-weight: 600;
+}
+@media (max-width: 560px) { .modo-sel { flex-direction: column; } }
+
+/* Flex y no rejilla: la rejilla estiraba la primera columna y dejaba "CO₂"
+   lejos de su valor, y en el teléfono aplastaba las columnas. Así cada dato
+   ocupa lo suyo y la fila se parte en dos cuando no cabe. */
+.barra-estado { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
+.barra-estado .dist-grupo { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 980px) {
+  .barra-estado { gap: 10px; }
+  .barra-estado .dist-grupo { margin-left: 0; }
+}
+/* Versión compacta de .dist-celda para la barra de estado. */
+.dist-chip { display: flex; align-items: baseline; gap: 5px; padding: 4px 9px; border-radius: 8px; }
+.dist-chip .k { font-size: 13px; letter-spacing: 0; text-transform: none; }
+.dist-chip .v { font-size: 15px; margin-top: 0; }
+
+.grid-2 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
+@media (max-width: 980px) { .grid-2 { grid-template-columns: 1fr; } }
+.col { display: flex; flex-direction: column; gap: 16px; }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 18px;
+  box-shadow: var(--sombra);
+  transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease);
+}
+.card:hover { border-color: var(--line-fuerte); box-shadow: var(--sombra-alta); }
+.card h3 {
+  font-size: 13.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--ink-soft); margin: 0 0 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ---------- galería de misión ---------- */
+.gallery-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.gallery-toolbar select { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 15.5px; }
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.gallery-card {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  transition: transform 180ms var(--ease), border-color 180ms var(--ease), box-shadow 180ms var(--ease);
+  animation: card-in 320ms var(--ease) both;
+}
+.gallery-card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 14px 30px -16px var(--accent-glow); }
+.gallery-card .g-img-wrap { position: relative; aspect-ratio: 4/3; background: var(--panel-3); overflow: hidden; }
+.gallery-card .g-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 300ms var(--ease); }
+.gallery-card:hover .g-img-wrap img { transform: scale(1.05); }
+.gallery-card .g-conf { position: absolute; top: 8px; right: 8px; background: rgba(255, 255, 255, 0.92); color: var(--accent-ink); font-size: 13.5px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+.gallery-card .g-body { padding: 10px 12px; }
+.gallery-card .g-class { font-size: 16px; font-weight: 600; text-transform: capitalize; }
+.gallery-card .g-meta { font-size: 13.5px; color: var(--ink-soft); margin-top: 3px; display: flex; justify-content: space-between; }
+.gallery-card .g-dl { display: block; text-align: center; font-size: 13.5px; padding: 7px; margin-top: 8px; border-radius: 7px; background: var(--accent-soft); color: var(--accent-ink); text-decoration: none; font-weight: 600; transition: filter 150ms; }
+.gallery-card .g-dl:hover { filter: brightness(0.96); }
+@keyframes card-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.gallery-empty { text-align: center; padding: 60px 20px; color: var(--ink-soft); }
+.gallery-empty svg { opacity: 0.4; margin-bottom: 10px; }
+
+/* ---------- cámara + radar ----------
+   En el teléfono iban lado a lado: la cámara quedaba aplastada sobre un
+   bloque blanco vacío y el radar en una columna de 100 px (2026-09-30). */
+.cam-radar { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 16px; }
+.cam-card { display: flex; flex-direction: column; }
+/* En escritorio el vídeo llena la tarjeta (sin hueco debajo)… */
+.cam-card .video-wrap { flex: 1; aspect-ratio: auto; min-height: 280px; }
+@media (max-width: 900px) {
+  .cam-radar { grid-template-columns: 1fr; }
+  /* …y en columna manda la proporción de la NexiGo (640x480). */
+  .cam-card .video-wrap { flex: none; aspect-ratio: 4 / 3; min-height: 0; }
+  .cam-radar .lidar-wrap { min-height: 300px !important; }
+}
+
+/* ---------- video ---------- */
+.video-wrap {
+  position: relative; border-radius: 12px; overflow: hidden;
+  background: #0d1410; aspect-ratio: 16/9; border: 2px solid var(--line);
+  transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease);
+}
+.video-wrap.alert { border-color: var(--crit); box-shadow: 0 0 0 4px var(--crit-soft); }
+.video-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pest-banner {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  background: var(--crit-ink); color: #fff; font-weight: 700;
+  padding: 10px 16px; display: none; align-items: center; justify-content: space-between;
+  font-size: 17px; letter-spacing: 0.02em;
+}
+.pest-banner.show { display: flex; }
+.video-badge {
+  position: absolute; top: 10px; left: 10px; z-index: 4;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13.5px; font-weight: 600; color: #fff;
+  background: rgba(13, 20, 16, 0.62); backdrop-filter: blur(4px);
+  padding: 5px 10px; border-radius: 7px;
+}
+.video-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: #ff6b6b; animation: blink 1.2s infinite; }
+@media (prefers-reduced-motion: reduce) { .video-badge .dot, .brand .status .dot { animation: none; } }
+
+.detect-log { margin-top: 4px; max-height: 190px; overflow-y: auto; }
+.detect-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 16px; }
+.detect-row:first-child { border-top: none; }
+.detect-row .conf { color: var(--accent-ink); font-size: 15px; font-weight: 600; }
+.detect-row .ts { color: var(--ink-soft); font-size: 13.5px; }
+.empty { color: var(--ink-soft); font-size: 16px; }
+
+/* ---------- controles ---------- */
+.controls-grid { display: grid; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(3, 54px); gap: 7px; }
+@media (max-width: 768px) {
+  .controls-grid { grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(3, 60px); gap: 8px; }
+}
+.ctrl-btn {
+  font-size: 24px; font-weight: bold;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 100ms var(--ease);
+  /* `none` y no `manipulation`: con manipulation el navegador sigue
+     pudiendo interpretar el toque como scroll y cancelarlo. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.ctrl-btn:active, .ctrl-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent-ink);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+.ctrl-btn {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px;
+  color: var(--ink); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 100ms, border-color 100ms, color 100ms;
+}
+.ctrl-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.ctrl-btn.active { background: var(--accent-ink); border-color: var(--accent); color: #fff; }
+.c-fwd { grid-column: 2; grid-row: 1; } .c-left { grid-column: 1; grid-row: 2; }
+.c-stop { grid-column: 2; grid-row: 2; color: var(--crit-ink); } .c-right { grid-column: 3; grid-row: 2; }
+.c-back { grid-column: 2; grid-row: 3; }
+.hint { font-size: 13.5px; color: var(--ink-soft); margin-top: 8px; line-height: 1.55; }
+.mode-btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-soft); padding: 4px 12px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.mode-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.mode-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+.slider-row { display: flex; flex-direction: column; gap: 6px; }
+.slider-row .label-row { display: flex; justify-content: space-between; font-size: 13.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.05em; }
+.slider-row .label-row .v { color: var(--accent-ink); font-weight: 600; text-transform: none; letter-spacing: 0; }
+input[type="range"] { width: 100%; cursor: pointer; -webkit-appearance: none; appearance: none;
+                      background: transparent; height: 22px; }
+input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 4px; background: var(--panel-3); border: 1px solid var(--line); }
+input[type="range"]::-moz-range-track { height: 6px; border-radius: 4px; background: var(--panel-3); border: 1px solid var(--line); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 17px; height: 17px; margin-top: -6.5px;
+    border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(22,40,28,.3); }
+input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%;
+    background: var(--accent); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(22,40,28,.3); }
+input[type="text"], select { font-family: inherit; }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.switch { position: relative; width: 42px; height: 24px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track { position: absolute; inset: 0; background: var(--line-fuerte); border-radius: 20px; cursor: pointer; transition: background 150ms; }
+.switch .track::after { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 150ms; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(18px); }
+
+/* ---------- stats ---------- */
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.stat-grid.ejes { grid-template-columns: repeat(3, 1fr); }   /* X / Y / Z en una fila */
+.stat { background: var(--panel-2); border: 2px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.stat .label { font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.stat .value { font-size: 36px; margin-top: 4px; color: var(--ink); font-weight: 650; letter-spacing: -.015em; }
+.stat .value small { font-size: 14px; color: var(--ink-soft); font-weight: 400; }
+.bar { height: 6px; background: var(--panel-3); border-radius: 4px; overflow: hidden; margin-top: 7px; }
+.bar > div { height: 100%; background: var(--accent); transition: width 300ms var(--ease); }
+.bar.warn > div { background: var(--warn); }
+.bar.crit > div { background: var(--crit); }
+
+.spark { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; position: relative; height: 66px; }
+.spark .tag { position: absolute; top: 8px; left: 11px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; z-index: 2; }
+.spark svg { width: 100%; height: 100%; display: block; }
+
+/* ---------- LIDAR / mapa ---------- */
+.lidar-wrap { position: relative; background: var(--panel-2); border-radius: 12px; border: 1px solid var(--line); overflow: hidden; min-height: 360px; }
+.lidar-wrap canvas { width: 100%; height: 100%; display: block; }
+#map-wrap { min-height: 480px; height: 65vh; margin: 0 16px; }
+#map-tools, #map-trazado { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 16px 10px; }
+#map-trazado { padding: 10px 16px 0; gap: 10px; }
+.map-tool { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 11px;
+            font-size: 14px; color: var(--ink); cursor: pointer; min-height: 36px; }
+.map-tool:hover { border-color: var(--accent); }
+.map-tool.activo { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.map-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
+.map-hint { position: absolute; top: 10px; left: 10px; right: 10px; font-size: 13px; color: var(--ink-soft);
+            background: rgba(255, 255, 255, 0.86); padding: 5px 10px; border-radius: 7px;
+            border: 1px solid var(--line); pointer-events: none; width: fit-content; }
+.lidar-caption { position: absolute; bottom: 10px; left: 10px; font-size: 13.5px; color: var(--ink-soft); background: rgba(255, 255, 255, 0.86); padding: 5px 10px; border-radius: 7px; border: 1px solid var(--line); }
+
+/* ---------- gestor de modelos ---------- */
+.model-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 8px; cursor: pointer;
+  transition: border-color 150ms var(--ease);
+}
+.model-row:hover { border-color: var(--line-fuerte); }
+.model-row.active { border-color: var(--accent); background: var(--accent-soft); }
+.model-row .name { font-size: 17px; font-weight: 600; }
+.model-row .meta { font-size: 13.5px; color: var(--ink-soft); margin-top: 2px; }
+.model-row .badge { font-size: 12px; color: #fff; background: var(--accent-ink); padding: 3px 9px; border-radius: 5px; font-weight: 700; letter-spacing: 0.04em; }
+
+.btn {
+  padding: 11px 16px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: border-color 150ms var(--ease), color 150ms var(--ease), transform 100ms var(--ease), background 150ms var(--ease);
+}
+.btn:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.btn:active { transform: scale(0.98); }
+.btn.primary { background: var(--accent-ink); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover { background: #05622a; border-color: var(--accent); color: #fff; }
+.btn.peligro { border-color: #f4b9b9; color: var(--crit-ink); }
+.btn.peligro:hover { background: var(--crit-ink); border-color: var(--crit); color: #fff; }
+.btn:disabled { cursor: default; transform: none; background: var(--panel-2);
+                border-color: var(--line); color: var(--ink-soft); font-weight: 400; }
+.btn-row { display: flex; flex-direction: column; gap: 10px; }
+
+/* ---------- registro ---------- */
+.term { font-size: 13.5px; color: var(--ink-soft); display: flex; flex-direction: column; gap: 3px; max-height: 240px; overflow-y: auto; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.term .t-time { color: var(--accent-ink); }
+.term .t-err { color: var(--crit-ink); }
+
+/* ---------- toasts ---------- */
+/* Por ENCIMA del botón STOP, nunca sobre él: un aviso tapaba la parada de
+   emergencia justo cuando algo fallaba (2026-09-30). */
+.toast-container { position: fixed; bottom: 132px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 140; max-width: 360px; }
+@media (max-width: 768px) {
+  .toast-container { left: 12px; right: 12px; bottom: 104px; max-width: none; }
+}
+.toast {
+  background: rgba(255, 255, 255, 0.97); backdrop-filter: blur(8px);
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 12px; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start;
+  box-shadow: var(--sombra-alta); animation: toast-in 320ms var(--ease);
+}
+.toast.warning { border-left-color: var(--warn); }
+.toast.error { border-left-color: var(--crit); }
+.toast .t-title { font-size: 16px; font-weight: 700; }
+.toast .t-msg { font-size: 15px; color: var(--ink-soft); margin-top: 2px; }
+@keyframes toast-in { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+.row-kv { display: flex; justify-content: space-between; align-items: center; font-size: 16px; gap: 12px; }
+.row-kv .k { color: var(--ink-soft); font-weight: 500; }
+.row-kv .v { font-weight: 600; letter-spacing: -0.5px; }
+
+/* ---------- matriz de salud ---------- */
+.health-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+.health-row .h-name { font-size: 17px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.health-row .h-detail { font-size: 13px; color: var(--ink-soft); font-weight: 400; overflow-wrap: anywhere; }
+.health-row .h-right { display: flex; align-items: center; gap: 10px; }
+.health-badge { font-size: 13px; font-weight: 700; padding: 3px 9px; border-radius: 5px; letter-spacing: 0.05em; }
+.health-badge.ok { background: var(--accent-soft); color: var(--accent-ink); }
+.health-badge.warn { background: var(--warn-soft); color: var(--warn-ink); }
+.health-badge.err { background: var(--crit-soft); color: var(--crit-ink); }
+.h-age { font-size: 13.5px; color: var(--ink-soft); }
+.health-legend { font-size: 13.5px; color: var(--ink-soft); margin-top: 10px; line-height: 1.6; }
+
+/* ---------- donuts ---------- */
+.donut-row { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 18px; }
+.donut { width: 94px; height: 94px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; background: conic-gradient(var(--accent) 0deg, var(--panel-3) 0deg); }
+.donut::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--panel); }
+.donut .d-val { position: relative; z-index: 2; font-size: 22px; font-weight: 600; }
+.donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.donut-wrap .d-label { font-size: 13px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
+
+/* ---------- parámetros ---------- */
+.param-group { margin-bottom: 18px; }
+
+/* ---------- parada de emergencia ---------- */
+.estop {
+  position: fixed; bottom: 26px; right: 26px; z-index: 150;
+  width: 88px; height: 88px; border-radius: 50%;
+  background: var(--crit-ink); border: 4px solid #fff; color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; cursor: pointer; box-shadow: 0 10px 30px -8px rgba(220, 38, 38, 0.6);
+  animation: breathe 3s ease-in-out infinite;
+}
+.estop:hover { filter: brightness(1.08); }
+/* Foco visible para quien maneja con teclado (o un mando BT en el móvil). */
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.estop:focus-visible { outline-offset: 4px; border-radius: 50%; }
+@media (max-width: 768px) {
+  .estop { width: 76px; height: 76px; bottom: 18px; right: 16px; }
+  .estop .ic { font-size: 28px; }
+}
+.estop span { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; }
+.estop .ic { font-size: 34px; }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.1); } }
+@media (prefers-reduced-motion: reduce) { .estop { animation: none; } }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="brand">
+    <div class="badge">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="9" width="16" height="11" rx="2.5"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/><circle cx="9" cy="14.5" r="1.4" fill="var(--accent)" stroke="none"/><circle cx="15" cy="14.5" r="1.4" fill="var(--accent)" stroke="none"/><path d="M9 18h6"/>
+      </svg>
+    </div>
+    <h1>AgroBot</h1>
+    <div class="sub">Unit 01 · Command</div>
+    <div class="status"><span class="dot"></span><span id="brand-status">modo manual</span></div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-btn active" data-tab="tab-dashboard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></span>Dashboard</button>
+    <button class="nav-btn" data-tab="tab-galeria"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="9" cy="9.5" r="1.7"/><path d="m3 17 5.5-5.5a2 2 0 0 1 2.8 0L18 18"/></svg></span>Galería de misión</button>
+    <button class="nav-btn" data-tab="tab-nav"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11 20 4l-7 17-2.5-7.5L3 11Z"/></svg></span>Navegación</button>
+    <button class="nav-btn" data-tab="tab-slam"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span>SLAM &amp; Telemetría</button>
+    <button class="nav-btn" data-tab="tab-ai"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.5 4.5l2 2M17.5 17.5l2 2M19.5 4.5l-2 2M6.5 17.5l-2 2"/></svg></span>Gestor de Modelos IA</button>
+    <button class="nav-btn" data-tab="tab-hw"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.7a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.4 2.7a7.6 7.6 0 0 0-2.6 1.5l-2.4-.7-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.7a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.4-2.7a7.6 7.6 0 0 0 2.6-1.5l2.4.7 2-3.4-2-1.6Z"/></svg></span>Config. Hardware</button>
+    <button class="nav-btn" data-tab="tab-params"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h9M17 6h3M4 12h3M9 12h11M4 18h13M19 18h1"/><circle cx="14.5" cy="6" r="2"/><circle cx="6.5" cy="12" r="2"/><circle cx="16.5" cy="18" r="2"/></svg></span>Parámetros</button>
+    <button class="nav-btn" data-tab="tab-sistema"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg></span>Sistema</button>
+    <a class="nav-btn" href="/training.html" target="_blank" style="text-decoration:none; color:inherit; margin-top:8px; border-top:1px solid var(--line); padding-top:14px;"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>Entrenamiento</a>
+  </div>
+  <button class="nav-colapsar" id="btn-colapsar" title="Colapsar barra lateral">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m15 6-6 6 6 6"/></svg>
+    <span>Colapsar</span>
+  </button>
+</nav>
+<div class="scrim" id="scrim"></div>
+
+<main>
+  <header class="topbar">
+    <div style="display:flex; align-items:center; min-width:0;">
+      <button class="sidebar-toggle" id="btn-menu" aria-label="Abrir menú" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <h2>AGROBOT<span class="largo"> · COMMAND</span></h2>
+    </div>
+    <div class="pills">
+      <div class="pill" id="pill-ws"><span class="dot"></span><span>enlace Jetson</span></div>
+      <div class="pill" id="pill-actuator" role="status"><span class="dot"></span><span class="pill-txt">ESP32-C3</span></div>
+      <div class="pill" id="pill-lidar" role="status"><span class="dot"></span><span class="pill-txt">LIDAR</span></div>
+      <div class="pill" id="pill-lora" role="status"><span class="dot"></span><span class="pill-txt">ESP32 LoRa</span></div>
+      <div class="pill" id="pill-seguridad" role="button" tabindex="0" title="Modo seguro"><span class="dot"></span><span class="pill-txt">Seguridad</span></div>
+      <span class="mono" id="clock" style="font-size:14px; color:var(--ink-soft);">--:--:--</span>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- ================= DASHBOARD ================= -->
+    <div class="tab active" id="tab-dashboard">
+      <!-- Barra superior: Estado de parcela + Modo + Detecciones -->
+      <div class="card barra-estado" style="margin-bottom:16px;">
+        <div>
+          <div class="row-kv" style="margin:0; border-top:none;">
+            <span class="k">CO₂</span><span class="v mono" id="k-co2-dash">—</span>
+          </div>
+        </div>
+        <div style="width:1px; height:30px; background:var(--line);"></div>
+        <div>
+          <div class="row-kv" style="margin:0; border-top:none;">
+            <span class="k">Temp</span><span class="v mono" id="k-temp-dash">—</span>
+          </div>
+        </div>
+        <div>
+          <div class="row-kv" style="margin:0; border-top:none;">
+            <span class="k">Humedad</span><span class="v mono" id="k-hum-dash">—</span>
+          </div>
+        </div>
+        <div style="width:1px; height:30px; background:var(--line);"></div>
+        <div>
+          <div class="row-kv" style="margin:0; border-top:none;">
+            <span class="k">Modo</span><span class="v mono" id="mode-status" style="color:var(--accent);">MANUAL</span>
+          </div>
+        </div>
+        <div style="width:1px; height:30px; background:var(--line);"></div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px; display:none;" id="detection-alert-emoji" aria-hidden="true">🐛</span>
+          <div>
+            <div class="row-kv" style="margin:0; border-top:none;">
+              <span class="k">Detectado</span><span class="v mono" id="detection-alert-name">—</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="width:10px; height:10px; border-radius:50%; background:var(--warn); display:none;" id="detection-led"></span>
+            <span class="mono" id="detection-conf" style="font-size:12px;">—</span>
+          </div>
+        </div>
+        <div class="dist-grupo" title="Hueco libre desde cada cara del robot, medido por el LIDAR. Rojo: no avanza hacia ese lado.">
+          <span class="k" style="color:var(--ink-soft); font-size:14px;">LIDAR</span>
+          <div class="dist-celda dist-chip" data-lado="adelante" title="Adelante"><span class="k">▲</span><span class="v mono">—</span></div>
+          <div class="dist-celda dist-chip" data-lado="atras" title="Atrás"><span class="k">▼</span><span class="v mono">—</span></div>
+          <div class="dist-celda dist-chip" data-lado="izquierda" title="Izquierda"><span class="k">◀</span><span class="v mono">—</span></div>
+          <div class="dist-celda dist-chip" data-lado="derecha" title="Derecha"><span class="k">▶</span><span class="v mono">—</span></div>
+        </div>
+      </div>
+
+      <!-- Cámara + Radar -->
+      <div class="cam-radar">
+        <div class="card cam-card" style="padding:0; overflow:hidden;">
+          <div class="video-wrap" id="video-wrap">
+            <div class="pest-banner" id="pest-banner">
+              <span id="pest-banner-text">¡Plaga detectada!</span>
+            </div>
+            <div class="video-badge"><span class="dot"></span><span id="video-badge-text">EN VIVO</span></div>
+            <img id="video" alt="video en vivo de la cámara del robot">
+          </div>
+        </div>
+        <div class="card" style="padding:0; overflow:hidden;">
+          <div style="padding:16px 16px 0;"><h3 style="margin-bottom:8px; margin-top:0;">LIDAR</h3></div>
+          <div class="lidar-wrap" style="min-height:380px;"><canvas id="radar-canvas-dashboard"></canvas><div class="lidar-caption" id="radar-caption-dashboard">sin datos</div></div>
+          <div class="slider-row" style="margin:10px 16px 16px;">
+            <div class="label-row"><span>ALCANCE</span><span class="v mono" id="radar-range-dash-val">4.0 m</span></div>
+            <input type="range" min="0.5" max="16" step="0.5" value="4" id="radar-range-dash">
+          </div>
+        </div>
+      </div>
+
+      <!-- Controles -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+          <h3 style="margin:0;">Control manual</h3>
+          <button class="btn primary" id="autonomous-mode-btn" style="background: linear-gradient(135deg, #1a9850, #5fa560); font-size: 14px;">🤖 Modo autónomo</button>
+        </div>
+            <div style="display:flex; gap:28px; flex-wrap:wrap; flex-direction: column;">
+              <div>
+              <div>
+                <div class="controls-grid">
+                  <button class="ctrl-btn c-fwd" data-v="1" data-omega="0" title="adelante">▲</button>
+                  <button class="ctrl-btn c-left" data-v="0" data-omega="1" title="girar izquierda">↺</button>
+                  <button class="ctrl-btn c-stop" data-v="0" data-omega="0" title="detener">■</button>
+                  <button class="ctrl-btn c-right" data-v="0" data-omega="-1" title="girar derecha">↻</button>
+                  <button class="ctrl-btn c-back" data-v="-1" data-omega="0" title="atrás">▼</button>
+                </div>
+                <p class="hint">un toque = un pulso (1 s adelante/atrás) · tocá varias veces para
+                  seguir · <strong>espacio</strong> o ■ para parar · flechas del teclado.</p>
+                <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                  <span style="font-size:13px; color:var(--ink-soft); margin-right:4px;">Modo:</span>
+                  <button class="mode-btn" id="mode-preciso" data-modo="preciso" title="Pulsos cortos (mitad de largos)">Preciso</button>
+                  <button class="mode-btn" id="mode-interior" data-modo="interior">Interior</button>
+                  <button class="mode-btn active" id="mode-exterior" data-modo="exterior">Exterior</button>
+                </div>
+                <div class="toggle-row" style="margin-top:8px;">
+                  <span style="font-size:14px;">Maniobra de giro</span>
+                  <label class="switch"><input type="checkbox" id="maniobra-toggle" checked><div class="track"></div></label>
+                </div>
+                <p class="hint" style="margin-top:4px;">Interior: suave, pulsos cortos, giro en su eje. Exterior: robusto, maniobra rápida con arcos cortos.</p>
+                <div class="slider-row" style="margin-top:12px;">
+                  <div class="label-row">
+                    <span>ACELERADOR</span>
+                    <span class="v mono"><span id="speed-pct">60</span>% ·
+                      <span id="speed-mps" style="color:var(--ink-soft);">—</span></span>
+                  </div>
+                  <input type="range" min="10" max="100" step="5" value="60" id="speed-scale">
+                  <p class="hint" style="margin-top:6px;">fracción de la velocidad máxima
+                    (se ajusta en Parámetros). Los botones mandan siempre el 100 % de esto.</p>
+                </div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:14px;">
+                <div class="slider-row">
+                  <div class="label-row">
+                    <span>SERVO CÁMARA</span>
+                    <span class="v mono"><span id="servo-val">0</span>° <span style="color:var(--ink-soft);">· real <span id="servo-real">—</span>°</span></span>
+                  </div>
+                  <input type="range" min="0" max="180" value="0" id="servo-slider">
+                </div>
+                <div class="toggle-row">
+                  <span style="font-size:16px;">LED de escaneo <span class="mono" style="color:var(--ink-soft); font-size:13.5px;">· real <span id="led-real">—</span></span></span>
+                  <label class="switch"><input type="checkbox" id="led-toggle"><div class="track"></div></label>
+                </div>
+                <button class="btn" id="scan-btn">Escanear planta</button>
+                <button class="btn" id="rec-video-btn">● Grabar video</button>
+                <p class="hint" id="rec-video-hint" style="display:none;"></p>
+                <p class="hint">El barrido lo hace la Jetson moviendo el servo; al terminar vuelve a lo que marca este control.
+                  Duración y recorrido se ajustan en <b>Parámetros → Autonomía</b>.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    <!-- ================= GALERÍA DE MISIÓN ================= -->
+    <div class="tab" id="tab-galeria">
+      <div class="card">
+        <div class="gallery-toolbar">
+          <h3 style="margin:0;">Capturas de la misión</h3>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <select id="gallery-filter">
+              <option value="">Todas las clases</option>
+            </select>
+            <button class="btn" id="gallery-report-btn">Descargar reporte de sesión</button>
+            <button class="btn" id="gallery-clear-btn">Vaciar galería</button>
+          </div>
+        </div>
+        <div id="gallery-grid" class="gallery-grid"></div>
+      </div>
+    </div>
+
+    <!-- ================= NAVEGACIÓN (ROS2 / Nav2) ================= -->
+    <div class="tab" id="tab-nav">
+      <div class="modo-sel">
+        <button class="modo-btn active" id="modo-manual">Manual · grabar recorrido</button>
+        <button class="modo-btn" id="modo-auto">Autónomo · patrullar</button>
+        <button class="modo-btn" id="modo-cal">Calibración · validar</button>
+      </div>
+
+      <div class="card" id="panel-manual" style="margin-bottom:16px;">
+        <h3 style="margin-top:0;">Grabar el recorrido</h3>
+        <p class="hint" style="line-height:1.55;">
+          Conducí el robot con la cruceta del Dashboard hasta cada planta o cabecera
+          de surco y pulsá <b>Grabar punto</b>. En modo autónomo el robot repetirá
+          estos puntos en ciclo.
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin:14px 0;">
+          <button class="btn primary" id="btn-wp-grabar">Grabar punto aquí</button>
+          <button class="btn peligro" id="btn-wp-borrar">Borrar recorrido</button>
+        </div>
+        <div class="toggle-row">
+          <span style="font-size:15px;">Grabar solo mientras conduzco</span>
+          <label class="switch"><input type="checkbox" id="auto-grabar"><div class="track"></div></label>
+        </div>
+        <div class="slider-row" style="margin-top:10px;">
+          <div class="label-row"><span>Un punto cada</span><span class="v mono" id="p-dist-puntos-val">50 cm</span></div>
+          <input type="range" min="20" max="500" step="10" value="50" id="p-dist-puntos">
+          <p class="hint" style="margin-top:6px;">Vale para la grabación mientras conducís y para la exploración.
+            Se aplica al soltar el control.</p>
+        </div>
+        <div class="row-kv"><span class="k">Puntos grabados</span><span class="v mono" id="patrol-n">0</span></div>
+        <ol class="mono" id="patrol-lista" style="margin:10px 0 0; padding-left:22px; font-size:13px; color:var(--ink-soft); line-height:1.7;"></ol>
+      </div>
+
+      <div class="card" id="panel-auto" style="margin-bottom:16px; display:none;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0;">Patrulla</h3>
+          <span class="pill" id="patrol-pill"><span class="dot"></span><span id="patrol-estado">detenida</span></span>
+        </div>
+        <p class="hint" style="margin:10px 0 14px; line-height:1.55;">
+          Recorre los puntos grabados en ciclo y hace un barrido de cámara cada
+          2 minutos, más uno cada vez que detecta una planta.
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+          <button class="btn primary" id="btn-patrulla-on">▶ Iniciar patrulla</button>
+          <button class="btn peligro" id="btn-patrulla-off">■ Detener</button>
+          <button class="btn" id="btn-wp-escanear">Escanear ahora</button>
+        </div>
+        <div style="border-top:1px solid var(--line); padding-top:14px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+            <b style="font-size:15px;">Exploración</b>
+            <span class="pill" id="expl-pill"><span class="dot"></span><span id="expl-estado">detenida</span></span>
+          </div>
+          <p class="hint" style="margin:8px 0 10px; line-height:1.5;">
+            Sin recorrido grabado ni mapa previo: avanza, esquiva con el LIDAR y deja que el SLAM
+            mapee. Va soltando puntos del recorrido cada 1,5 m.
+          </p>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+            <button class="btn primary" id="btn-expl-on">▶ Explorar y mapear</button>
+            <button class="btn peligro" id="btn-expl-off">■ Detener</button>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px;">
+            <span>Avances: <b class="mono" id="expl-pulsos">0</b></span>
+            <span>Giros: <b class="mono" id="expl-giros">0</b></span>
+            <span>Correcciones: <b class="mono" id="expl-correcciones">0</b></span>
+            <span>Desatascos: <b class="mono" id="expl-desatascos">0</b></span>
+            <span>Barridos: <b class="mono" id="expl-escaneos">0</b></span>
+          </div>
+          <div class="toggle-row" style="margin-top:12px;">
+            <span style="font-size:15px;">Seguir sendero
+              <span style="color:var(--ink-soft); font-size:13px;">(centrarse entre hileras)</span></span>
+            <label class="switch"><input type="checkbox" id="sendero-activo"><div class="track"></div></label>
+          </div>
+          <div class="hint mono" id="sendero-estado" style="margin-top:6px; font-size:13px;">—</div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px;">
+          <span>Puntos: <b class="mono" id="patrol-n2">0</b></span>
+          <span>Vueltas: <b class="mono" id="patrol-vueltas">0</b></span>
+          <span>Barridos: <b class="mono" id="patrol-escaneos">0</b></span>
+          <span>Próximo barrido: <b class="mono" id="patrol-proximo">—</b></span>
+        </div>
+        <div class="dist-lidar" style="margin-top:16px;">
+          <div class="dist-celda" data-lado="adelante"><div class="k">Adelante</div><div class="v mono">—</div></div>
+          <div class="dist-celda" data-lado="izquierda"><div class="k">Izquierda</div><div class="v mono">—</div></div>
+          <div class="dist-robot"><svg viewBox="0 0 46 58" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="38" height="44" rx="6"/><path d="M23 2 15 12h16Z" fill="currentColor" stroke="none"/></svg></div>
+          <div class="dist-celda" data-lado="derecha"><div class="k">Derecha</div><div class="v mono">—</div></div>
+          <div class="dist-celda" data-lado="atras"><div class="k">Atrás</div><div class="v mono">—</div></div>
+        </div>
+        <div class="dist-estado">esperando al LIDAR…</div>
+      </div>
+
+      <div class="card" id="panel-cal" style="margin-bottom:16px; display:none;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0;">Calibración de navegación</h3>
+          <span class="pill" id="cal-pill"><span class="dot"></span><span id="cal-estado">inactiva</span></span>
+        </div>
+        <p class="hint" style="margin:10px 0 14px; line-height:1.55;">
+          Conducí el robot por la habitación mientras se graban poses, LIDAR y velocidades.
+          Al terminar se analizan los datos y se valida que la navegación esté bien calibrada.
+          Después podés iniciar la patrulla sin perder el mapa.
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+          <button class="btn primary" id="btn-cal-start">▶ Iniciar calibración</button>
+          <button class="btn peligro" id="btn-cal-stop" disabled>■ Detener y analizar</button>
+        </div>
+
+        <div id="cal-live" style="display:none;">
+          <div style="border-top:1px solid var(--line); padding-top:14px; margin-bottom:14px;">
+            <b style="font-size:15px;">Datos en tiempo real</b>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px; margin-bottom:12px;">
+            <span>Poses: <b class="mono" id="cal-poses">0</b></span>
+            <span>Distancia: <b class="mono" id="cal-dist">0.000 m</b></span>
+            <span>Waypoints: <b class="mono" id="cal-wps">0</b></span>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px; margin-bottom:12px;">
+            <span>Posición: <b class="mono" id="cal-pos">x=0 y=0 θ=0°</b></span>
+          </div>
+          <div class="dist-lidar" style="margin-top:8px;">
+            <div class="dist-celda" data-lado="adelante"><div class="k">Adelante</div><div class="v mono" id="cal-lidar-f">—</div></div>
+            <div class="dist-celda" data-lado="izquierda"><div class="k">Izquierda</div><div class="v mono" id="cal-lidar-i">—</div></div>
+            <div class="dist-robot"><svg viewBox="0 0 46 58" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="38" height="44" rx="6"/><path d="M23 2 15 12h16Z" fill="currentColor" stroke="none"/></svg></div>
+            <div class="dist-celda" data-lado="derecha"><div class="k">Derecha</div><div class="v mono" id="cal-lidar-d">—</div></div>
+          </div>
+        </div>
+
+        <div id="cal-result" style="display:none;">
+          <div style="border-top:1px solid var(--line); padding-top:14px; margin-bottom:10px;">
+            <b style="font-size:15px;">Resultado del análisis</b>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px; margin-bottom:8px;">
+            <span>Poses: <b class="mono" id="cal-r-poses">0</b></span>
+            <span>Distancia: <b class="mono" id="cal-r-dist">0 m</b></span>
+            <span>Tiempo: <b class="mono" id="cal-r-tiempo">0 s</b></span>
+            <span>Vel. media: <b class="mono" id="cal-r-vel">0 m/s</b></span>
+          </div>
+          <div id="cal-mejoras" style="margin-top:10px;"></div>
+          <div style="margin-top:14px; display:flex; flex-wrap:wrap; gap:8px;">
+            <button class="btn primary" id="btn-cal-patrol">✓ Validar e iniciar patrulla</button>
+            <button class="btn" id="btn-cal-again">Repetir calibración</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0;">
+        <div style="padding:16px 16px 0; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+          <h3 style="margin-bottom:8px;">Mapa (slam_toolbox)</h3>
+          <span class="pill" id="ros-pill"><span class="dot"></span><span id="ros-pill-text">ROS…</span></span>
+        </div>
+        <div id="ros-reason" class="hint" style="display:none; margin:0 16px 12px; padding:9px 11px;
+             border:1px solid var(--warn); border-radius:8px; color:var(--warn-ink); line-height:1.45;"></div>
+        <div id="map-tools">
+          <button class="map-tool" data-herr="ver">✋ Mover</button>
+          <button class="map-tool" data-herr="surco">〰 Surco</button>
+          <button class="map-tool" data-herr="punto">🌱 Punto de escaneo</button>
+          <span class="map-sep"></span>
+          <button class="map-tool" id="map-terminar">✔ Terminar surco</button>
+          <button class="map-tool" id="map-deshacer">↶ Deshacer</button>
+          <button class="map-tool" id="map-borrar">🗑 Borrar todo</button>
+          <span class="map-sep"></span>
+          <button class="map-tool" id="map-zoom-menos" title="Alejar">−</button>
+          <button class="map-tool" id="map-zoom-mas" title="Acercar">+</button>
+          <button class="map-tool" id="map-centrar" title="Centrar en el robot">◎ Robot</button>
+        </div>
+        <div class="lidar-wrap" id="map-wrap">
+          <canvas id="map-canvas" style="touch-action:none;"></canvas>
+          <div class="map-hint" id="map-hint"></div>
+          <div class="lidar-caption" id="map-caption">sin mapa todavía</div>
+        </div>
+        <div id="map-trazado">
+          <span class="hint mono" id="map-trazado-resumen" style="margin:0;">—</span>
+          <label class="hint" style="margin:0; display:flex; align-items:center; gap:6px;">Punto cada
+            <input type="number" id="map-espaciado" value="0.5" min="0.1" max="5" step="0.1" style="width:64px;"> m</label>
+          <button class="btn" id="map-guardar">💾 Guardar trazado</button>
+          <button class="btn primary" id="map-ruta">➜ Generar ruta de patrulla</button>
+        </div>
+        <div style="padding:12px 16px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <span class="hint" style="margin:0;">Pose: <b class="mono" id="pose-source-val">—</b></span>
+          <button class="btn peligro" id="nav-reset-map-btn">Resetear mapa</button>
+        </div>
+        <div style="padding:14px 16px 16px; border-top:1px solid var(--line);">
+          <h3 style="margin:0 0 6px;">Mapas guardados</h3>
+          <p class="hint" style="line-height:1.5; margin:0 0 10px;">Guarda el mapa y su recorrido juntos. Para reusar uno,
+            <b>poné el robot en la base donde empezaste ese mapa</b> y pulsá Cargar: el SLAM sigue ampliándolo desde ahí.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+            <input id="mapa-nombre" type="text" maxlength="40" placeholder="nombre, ej. invernadero_1"
+                   style="flex:1; min-width:170px; padding:9px 11px; border:1px solid var(--line); border-radius:10px;
+                          background:var(--panel); color:var(--ink); font-size:15px;">
+            <button class="btn primary" id="mapa-guardar-btn">Guardar mapa</button>
+          </div>
+          <div id="mapas-lista" class="hint">cargando…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SLAM & TELEMETRÍA ================= -->
+    <div class="tab" id="tab-slam">
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0;">Odometría visual (webcam)</h3>
+          <span class="pill" id="ov-pill"><span class="dot"></span><span id="ov-estado">—</span></span>
+        </div>
+        <p class="hint" style="margin:10px 0 12px; line-height:1.5;">
+          Mide avance y giro siguiendo el suelo con la cámara. Se pausa sola si la cámara no mira al frente.
+          <b>Calibración:</b> mové el robot en línea recta y después girá; ajustá altura e inclinación hasta que
+          "Cámara" y "EKF" coincidan, y recién entonces activá <i>Enviar al EKF</i>
+          (el EKF la toma tras reiniciar <code>agrobot-ros</code>).
+        </p>
+        <table class="mono" style="width:100%; max-width:460px; border-collapse:collapse; font-size:14px; margin-bottom:12px;">
+          <tr style="color:var(--ink-soft);"><td></td><td style="text-align:right;">Cámara</td><td style="text-align:right;">EKF</td></tr>
+          <tr><td>Avance (m/s)</td><td style="text-align:right;" id="ov-vx">—</td><td style="text-align:right;" id="ov-ekf-vx">—</td></tr>
+          <tr><td>Giro (rad/s)</td><td style="text-align:right;" id="ov-vyaw">—</td><td style="text-align:right;" id="ov-ekf-vyaw">—</td></tr>
+          <tr style="color:var(--ink-soft);"><td>Rasgos · inliers · Hz</td><td colspan="2" style="text-align:right;" id="ov-calidad">—</td></tr>
+        </table>
+        <div class="toggle-row"><span style="font-size:15px;">Medir</span>
+          <label class="switch"><input type="checkbox" id="ov-habilitada"><div class="track"></div></label></div>
+        <div class="toggle-row"><span style="font-size:15px;">Enviar al EKF <span style="color:var(--ink-soft); font-size:13px;">(solo tras calibrar)</span></span>
+          <label class="switch"><input type="checkbox" id="ov-publicar"><div class="track"></div></label></div>
+        <div class="param-group" style="margin-top:12px;">
+          <div class="slider-row" style="margin-bottom:12px;">
+            <div class="label-row"><span>Altura del lente sobre el suelo</span><span class="v mono" id="ov-altura-val">—</span></div>
+            <input type="range" min="0.05" max="1.0" step="0.01" id="ov-altura">
+          </div>
+          <div class="slider-row" style="margin-bottom:12px;">
+            <div class="label-row"><span>Inclinación hacia abajo</span><span class="v mono" id="ov-incl-val">—</span></div>
+            <input type="range" min="-10" max="60" step="0.5" id="ov-incl">
+          </div>
+          <div class="slider-row" style="margin-bottom:12px;">
+            <div class="label-row"><span>Campo de visión horizontal</span><span class="v mono" id="ov-hfov-val">—</span></div>
+            <input type="range" min="40" max="130" step="1" id="ov-hfov">
+          </div>
+          <div class="slider-row">
+            <div class="label-row"><span>Lente por delante del centro</span><span class="v mono" id="ov-adelante-val">—</span></div>
+            <input type="range" min="-0.3" max="0.5" step="0.01" id="ov-adelante">
+          </div>
+        </div>
+        <button class="btn primary" id="ov-guardar" style="margin-top:12px;">Guardar calibración</button>
+      </div>
+      <div class="grid-2">
+        <div class="col">
+          <div class="card">
+            <h3>Telemetría ESP32 LoRa V3</h3>
+            <div class="stat-grid" style="margin-bottom:16px;">
+              <div class="stat"><div class="label">CO₂</div><div class="value mono" id="v-co2">—<small> ppm</small></div></div>
+              <div class="stat"><div class="label">Temp. SCD40</div><div class="value mono" id="v-temp-scd">—<small> °C</small></div></div>
+              <div class="stat"><div class="label">Humedad</div><div class="value mono" id="v-hum">—<small> %</small></div></div>
+            </div>
+            <div class="row-kv" id="env-missing-row" style="display:none; border-top:none; margin-bottom:10px;">
+              <span class="k" style="color:var(--warn-ink);">⚠️ Sensores sin inicializar (se envía 0.0)</span>
+              <span class="v mono" id="env-missing" style="color:var(--warn-ink);">—</span>
+            </div>
+            <div style="margin-bottom:16px;">
+              <div style="font-size:15.5px; color:var(--ink-soft);">MPU6050 VELOCIDAD ANGULAR (°/s)</div>
+              <div class="stat-grid ejes" style="margin-top:6px;">
+                <div class="stat"><div class="label">gyro X</div><div class="value mono" id="v-gyro-x">—</div></div>
+                <div class="stat"><div class="label">gyro Y</div><div class="value mono" id="v-gyro-y">—</div></div>
+                <div class="stat"><div class="label">gyro Z</div><div class="value mono" id="v-gyro-z">—</div></div>
+              </div>
+              <div style="font-size:15.5px; color:var(--ink-soft); margin-top:12px;">MPU6050 ACELERACIÓN (g)</div>
+              <div class="stat-grid ejes" style="margin-top:6px;">
+                <div class="stat"><div class="label">accel X</div><div class="value mono" id="v-accel-x">—</div></div>
+                <div class="stat"><div class="label">accel Y</div><div class="value mono" id="v-accel-y">—</div></div>
+                <div class="stat"><div class="label">accel Z</div><div class="value mono" id="v-accel-z">—</div></div>
+              </div>
+            </div>
+            <h3>Histogramas (últimos 120s)</h3>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <div class="spark"><span class="tag" style="color:var(--accent)">CO2</span><svg id="spark-co2" viewBox="0 0 100 20" preserveAspectRatio="none"></svg></div>
+              <div class="spark"><span class="tag" style="color:var(--warn)">TEMP</span><svg id="spark-temp" viewBox="0 0 100 20" preserveAspectRatio="none"></svg></div>
+              <div class="spark"><span class="tag" style="color:var(--info)">HUM</span><svg id="spark-hum" viewBox="0 0 100 20" preserveAspectRatio="none"></svg></div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card">
+            <h3>Estado del actuador (eco UDP del ESP32-C3)</h3>
+            <p class="hint" style="margin-bottom:10px;">Lo que el actuador confirma haber recibido/ejecutado — útil para detectar paquetes UDP perdidos (compará <code>seq</code> mandado vs. <code>seq_echo</code> recibido).</p>
+            <div class="stat-grid">
+              <div class="stat"><div class="label">v comandada (eco)</div><div class="value mono" id="v-cmd-echo">—<small> m/s</small></div></div>
+              <div class="stat"><div class="label">ω comandada (eco)</div><div class="value mono" id="omega-cmd-echo">—<small> rad/s</small></div></div>
+              <div class="stat"><div class="label">escaneando</div><div class="value mono" id="scanning-echo">—</div></div>
+              <div class="stat"><div class="label">seq echo</div><div class="value mono" id="seq-echo">—</div></div>
+              <div class="stat"><div class="label">servo (real)</div><div class="value mono" id="servo-echo">—</div></div>
+              <div class="stat"><div class="label">LED (real)</div><div class="value mono" id="led-echo">—</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= AI MODEL MANAGER ================= -->
+    <div class="tab" id="tab-ai">
+      <div style="max-width:800px; margin:0 auto;">
+        <div class="col">
+          <div class="card">
+            <h3>Modelos disponibles (models/)</h3>
+            <div class="btn-row" style="margin-bottom:16px;">
+              <button class="btn primary" id="refresh-models-btn">🔄 Recargar modelos</button>
+              <button class="btn" id="scan-models-btn">📁 Escanear directorio</button>
+            </div>
+            <div id="model-list"><div class="empty">Cargando…</div></div>
+          </div>
+          <div class="card" style="margin-top:16px;">
+            <h3>Modelo activo</h3>
+            <div class="stat" style="background:var(--accent-soft); border:2px solid var(--accent); padding:16px;">
+              <div class="label">En uso</div>
+              <div class="value mono" id="active-model-display" style="font-size:20px; color:var(--accent-ink);">Ninguno</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= HARDWARE CONFIG ================= -->
+    <div class="tab" id="tab-hw">
+      <div class="grid-2" style="max-width:1000px; margin:0 auto;">
+        <div class="col">
+          <div class="card">
+            <h3>Interfaces de la Jetson</h3>
+            <div class="toggle-row" style="margin-bottom:12px;">
+              <span style="font-size:16px;">Cámara (/dev/video0)</span>
+              <label class="switch"><input type="checkbox" id="camera-toggle" checked><div class="track"></div></label>
+            </div>
+            <div class="slider-row" style="margin-bottom:12px;">
+              <div class="label-row"><span>LIDAR baudrate</span></div>
+              <select id="lidar-baud" style="background:var(--panel-2); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:8px;">
+                <option>115200</option><option selected>230400</option><option>460800</option>
+              </select>
+            </div>
+            <button class="btn primary" id="hw-save-btn" style="width:100%;">Guardar configuración</button>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card">
+            <h3>Calibración del servo</h3>
+            <p class="hint" style="margin-bottom:12px;">Se suma al ángulo pedido antes de mandarlo al actuador — corrige el desalineo mecánico del montaje de la cámara.</p>
+            <div class="slider-row">
+              <div class="label-row"><span>OFFSET DEL SERVO</span><span class="v mono" id="cal-servo-val">0°</span></div>
+              <input type="range" min="-15" max="15" value="0" id="cal-servo">
+            </div>
+          </div>
+          <div class="card">
+            <h3>Bias del giroscopio (MPU6050)</h3>
+            <p class="hint" style="margin-bottom:12px;">Con el robot <strong>totalmente quieto</strong>, anota lo que marca cada eje en la pestaña SLAM &amp; Telemetría y ponlo acá: ese valor se resta de cada lectura. El eje <strong>Z</strong> es el que más importa — alimenta la estimación de rumbo, y un bias ahí es deriva de heading constante.</p>
+            <div class="slider-row" style="margin-bottom:14px;">
+              <div class="label-row"><span>BIAS GYRO X</span><span class="v mono" id="cal-gx-val">0.00 °/s</span></div>
+              <input type="range" min="-10" max="10" step="0.01" value="0" id="cal-gx">
+            </div>
+            <div class="slider-row" style="margin-bottom:14px;">
+              <div class="label-row"><span>BIAS GYRO Y</span><span class="v mono" id="cal-gy-val">0.00 °/s</span></div>
+              <input type="range" min="-10" max="10" step="0.01" value="0" id="cal-gy">
+            </div>
+            <div class="slider-row" style="margin-bottom:14px;">
+              <div class="label-row"><span>BIAS GYRO Z (rumbo)</span><span class="v mono" id="cal-gz-val">0.00 °/s</span></div>
+              <input type="range" min="-10" max="10" step="0.01" value="0" id="cal-gz">
+            </div>
+            <div class="btn-row">
+              <button class="btn" id="cal-autozero-btn">Auto-cero (usa lectura actual)</button>
+              <button class="btn primary" id="cal-save-btn">Guardar en EEPROM local</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PARÁMETROS ================= -->
+    <div class="tab" id="tab-params">
+      <div class="grid-2" style="max-width:1100px; margin:0 auto;">
+        <div class="col">
+          <div class="card">
+            <h3>Detección de plagas</h3>
+            <div class="param-group">
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Umbral de confianza (mostrar detección)</span><span class="v mono" id="p-conf-val">0.45</span></div>
+                <input type="range" min="0.1" max="0.95" step="0.01" value="0.45" id="p-conf">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>Umbral para alerta / grabar clip</span><span class="v mono" id="p-clip-val">0.60</span></div>
+                <input type="range" min="0.1" max="0.95" step="0.01" value="0.60" id="p-clip">
+              </div>
+              <div class="slider-row" style="margin-top:14px;">
+                <label class="label-row" for="p-escanear"><span>Barrido de cámara al detectar una planta</span></label>
+                <select id="p-escanear" style="width:100%; margin-top:6px; background:var(--panel-2); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-size:15px;">
+                  <option value="siempre">Siempre (también en manual)</option>
+                  <option value="autonomo">Solo en modo autónomo</option>
+                  <option value="nunca">Nunca</option>
+                </select>
+                <div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">Solo si la detección se mantiene y el robot se movió desde el último barrido.</div>
+              </div>
+            </div>
+            <button class="btn primary" id="p-detection-save">Guardar</button>
+          </div>
+
+          <div class="card">
+            <h3>Salud de tópicos (umbrales)</h3>
+            <div class="param-group">
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>WARN si no hay dato en más de</span><span class="v mono" id="p-warn-val">5 s</span></div>
+                <input type="range" min="1" max="30" step="1" value="5" id="p-warn">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>ERR si no hay dato en más de</span><span class="v mono" id="p-err-val">20 s</span></div>
+                <input type="range" min="5" max="120" step="1" value="20" id="p-err">
+              </div>
+            </div>
+            <h3 style="margin-top:18px;">Suavizado de control (rampa, no PID)</h3>
+            <p class="hint" style="margin-bottom:12px;">Sin encoder no hay error real que corregir en lazo cerrado — esto solo limita cuánto puede cambiar v/ω por segundo entre un comando y el siguiente, para evitar tirones.</p>
+            <div class="param-group">
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Aceleración lineal máx.</span><span class="v mono" id="p-accel-v-val">1.0 m/s²</span></div>
+                <input type="range" min="0.1" max="3" step="0.1" value="1.0" id="p-accel-v">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>Aceleración angular máx.</span><span class="v mono" id="p-accel-omega-val">3.0 rad/s²</span></div>
+                <input type="range" min="0.2" max="8" step="0.1" value="3.0" id="p-accel-omega">
+              </div>
+            </div>
+            <button class="btn primary" id="p-safety-save">Guardar</button>
+
+            <h3 style="margin-top:18px;">Velocidad máxima del robot</h3>
+            <p class="hint" style="margin-bottom:12px;">Techo al que corresponde el 100 % del acelerador.
+              Deben coincidir con <code>V_MAX</code> / <code>VY_MAX</code> / <code>OMEGA_MAX</code> del
+              firmware: si acá pedís más, el ESP32-C3 lo recorta en silencio y el dashboard muestra una
+              velocidad que el robot nunca alcanza.</p>
+            <div class="param-group">
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Velocidad lineal máx.</span><span class="v mono" id="p-max-v-val">0.55 m/s</span></div>
+                <input type="range" min="0.05" max="1.5" step="0.05" value="0.55" id="p-max-v">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>Velocidad angular máx.</span><span class="v mono" id="p-max-omega-val">1.5 rad/s</span></div>
+                <input type="range" min="0.1" max="4" step="0.1" value="1.5" id="p-max-omega">
+              </div>
+              <div class="slider-row" style="margin-top:14px;">
+                <div class="label-row"><span>Suavidad: empuje por ciclo</span><span class="v mono" id="p-duty-val">60 %</span></div>
+                <input type="range" min="15" max="100" step="5" value="60" id="p-duty">
+                <p class="hint" style="margin-top:6px;">Los motores no bajan del 78 % de potencia, así que para ir más lento
+                  la Jetson trocea el pulso: empuja esta fracción de cada ciclo y suelta el resto. 100 % = sin trocear.</p>
+              </div>
+              <div class="slider-row" style="margin-top:14px;">
+                <div class="label-row"><span>Suavidad: duración del ciclo</span><span class="v mono" id="p-periodo-val">0.30 s</span></div>
+                <input type="range" min="0.1" max="1" step="0.05" value="0.30" id="p-periodo">
+              </div>
+            </div>
+            <button class="btn primary" id="p-control-save">Guardar</button>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="card">
+            <h3>Frenado por LIDAR</h3>
+            <p class="hint" style="margin-bottom:12px;">Todo en centímetros y grados. Mira por sectores: un cono al frente (y su
+              espejo atrás) y un cono a cada lado. <b>Cono frontal estrecho</b> = pasa por pasillos sin frenar por las paredes;
+              ancho = ve antes las esquinas pero frena más. Corta los motores con <b>margen + deslizamiento</b> de antelación,
+              porque el robot no tiene gama lenta ni freno. El largo y el ancho solo se usan para restar media carrocería
+              (deben coincidir con el <code>footprint</code> de <code>nav2_params.yaml</code>).</p>
+            <div class="param-group">
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Cono frontal (el trasero es su espejo)</span><span class="v mono" id="p-cono-frontal-val">60°</span></div>
+                <input type="range" min="10" max="180" step="5" value="60" id="p-cono-frontal">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Cono lateral (a cada lado)</span><span class="v mono" id="p-cono-lateral-val">60°</span></div>
+                <input type="range" min="10" max="160" step="5" value="60" id="p-cono-lateral">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Hueco que deja al parar</span><span class="v mono" id="p-margen-val">26 cm</span></div>
+                <input type="range" min="2" max="100" step="1" value="26" id="p-margen">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Cuánto desliza al cortar motores</span><span class="v mono" id="p-desliz-val">40 cm</span></div>
+                <input type="range" min="0" max="150" step="5" value="40" id="p-desliz">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Largo del robot</span><span class="v mono" id="p-largo-val">40 cm</span></div>
+                <input type="range" min="20" max="120" step="1" value="40" id="p-largo">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>Ancho del robot</span><span class="v mono" id="p-ancho-val">35 cm</span></div>
+                <input type="range" min="20" max="120" step="1" value="35" id="p-ancho">
+              </div>
+            </div>
+            <button class="btn primary" id="p-slam-save" style="margin-bottom:18px;">Guardar</button>
+
+            <h3>Autonomía (modo exploración)</h3>
+            <p class="hint" style="margin-bottom:12px;">Cuánto hueco LIBRE (hasta tocar) exige el robot para decidir cada
+              maniobra. Si se para demasiado en sitios estrechos, bajá «avance libre»; si roza, subilo.</p>
+            <div class="param-group">
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Avance libre mínimo</span><span class="v mono" id="p-avance-val">100 cm</span></div>
+                <input type="range" min="30" max="300" step="5" value="100" id="p-avance">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Lado libre para girar hacia ahí</span><span class="v mono" id="p-lado-val">60 cm</span></div>
+                <input type="range" min="10" max="200" step="5" value="60" id="p-lado">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Espacio atrás para retroceder</span><span class="v mono" id="p-retro-val">50 cm</span></div>
+                <input type="range" min="10" max="200" step="5" value="50" id="p-retro">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Acelerador en autónomo</span><span class="v mono" id="p-escala-val">50 %</span></div>
+                <input type="range" min="10" max="100" step="5" value="50" id="p-escala">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Barrido de cámara cada</span><span class="v mono" id="p-escaneo-val">120 s</span></div>
+                <input type="range" min="15" max="600" step="15" value="120" id="p-escaneo">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Duración del barrido</span><span class="v mono" id="p-barrido-dur-val">10 s</span></div>
+                <input type="range" min="2" max="60" step="1" value="10" id="p-barrido-dur">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Barrido: ángulo inicial</span><span class="v mono" id="p-barrido-min-val">25°</span></div>
+                <input type="range" min="25" max="110" step="1" value="25" id="p-barrido-min">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>Barrido: ángulo final</span><span class="v mono" id="p-barrido-max-val">110°</span></div>
+                <input type="range" min="25" max="110" step="1" value="110" id="p-barrido-max">
+              </div>
+            </div>
+            <button class="btn primary" id="p-autonomia-save" style="margin-bottom:18px;">Guardar</button>
+
+            <h3>Seguir senderos</h3>
+            <p class="hint" style="margin-bottom:12px;">Mide el desvío del centro del camino de dos formas y las combina:
+              por <b>LIDAR</b> (distancia a la hilera de cada lado; con plantas bajas no las ve) y por
+              <b>cámara</b> (paja y plantas de los costados proyectadas al suelo: da el centro, el ancho y el rumbo
+              del sendero en cm). Corrige con pulsos de giro.
+              <a href="/api/sendero/vista.jpg" target="_blank">Ver lo que detecta la cámara ahora</a>.</p>
+            <div class="param-group">
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Desvío que se tolera sin corregir</span><span class="v mono" id="p-sd-tol-val">10 cm</span></div>
+                <input type="range" min="2" max="60" step="1" value="10" id="p-sd-tol">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Más lejos que esto no es hilera</span><span class="v mono" id="p-sd-pared-val">150 cm</span></div>
+                <input type="range" min="30" max="400" step="10" value="150" id="p-sd-pared">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Peso de la cámara (0 = solo LIDAR)</span><span class="v mono" id="p-sd-peso-val">50 %</span></div>
+                <input type="range" min="0" max="100" step="5" value="50" id="p-sd-peso">
+              </div>
+              <div class="toggle-row" style="margin-bottom:14px;">
+                <span style="font-size:15px;">Usar la cámara</span>
+                <label class="switch"><input type="checkbox" id="p-sd-vision" checked><div class="track"></div></label>
+              </div>
+              <div class="toggle-row" style="margin-bottom:14px;">
+                <span style="font-size:15px;">La paja seca marca el borde</span>
+                <label class="switch"><input type="checkbox" id="p-sd-paja" checked><div class="track"></div></label>
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Verde: matiz mínimo</span><span class="v mono" id="p-sd-hmin-val">30</span></div>
+                <input type="range" min="0" max="179" step="1" value="30" id="p-sd-hmin">
+              </div>
+              <div class="slider-row" style="margin-bottom:14px;">
+                <div class="label-row"><span>Verde: matiz máximo</span><span class="v mono" id="p-sd-hmax-val">90</span></div>
+                <input type="range" min="0" max="179" step="1" value="90" id="p-sd-hmax">
+              </div>
+              <div class="slider-row">
+                <div class="label-row"><span>Verde: saturación mínima</span><span class="v mono" id="p-sd-smin-val">60</span></div>
+                <input type="range" min="0" max="255" step="5" value="60" id="p-sd-smin">
+              </div>
+            </div>
+            <button class="btn primary" id="p-sendero-save" style="margin-bottom:18px;">Guardar</button>
+
+            <h3>Fusión de pose (sin encoders)</h3>
+            <div class="slider-row">
+              <div class="label-row"><span>Confianza en el giroscopio vs. velocidad comandada</span><span class="v mono" id="p-gyro-val">0.80</span></div>
+              <input type="range" min="0" max="1" step="0.05" value="0.80" id="p-gyro">
+            </div>
+            <p class="hint">0 = solo dead-reckoning (deriva con el terreno) · 1 = solo giroscopio (deriva con el tiempo). El punto medio suele ser lo más estable.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SISTEMA ================= -->
+    <div class="tab" id="tab-sistema">
+      <div class="grid-2">
+        <div class="col">
+          <div class="card">
+            <h3>Qué está vivo</h3>
+            <div id="health-list"></div>
+            <div class="health-legend"><b>ok</b> = mensaje reciente &nbsp;|&nbsp; <b>warn</b> = llegó antes pero está viejo &nbsp;|&nbsp; <b>err</b> = nunca llegó ningún mensaje.</div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card" style="padding:0;">
+            <div style="padding:16px 16px 0;"><h3 style="margin-bottom:8px;">LIDAR — vista radar</h3></div>
+            <div class="lidar-wrap" style="min-height:300px;"><canvas id="radar-canvas"></canvas><div class="lidar-caption" id="radar-caption">sin datos de LIDAR conectados</div></div>
+              <div class="slider-row" style="margin:10px 16px 16px;">
+                <div class="label-row"><span>ALCANCE DEL RADAR</span><span class="v mono" id="radar-range-val">4.0 m</span></div>
+                <input type="range" min="0.5" max="16" step="0.5" value="4" id="radar-range">
+              </div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px;">
+        <h3>Sistema (Jetson)</h3>
+        <div class="donut-row">
+          <div class="donut-wrap"><div class="donut" id="donut-cpu"><span class="d-val mono" id="donut-cpu-val">—</span></div><span class="d-label">CPU</span></div>
+          <div class="donut-wrap"><div class="donut" id="donut-ram"><span class="d-val mono" id="donut-ram-val">—</span></div><span class="d-label">RAM</span></div>
+          <div class="donut-wrap"><div class="donut" id="donut-gpu"><span class="d-val mono" id="donut-gpu-val">—</span></div><span class="d-label">GPU</span></div>
+          <div class="donut-wrap"><div class="donut" id="donut-temp"><span class="d-val mono" id="donut-temp-val">—</span></div><span class="d-label">TEMP CHIP</span></div>
+          <div class="donut-wrap" title="Tarjeta WiFi/Bluetooth: AP, cliente y BT en una sola radio. Se apaga sola hacia 100 °C."><div class="donut" id="donut-temp-wifi"><span class="d-val mono" id="donut-temp-wifi-val">—</span></div><span class="d-label">TEMP WIFI</span></div>
+        </div>
+        <div class="row-kv" style="margin-top:16px; border-top:1px solid var(--line); padding-top:14px;">
+          <span class="k" style="color:var(--ink-soft);">Pose estimada (fusión IMU + comando, sin encoders)</span>
+          <span class="v mono" id="pose-val">x=0.00 y=0.00 θ=0°</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<div class="toast-container" id="toast-container"></div>
+<button class="estop" id="estop-btn" aria-label="Parada de emergencia"><span class="ic" aria-hidden="true">✋</span><span>STOP</span></button>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  // ---------------------------------------------------------------
+  // Colores de los canvas
+  // ---------------------------------------------------------------
+  const CSSVAR = (nombre, respaldo) => {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
+    return v || respaldo;
+  };
+  const COLOR = {
+    acento: CSSVAR("--accent", "#16a34a"),
+    acentoTexto: CSSVAR("--accent-ink", "#15803d"),
+    critico: CSSVAR("--crit", "#dc2626"),
+    tinta: CSSVAR("--ink", "#16241c"),
+    tintaSuave: CSSVAR("--ink-soft", "#64796b"),
+    linea: CSSVAR("--line", "#dde7db"),
+    ocupado: "#2f4038",
+    libre: "#ffffff",
+  };
+
+  // ---------------------------------------------------------------
+  // Navegación de tabs
+  // ---------------------------------------------------------------
+  // Cajón lateral. En móvil se abre por encima del contenido; en
+  // escritorio se colapsa a iconos. La preferencia de colapso se recuerda
+  // para no tener que rehacerla en cada recarga.
+  const cuerpo = document.body;
+  const btnMenu = $("btn-menu");
+
+  function abrirNav(abrir) {
+    cuerpo.classList.toggle("nav-abierta", abrir);
+    if (btnMenu) btnMenu.setAttribute("aria-expanded", abrir ? "true" : "false");
+  }
+
+  if (btnMenu) btnMenu.addEventListener("click", () => abrirNav(!cuerpo.classList.contains("nav-abierta")));
+  if ($("scrim")) $("scrim").addEventListener("click", () => abrirNav(false));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") abrirNav(false); });
+
+  try {
+    if (localStorage.getItem("agrobot-nav-colapsada") === "1") cuerpo.classList.add("nav-colapsada");
+  } catch (_) { /* navegación privada: se arranca expandida y ya */ }
+
+  if ($("btn-colapsar")) {
+    $("btn-colapsar").addEventListener("click", () => {
+      const colapsada = cuerpo.classList.toggle("nav-colapsada");
+      try { localStorage.setItem("agrobot-nav-colapsada", colapsada ? "1" : "0"); } catch (_) {}
+      // Los canvas (mapa y radar) se dimensionan con el ancho disponible:
+      // si no se recalculan acá se quedan con el tamaño de antes del
+      // colapso y aparecen recortados o estirados.
+      resizeMap(); resizeRadar(); resizeRadarDash(); dibujarRadarSiVisible(); ajustarVideo();
+    });
+  }
+
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+      btn.classList.add("active");
+      $(btn.dataset.tab).classList.add("active");
+      abrirNav(false);   // en móvil, elegir pestaña cierra el cajón
+      if (btn.dataset.tab === "tab-sistema") { resizeRadar(); dibujarRadarSiVisible(); }
+      if (btn.dataset.tab === "tab-dashboard") { resizeRadarDash(); dibujarRadarSiVisible(); }
+      if (btn.dataset.tab === "tab-nav") resizeMap();
+      ajustarVideo();
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // Video
+  // ---------------------------------------------------------------
+  function videoVisible() {
+    return !document.hidden && $("tab-dashboard").classList.contains("active");
+  }
+  function ajustarVideo() {
+    const img = $("video");
+    if (!img) return;
+    const debe = videoVisible();
+    const conectado = !!img.getAttribute("src");
+    if (debe && !conectado) img.src = "/video?t=" + Date.now();
+    else if (!debe && conectado) { img.removeAttribute("src"); }
+  }
+  document.addEventListener("visibilitychange", () => { ajustarVideo(); dibujarRadarSiVisible(); });
+  ajustarVideo();
+
+  // ---------------------------------------------------------------
+  // Reloj
+  // ---------------------------------------------------------------
+  setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString(); }, 1000);
+
+  // ---------------------------------------------------------------
+  // Toasts
+  // ---------------------------------------------------------------
+  function toast(kind, title, message, ms = 4000) {
+    const el = document.createElement("div");
+    el.className = `toast ${kind}`;
+    el.innerHTML = `<div><div class="t-title">${title}</div><div class="t-msg">${message}</div></div>`;
+    $("toast-container").appendChild(el);
+    setTimeout(() => el.remove(), ms);
+  }
+
+  // ---------------------------------------------------------------
+  // WebSocket
+  // ---------------------------------------------------------------
+  // Registro de eventos en la consola del navegador. Lo llamaban el aviso
+  // "toast" del backend y el arranque sin que existiera: cada aviso lanzaba
+  // un ReferenceError.
+  function log(texto, esError) {
+    (esError ? console.warn : console.info)("[agrobot]", texto);
+  }
+
+  function setPill(id, state) {
+    const el = $(id);
+    el.classList.remove("ok", "warn", "crit");
+    if (state) el.classList.add(state);
+  }
+
+  let ws;
+  function connect() {
+    ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.onopen = () => { setPill("pill-ws", "ok"); };
+    ws.onclose = () => { setPill("pill-ws", "crit"); setTimeout(connect, 1000); };
+    ws.onerror = () => ws.close();
+    ws.onmessage = (evt) => handleMessage(JSON.parse(evt.data));
+  }
+  connect();
+
+  function sendControl(v, omega, scan = false) {
+    const scale = speedScale();
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "control", v, omega, scan, scale }));
+  }
+
+  const conDatos = (o) => !!o && Object.keys(o).length > 0;
+
+  function handleMessage(msg) {
+    switch (msg.type) {
+      case "snapshot":
+        if (conDatos(msg.data.env_telemetry)) updateEnv(msg.data.env_telemetry);
+        (msg.data.env_history || []).forEach(pushSpark);
+        if (conDatos(msg.data.actuator_status)) updateActuator(msg.data.actuator_status);
+        (msg.data.detections || []).forEach(addDetection);
+        setCaptures(msg.data.captures || []);
+        if (msg.data.system_stats) updateStats(msg.data.system_stats);
+        renderModels(msg.data.models || []);
+        applyConfig(msg.data.config);
+        setMissionUI(msg.data.mission_active);
+        renderHealth(msg.data.health || []);
+        updatePose(msg.data.pose);
+        setPoseSource(msg.data.pose_source);
+        setRosAvailable(msg.data.ros_available, msg.data.ros_reason);
+        applyActuatorSetpoint(msg.data.actuator_setpoint);
+        drawRadar(msg.data.lidar_scan || []);
+        if (msg.data.map) setMap(msg.data.map);
+        if (msg.data.navigation) applyNavConfig(msg.data.navigation);
+        break;
+      case "env_telemetry": updateEnv(msg.data); pushSpark({ t: Date.now()/1000, co2: msg.data.co2, temp: msg.data.tempSCD, hum: msg.data.humidity }); break;
+      case "actuator_status": updateActuator(msg.data); break;
+      case "actuator_setpoint": applyActuatorSetpoint(msg.data); break;
+      case "detection": addDetection(msg.data); break;
+      case "system_stats": updateStats(msg.data); break;
+      case "toast": toast(msg.data.kind, msg.data.title, msg.data.message); log(`${msg.data.title}: ${msg.data.message}`, msg.data.kind === "error"); break;
+      case "mission_state": setMissionUI(msg.data.active); break;
+      case "config_update": applyConfig(msg.data); if (msg.data.navigation) applyNavConfig(msg.data.navigation); break;
+      case "health": renderHealth(msg.data); break;
+      case "pose": updatePose(msg.data); setPoseSource(msg.source); pintarVelEkf(msg.data); break;
+      case "odom_webcam": pintarOdomWebcam(msg.data); break;
+      case "exploracion": pintarExploracion(msg.data); break;
+      case "exploracion_event": break;   // ya se ve en el estado
+      case "lidar_scan": lastScan = msg.data; dibujarRadarSiVisible(); break;
+      case "map": setMap(msg.data); break;
+      case "drive_mode": mostrarDriveMode(msg.data.modo); break;
+      case "lidar_distancias": pintarDistancias(msg.data); break;
+      // Llega hasta 4 veces por segundo mientras frena: se marca en el
+      // panel de distancias en vez de apilar un toast por mensaje.
+      case "obstacle_warning": marcarFrenado(msg.data); break;
+      case "seguridad": updateSeguridad(msg.data); break;
+      case "capture": addCapture(msg.data); break;
+      case "captures_cleared": setCaptures([]); break;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Galería
+  // ---------------------------------------------------------------
+  let captures = [];
+  function setCaptures(list) { captures = list.slice(); renderGallery(); }
+  function addCapture(c) { captures.unshift(c); if (captures.length > 200) captures.pop(); renderGallery(); }
+
+  function renderGallery() {
+    const grid = $("gallery-grid");
+    if (!grid) return;
+    const filterSel = $("gallery-filter");
+    const classes = [...new Set(captures.map(c => c.class))];
+    const prevVal = filterSel.value;
+    filterSel.innerHTML = `<option value="">Todas las clases</option>` + classes.map(c => `<option value="${c}">${c}</option>`).join("");
+    filterSel.value = classes.includes(prevVal) ? prevVal : "";
+    const active = filterSel.value;
+    const shown = active ? captures.filter(c => c.class === active) : captures;
+
+    if (!shown.length) {
+      grid.innerHTML = `<div class="gallery-empty" style="grid-column:1/-1;">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="9" cy="9.5" r="1.7"/><path d="m3 17 5.5-5.5a2 2 0 0 1 2.8 0L18 18"/></svg>
+        <div>Sin capturas todavía — aparecerán aquí cuando AgroBot detecte una plaga y traiga la foto.</div>
+      </div>`;
+      return;
+    }
+    grid.innerHTML = shown.map((c) => {
+      const time = new Date(c.ts * 1000).toLocaleString();
+      return `<div class="gallery-card">
+        <div class="g-img-wrap"><img src="${c.image_url}" loading="lazy" alt="${c.class}"><span class="g-conf">${(c.confidence*100).toFixed(0)}%</span></div>
+        <div class="g-body">
+          <div class="g-class">${c.class}</div>
+          <div class="g-meta"><span>${time}</span></div>
+          <a class="g-dl" href="${c.image_url}" download="agrobot_${c.id}_${c.class}.jpg">Descargar foto</a>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  $("gallery-filter").addEventListener("change", renderGallery);
+  $("gallery-clear-btn").addEventListener("click", async () => {
+    await fetch("/api/captures/clear", { method: "POST" });
+    toast("success", "Galería vaciada", "Se borraron las capturas guardadas.");
+  });
+  $("gallery-report-btn").addEventListener("click", async () => {
+    const res = await fetch("/api/session-report", { method: "POST" });
+    const report = await res.json();
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `agrobot_reporte_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  fetch("/api/captures").then(r => r.json()).then(setCaptures);
+
+  // ---------------------------------------------------------------
+  // Sistema — salud, pose, radar, donuts
+  // ---------------------------------------------------------------
+  const PILDORA_POR_TOPICO = { esp32c3: "pill-actuator", lora_v3: "pill-lora", lidar: "pill-lidar" };
+
+  // Texto corto de la píldora de la C3 según las vías vivas (BLE / WiFi),
+  // sacado del detalle de /api/health: "C3 · BLE+WiFi", "C3 · solo WiFi"…
+  function textoPildoraC3(detalle) {
+    const ble = /BLE ✓/.test(detalle || ""), wifi = /WiFi ✓/.test(detalle || "");
+    if (ble && wifi) return "C3 · BLE+WiFi";
+    if (ble) return "C3 · BLE";
+    if (wifi) return "C3 · WiFi";
+    return "ESP32-C3";
+  }
+
+  // Texto del backend dentro de innerHTML: siempre escapado.
+  function escapeHtml(txt) {
+    return String(txt).replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+  }
+
+  // Modo seguro (FDIR) y patinaje: ver modo_seguro.py / deslizamiento.py.
+  let seguridadEnganchada = false;
+  function updateSeguridad(d) {
+    const el = $("pill-seguridad");
+    if (!el || !d) return;
+    seguridadEnganchada = !!d.enganchado;
+    const nivel = d.nivel;
+    setPill("pill-seguridad", nivel === "seguro" ? "crit" : nivel === "precaucion" ? "warn" : "ok");
+    const des = d.deslizamiento || {};
+    const pat = des.patinaje ? ` · patina ${Math.round(des.patinaje * 100)} %` : "";
+    el.querySelector(".pill-txt").textContent =
+      nivel === "seguro" ? "MODO SEGURO" : nivel === "precaucion" ? "Precaución" + pat : "Seguro ✓";
+    el.title = (d.motivos && d.motivos.length ? d.motivos.join("\n") + "\n" : "Sin fallos\n") +
+      `Patinaje ${Math.round((des.patinaje || 0) * 100)} % · eficiencia ${des.eficiencia_k != null ? des.eficiencia_k : "—"}` +
+      (seguridadEnganchada ? "\nToca para rearmar" : "");
+  }
+  async function rearmarSeguridad() {
+    if (!seguridadEnganchada) return;
+    if (!confirm("¿Revisaste el robot? Rearmar el modo seguro permite volver a la autonomía.")) return;
+    try {
+      const r = await fetch("/api/seguridad/rearmar", { method: "POST" });
+      const j = await r.json();
+      updateSeguridad(j);
+    } catch (e) { toast("error", "Modo seguro", "No se pudo rearmar: " + e); }
+  }
+  {
+    const el = $("pill-seguridad");
+    if (el) {
+      el.addEventListener("click", rearmarSeguridad);
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") rearmarSeguridad(); });
+    }
+  }
+
+  function renderHealth(list) {
+    list.forEach((t) => {
+      const pid = PILDORA_POR_TOPICO[t.key];
+      if (!pid) return;
+      setPill(pid, t.status === "ok" ? "ok" : t.status === "warn" ? "warn" : "crit");
+      const el = $(pid);
+      el.title = t.detail || "";
+      if (t.key === "esp32c3") el.querySelector(".pill-txt").textContent = textoPildoraC3(t.detail);
+    });
+    const wrap = $("health-list");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    list.forEach((t) => {
+      const row = document.createElement("div");
+      row.className = "health-row";
+      // Filas sin latido (ROS, EKF) no tienen edad: "nunca" confundía con un fallo.
+      const sinLatido = t.age_s == null && t.status === "ok";
+      const ageText = sinLatido ? "" : t.age_s == null ? "nunca" : (t.age_s < 60 ? `hace ${t.age_s.toFixed(1)}s` : `hace ${Math.round(t.age_s/60)}min`);
+      const detalle = t.detail ? `<span class="h-detail">${escapeHtml(t.detail)}</span>` : "";
+      row.innerHTML = `<span class="h-name"><span>${t.icon} ${t.label}</span>${detalle}</span><span class="h-right"><span class="health-badge ${t.status}">${t.status.toUpperCase()}</span><span class="h-age mono">${ageText}</span></span>`;
+      wrap.appendChild(row);
+    });
+  }
+
+  let lastPose = { x: 0, y: 0, theta_deg: 0 };
+  function updatePose(p) {
+    if (!p) return;
+    lastPose = p;
+    const el = $("pose-val");
+    if (el) el.textContent = `x=${p.x.toFixed(2)} y=${p.y.toFixed(2)} θ=${p.theta_deg.toFixed(0)}°`;
+    drawMap();
+  }
+
+  function setPoseSource(src) {
+    const el = $("pose-source-val");
+    if (!el) return;
+    el.textContent = src === "ros_ekf" ? "EKF (robot_localization)" : "dead-reckoning (sin ROS)";
+    el.style.color = src === "ros_ekf" ? "var(--accent)" : "var(--warn)";
+  }
+
+  function setRosAvailable(available, reason) {
+    setPill("ros-pill", available ? "ok" : "warn");
+    $("ros-pill-text").textContent = available ? "ROS activo" : "ROS no disponible";
+    const banner = $("ros-reason");
+    if (available || !reason) { banner.style.display = "none"; return; }
+    banner.style.display = "block";
+    banner.textContent = reason;
+    $("ros-pill").title = reason;
+  }
+
+  // El modo de Nav2 ya no se muestra ni se cambia desde el dashboard: la
+  // pestaña Navegación quedó reducida a manual (grabar) y autónomo
+  // (patrullar). Se conserva la función porque el WebSocket la sigue
+  // llamando al llegar la config.
+  function applyNavConfig(nav) { /* sin UI asociada */ }
+
+  // ---------------------------------------------------------------
+  // Navegación — mapa de slam_toolbox + clic para mandar meta a Nav2
+  // ---------------------------------------------------------------
+  let lastMap = null;
+  const mapCanvas = $("map-canvas");
+  function resizeMap() {
+    if (!mapCanvas) return;
+    const w = mapCanvas.clientWidth, h = mapCanvas.clientHeight;
+    if (!w || !h) return;
+    mapCanvas.width = w;
+    mapCanvas.height = h;
+    drawMap();
+  }
+  // Puntos del recorrido que se dibujan sobre el mapa (los rellena la
+  // patrulla al refrescar su estado).
+  let waypointsMapa = [], waypointIndice = -1;
+
+  // El mapa se pinta UNA vez por mensaje en un lienzo interno (1 px por
+  // celda) y cada redibujo solo lo escala: antes se hacía un fillRect por
+  // celda en cada pose (8 Hz), y con el mapa grande y con zoom no alcanzaba.
+  const mapaLienzo = document.createElement("canvas");
+  let vista = { zoom: 1, dx: 0, dy: 0 };
+  let surcosMapa = [], surcoActual = null, puntosEscaneo = [], herramientaMapa = "ver";
+
+  function setMap(m) {
+    lastMap = m;
+    $("map-caption").textContent = `${m.width}×${m.height} celdas · resolución ${m.resolution.toFixed(2)} m/celda`;
+    mapaLienzo.width = m.width; mapaLienzo.height = m.height;
+    const c = mapaLienzo.getContext("2d");
+    const img = c.createImageData(m.width, m.height);
+    const libre = [255, 255, 255], ocupado = [47, 64, 56];
+    for (let row = 0; row < m.height; row++) {
+      for (let col = 0; col < m.width; col++) {
+        const v = m.data[row * m.width + col];
+        const k = ((m.height - 1 - row) * m.width + col) * 4;
+        if (v < 0) { img.data[k + 3] = 0; continue; }
+        const rgb = v > 50 ? ocupado : libre;
+        img.data[k] = rgb[0]; img.data[k + 1] = rgb[1]; img.data[k + 2] = rgb[2]; img.data[k + 3] = 255;
+      }
+    }
+    c.putImageData(img, 0, 0);
+    drawMap();
+  }
+
+  // Transformación mundo (m) <-> píxel del canvas, con zoom y desplazamiento.
+  function escalaMapa() {
+    const w = mapCanvas.width, h = mapCanvas.height, { width: gw, height: gh } = lastMap;
+    const s = Math.min(w / gw, h / gh) * vista.zoom;
+    return { s, ox: (w - gw * s) / 2 + vista.dx, oy: (h - gh * s) / 2 + vista.dy, gh };
+  }
+  function mundoAPixel(wx, wy) {
+    const { s, ox, oy, gh } = escalaMapa();
+    return [ox + ((wx - lastMap.origin_x) / lastMap.resolution) * s,
+            oy + (gh - (wy - lastMap.origin_y) / lastMap.resolution) * s];
+  }
+  function pixelAMundo(px, py) {
+    const { s, ox, oy, gh } = escalaMapa();
+    return [lastMap.origin_x + ((px - ox) / s) * lastMap.resolution,
+            lastMap.origin_y + (gh - (py - oy) / s) * lastMap.resolution];
+  }
+
+  function drawMap() {
+    if (!mapCanvas) return;
+    const ctx = mapCanvas.getContext("2d");
+    const w = mapCanvas.width, h = mapCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+    if (!lastMap) return;
+
+    const { s, ox, oy } = escalaMapa();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(mapaLienzo, ox, oy, lastMap.width * s, lastMap.height * s);
+    const aPixel = mundoAPixel;
+
+    // Surcos trazados (naranja) y el que se está trazando (verde).
+    const trazar = (pts, color, ancho, guiones) => {
+      if (pts.length < 1) return;
+      ctx.strokeStyle = color; ctx.lineWidth = ancho; ctx.setLineDash(guiones);
+      ctx.beginPath();
+      pts.forEach((p, i) => { const [x, y] = aPixel(p.x, p.y); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.stroke(); ctx.setLineDash([]);
+      pts.forEach((p) => { const [x, y] = aPixel(p.x, p.y);
+        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); });
+    };
+    surcosMapa.forEach((f, i) => {
+      trazar(f.points, "#e08a1e", 3, [8, 4]);
+      if (f.points.length) {
+        const [x, y] = aPixel(f.points[0].x, f.points[0].y);
+        ctx.fillStyle = "#b86a00"; ctx.font = "bold 12px sans-serif"; ctx.fillText(`S${i + 1}`, x + 5, y - 5);
+      }
+    });
+    if (surcoActual) trazar(surcoActual, "#1a9850", 3, []);
+    ctx.font = "18px serif"; ctx.textAlign = "center";
+    puntosEscaneo.forEach((p) => { const [x, y] = aPixel(p.x, p.y); ctx.fillText("🌱", x, y + 6); });
+    ctx.textAlign = "left";
+
+    // Puntos del recorrido sobre el mapa. El índice actual va resaltado.
+    if (waypointsMapa.length) {
+      ctx.strokeStyle = "rgba(26,152,80,0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      waypointsMapa.forEach((wp, i) => {
+        const [x, y] = aPixel(wp.x, wp.y);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      waypointsMapa.forEach((wp, i) => {
+        const [x, y] = aPixel(wp.x, wp.y);
+        const actual = i === waypointIndice;
+        ctx.beginPath();
+        ctx.arc(x, y, actual ? 5 : 3, 0, Math.PI * 2);
+        ctx.fillStyle = actual ? "#f2a33c" : "#1a9850";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1; ctx.stroke();
+      });
+    }
+
+    // El triángulo se dibuja apuntando hacia arriba (+Y del mapa, 90°):
+    // hay que girarlo (90° - rumbo) para que 0° apunte a +X.
+    const [px, py] = aPixel(lastPose.x, lastPose.y);
+    const th = (90 - lastPose.theta_deg) * Math.PI / 180;
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(th);
+    ctx.fillStyle = COLOR.acento;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(-6, 7); ctx.lineTo(6, 7); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------
+  // Trazado sobre el mapa: surcos y puntos de escaneo. Mismo almacén que el
+  // dashboard de entrenamiento (/api/training/*): lo trazado en uno se ve
+  // en el otro.
+  // ---------------------------------------------------------------
+  const pistaHerramienta = {
+    ver: "Arrastrá para mover el mapa · rueda o +/− para acercar",
+    surco: "Clic para añadir puntos al surco · doble clic o «Terminar» para cerrarlo",
+    punto: "Clic donde está la planta a escanear 🌱",
+  };
+  function elegirHerramienta(h) {
+    if (herramientaMapa === "surco" && h !== "surco") terminarSurco();
+    herramientaMapa = h;
+    document.querySelectorAll("#map-tools [data-herr]").forEach((b) =>
+      b.classList.toggle("activo", b.dataset.herr === h));
+    $("map-hint").textContent = pistaHerramienta[h];
+    mapCanvas.style.cursor = h === "ver" ? "grab" : "crosshair";
+  }
+  function terminarSurco() {
+    if (surcoActual && surcoActual.length >= 2) surcosMapa.push({ points: surcoActual });
+    surcoActual = null;
+    actualizarResumenTrazado();
+    drawMap();
+  }
+  function actualizarResumenTrazado() {
+    $("map-trazado-resumen").textContent =
+      `${surcosMapa.length} surco(s) · ${puntosEscaneo.length} punto(s) de escaneo`;
+  }
+  async function cargarTrazado() {
+    try {
+      const d = await (await fetch("/api/training/data")).json();
+      surcosMapa = d.furrows || []; puntosEscaneo = d.scan_points || [];
+      actualizarResumenTrazado(); drawMap();
+    } catch (_) {}
+  }
+  async function postJSON(url, body) {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+                                 body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`);
+    return d;
+  }
+  async function guardarTrazado() {
+    terminarSurco();
+    try {
+      await postJSON("/api/training/save_furrows", { furrows: surcosMapa });
+      await postJSON("/api/training/save_scan_points", { scan_points: puntosEscaneo });
+      toast("success", "Trazado guardado", `${surcosMapa.length} surco(s), ${puntosEscaneo.length} punto(s)`);
+    } catch (e) { toast("error", "No se guardó", e.message); }
+  }
+  async function generarRutaTrazado() {
+    terminarSurco();
+    if (!surcosMapa.length && !puntosEscaneo.length) {
+      toast("warning", "Nada que recorrer", "Trazá al menos un surco o un punto de escaneo."); return;
+    }
+    try {
+      const d = await postJSON("/api/training/generate_route", {
+        furrows: surcosMapa, scan_points: puntosEscaneo,
+        spacing_m: parseFloat($("map-espaciado").value) || 0.5 });
+      toast("success", "Ruta generada", `${d.count} punto(s) cargados en la patrulla`);
+      refrescarPatrulla();
+    } catch (e) { toast("error", "No se generó la ruta", e.message); }
+  }
+
+  if (mapCanvas) {
+    let arrastre = null;
+    const posEvento = (e) => { const r = mapCanvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    mapCanvas.addEventListener("pointerdown", (e) => {
+      if (herramientaMapa !== "ver" || !lastMap) return;
+      arrastre = { x: e.clientX, y: e.clientY, dx: vista.dx, dy: vista.dy };
+      mapCanvas.setPointerCapture(e.pointerId); mapCanvas.style.cursor = "grabbing";
+    });
+    mapCanvas.addEventListener("pointermove", (e) => {
+      if (!arrastre) return;
+      vista.dx = arrastre.dx + e.clientX - arrastre.x; vista.dy = arrastre.dy + e.clientY - arrastre.y;
+      drawMap();
+    });
+    const soltar = () => { arrastre = null; if (herramientaMapa === "ver") mapCanvas.style.cursor = "grab"; };
+    mapCanvas.addEventListener("pointerup", soltar);
+    mapCanvas.addEventListener("pointercancel", soltar);
+    mapCanvas.addEventListener("click", (e) => {
+      if (!lastMap || herramientaMapa === "ver") return;
+      const [x, y] = pixelAMundo(...posEvento(e));
+      if (herramientaMapa === "surco") (surcoActual = surcoActual || []).push({ x, y });
+      else if (herramientaMapa === "punto") puntosEscaneo.push({ x, y });
+      actualizarResumenTrazado(); drawMap();
+    });
+    mapCanvas.addEventListener("dblclick", (e) => { if (herramientaMapa === "surco") { e.preventDefault(); terminarSurco(); } });
+    // Zoom hacia el cursor: el punto bajo el ratón se queda quieto.
+    const zoomEn = (factor, px, py) => {
+      const z = Math.min(12, Math.max(1, vista.zoom * factor)), f = z / vista.zoom;
+      const cx = mapCanvas.width / 2, cy = mapCanvas.height / 2;
+      vista.dx = (vista.dx + cx - px) * f - cx + px; vista.dy = (vista.dy + cy - py) * f - cy + py;
+      vista.zoom = z;
+      if (z === 1) vista.dx = vista.dy = 0;
+      drawMap();
+    };
+    mapCanvas.addEventListener("wheel", (e) => {
+      e.preventDefault(); zoomEn(e.deltaY < 0 ? 1.2 : 1 / 1.2, ...posEvento(e));
+    }, { passive: false });
+    document.querySelectorAll("#map-tools [data-herr]").forEach((b) =>
+      b.addEventListener("click", () => elegirHerramienta(b.dataset.herr)));
+    $("map-zoom-mas").addEventListener("click", () => zoomEn(1.3, mapCanvas.width / 2, mapCanvas.height / 2));
+    $("map-zoom-menos").addEventListener("click", () => zoomEn(1 / 1.3, mapCanvas.width / 2, mapCanvas.height / 2));
+    $("map-centrar").addEventListener("click", () => {
+      if (!lastMap) return;
+      const [px, py] = mundoAPixel(lastPose.x, lastPose.y);
+      vista.dx += mapCanvas.width / 2 - px; vista.dy += mapCanvas.height / 2 - py; drawMap();
+    });
+    $("map-terminar").addEventListener("click", terminarSurco);
+    $("map-deshacer").addEventListener("click", () => {
+      if (surcoActual && surcoActual.length) surcoActual.pop();
+      else if (herramientaMapa === "punto" && puntosEscaneo.length) puntosEscaneo.pop();
+      else if (surcosMapa.length) surcosMapa.pop();
+      else puntosEscaneo.pop();
+      actualizarResumenTrazado(); drawMap();
+    });
+    $("map-borrar").addEventListener("click", () => {
+      if (!confirm("¿Borrar todos los surcos y puntos de escaneo trazados? (se guarda al pulsar Guardar)")) return;
+      surcosMapa = []; puntosEscaneo = []; surcoActual = null; actualizarResumenTrazado(); drawMap();
+    });
+    $("map-guardar").addEventListener("click", guardarTrazado);
+    $("map-ruta").addEventListener("click", generarRutaTrazado);
+    elegirHerramienta("ver");
+    cargarTrazado();
+  }
+  window.addEventListener("resize", resizeMap);
+
+  // El clic en el mapa mandaba al robot a ese punto. Se quitó el 2026-09-17:
+  // la pestaña quedó en manual (grabar) y autónomo (patrullar/explorar), y un
+  // clic accidental sobre el mapa arrancaba el robot sin avisar.
+
+  // ---------------------------------------------------------------
+  // Patrulla autónoma
+  // ---------------------------------------------------------------
+  // Modo manual / autónomo. Son los dos únicos modos: en manual se graba
+  // el recorrido conduciendo, en autónomo el robot lo repite solo.
+  function ponerModo(modo) {
+    $("modo-manual").classList.toggle("active", modo === "manual");
+    $("modo-auto").classList.toggle("active", modo === "auto");
+    $("modo-cal").classList.toggle("active", modo === "cal");
+    $("panel-manual").style.display = modo === "manual" ? "" : "none";
+    $("panel-auto").style.display = modo === "auto" ? "" : "none";
+    $("panel-cal").style.display = modo === "cal" ? "" : "none";
+  }
+  if ($("modo-manual")) {
+    $("modo-manual").addEventListener("click", () => ponerModo("manual"));
+    $("modo-auto").addEventListener("click", () => ponerModo("auto"));
+    $("modo-cal").addEventListener("click", () => ponerModo("cal"));
+  }
+
+  function pintarPatrulla(p) {
+    if (!p || !$("patrol-estado")) return;
+    const wps = p.waypoints || [];
+    $("patrol-estado").textContent = p.estado || "detenida";
+    $("patrol-pill").className = "pill" + (p.activo ? " ok" : "");
+    $("patrol-n").textContent = wps.length;
+    $("patrol-n2").textContent = wps.length;
+    $("patrol-vueltas").textContent = p.vueltas ?? 0;
+    $("patrol-escaneos").textContent = p.escaneos ?? 0;
+    $("patrol-proximo").textContent = p.activo ? Math.round(p.proximo_escaneo_s) + " s" : "—";
+    $("patrol-lista").innerHTML = wps.length
+      ? wps.map((w, i) => `<li${i === p.indice && p.activo ? ' style="color:var(--accent-ink);font-weight:600"' : ""}>x=${w.x.toFixed(2)}  y=${w.y.toFixed(2)}</li>`).join("")
+      : '<li style="list-style:none; margin-left:-22px;">Sin puntos todavía.</li>';
+    $("btn-patrulla-on").disabled = p.activo || wps.length === 0;
+    $("btn-patrulla-off").disabled = !p.activo;
+    if ($("auto-grabar") !== document.activeElement) $("auto-grabar").checked = !!p.auto_activa;
+    // los puntos se dibujan sobre el mapa de la pestaña Navegación
+    waypointsMapa = wps;
+    waypointIndice = p.activo ? p.indice : -1;
+    drawMap();
+  }
+
+  // ---------------------------------------------------------------
+  // Distancias del LIDAR (hay dos paneles: Dashboard y Navegación)
+  // ---------------------------------------------------------------
+  let ultimasDistanciasT = 0;
+  let frenadoHasta = 0;
+  let textoFrenado = "";
+  const nombreLado = { adelante: "adelante", atras: "atrás", izquierda: "a la izquierda", derecha: "a la derecha" };
+
+  function pintarDistancias(d) {
+    ultimasDistanciasT = Date.now();
+    const umbral = d.umbral_cm ?? 66;
+    document.querySelectorAll(".dist-celda").forEach((celda) => {
+      const valor = d[celda.dataset.lado];
+      celda.classList.remove("ok", "aviso", "peligro");
+      if (valor == null) {
+        celda.querySelector(".v").textContent = "libre";
+        celda.classList.add("ok");
+        return;
+      }
+      celda.querySelector(".v").textContent = valor + " cm";
+      celda.classList.add(valor <= umbral ? "peligro" : valor <= umbral + 35 ? "aviso" : "ok");
+    });
+    pintarEstadoDistancias();
+  }
+
+  function marcarFrenado(aviso) {
+    frenadoHasta = Date.now() + 700;
+    textoFrenado = aviso.motivo === "lidar_sin_datos"
+      ? "LIDAR sin datos: no avanza ni retrocede (solo gira)"
+      : `Frenando: obstáculo ${nombreLado[aviso.lado] || ""} a ${Math.round(aviso.distancia_m * 100)} cm`;
+    pintarEstadoDistancias();
+  }
+
+  function pintarEstadoDistancias() {
+    const sinDatos = Date.now() - ultimasDistanciasT > 1500;
+    const frenando = Date.now() < frenadoHasta;
+    document.querySelectorAll(".dist-estado").forEach((el) => {
+      el.classList.toggle("frenando", frenando || (sinDatos && ultimasDistanciasT > 0));
+      el.textContent = frenando ? textoFrenado
+        : sinDatos ? (ultimasDistanciasT ? "LIDAR sin datos — revisá el cable USB" : "esperando al LIDAR…")
+        : "LIDAR midiendo";
+    });
+    if (sinDatos) {
+      document.querySelectorAll(".dist-celda").forEach((c) => {
+        c.classList.remove("ok", "aviso", "peligro");
+        c.querySelector(".v").textContent = "—";
+      });
+    }
+  }
+  setInterval(pintarEstadoDistancias, 500);
+
+  function refrescarPatrulla() {
+    fetch("/api/patrol").then(r => r.ok ? r.json() : null).then(pintarPatrulla).catch(() => {});
+  }
+
+  if ($("btn-wp-grabar")) {
+    $("btn-wp-grabar").addEventListener("click", async () => {
+      const res = await fetch("/api/patrol/record", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) toast("success", "Punto grabado", `El recorrido tiene ${d.total} punto(s).`);
+      else toast("warning", "No se pudo grabar", d.error || "error desconocido");
+      refrescarPatrulla();
+    });
+
+    $("btn-wp-escanear").addEventListener("click", () => {
+      fetch("/api/patrol/scan", { method: "POST" });
+      toast("success", "Barrido manual", "El robot se detiene y barre 10 segundos.");
+    });
+
+    // Arrancar/parar el modo autónomo. Mismo endpoint que el botón grande
+    // del Dashboard, para que no haya dos caminos que hagan cosas distintas.
+    $("btn-patrulla-on").addEventListener("click", async () => {
+      const res = await fetch("/api/mission/start", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) toast("warning", "No se pudo arrancar", d.message || "error desconocido");
+      refrescarPatrulla();
+    });
+
+    $("btn-patrulla-off").addEventListener("click", async () => {
+      await fetch("/api/mission/stop", { method: "POST" });
+      refrescarPatrulla();
+    });
+
+    $("btn-wp-borrar").addEventListener("click", async () => {
+      if (!confirm("¿Borrar todo el recorrido grabado?")) return;
+      const res = await fetch("/api/patrol/clear", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) toast("warning", "No se pudo borrar", d.error || "error desconocido");
+      refrescarPatrulla();
+    });
+
+    // Cada 2 s alcanza: lo único que corre es la cuenta atrás del barrido.
+    setInterval(refrescarPatrulla, 2000);
+    refrescarPatrulla();
+  }
+
+  $("nav-reset-map-btn").addEventListener("click", async () => {
+    const n = parseInt($("patrol-n").textContent, 10) || 0;
+    const aviso = n
+      ? `\n\nTambién se borran los ${n} punto(s) del recorrido: son coordenadas del mapa viejo y mandarían al robot a sitios equivocados.`
+      : "";
+    if (!confirm("¿Borrar el mapa y empezar de cero desde donde está el robot?" + aviso)) return;
+    const btn = $("nav-reset-map-btn");
+    btn.disabled = true; btn.textContent = "Reseteando…";
+    try {
+      // Éxito y fallo de ROS los anuncia el backend por WebSocket; el 409
+      // (patrulla en marcha) no, porque ni llega a intentarlo.
+      const res = await fetch("/api/nav/reset_map", { method: "POST" });
+      if (res.status === 409) {
+        const d = await res.json().catch(() => ({}));
+        toast("warning", "No se reseteó", d.error || "Patrulla en marcha.");
+      }
+    } catch (_) {
+      toast("error", "Sin conexión", "No llegó la orden a la Jetson.");
+    } finally {
+      btn.disabled = false; btn.textContent = "Resetear mapa";
+      refrescarPatrulla();
+    }
+  });
+
+  // ---------------------------------------------------------------
+  // Mapas con nombre
+  // ---------------------------------------------------------------
+  function escaparHTML(t) {
+    return String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  async function refrescarMapas() {
+    const cont = $("mapas-lista");
+    try {
+      const { mapas } = await fetch("/api/mapas").then((r) => r.json());
+      if (!mapas.length) { cont.textContent = "Todavía no hay mapas guardados."; return; }
+      cont.innerHTML = mapas.map((m) => `
+        <div class="row-kv" style="align-items:center; gap:10px; padding:8px 0;">
+          <span class="k" style="color:var(--ink);"><b>${escaparHTML(m.nombre)}</b>
+            <span class="mono" style="color:var(--ink-soft); font-size:12px;">
+              · ${new Date(m.guardado * 1000).toLocaleString()} · ${m.puntos} pto(s) · ${(m.peso_kb / 1024).toFixed(1)} MB</span></span>
+          <button class="btn" data-cargar="${escaparHTML(m.nombre)}">Cargar</button>
+        </div>`).join("");
+      cont.querySelectorAll("[data-cargar]").forEach((btn) => btn.addEventListener("click", () => cargarMapa(btn.dataset.cargar, btn)));
+    } catch (_) {
+      cont.textContent = "No se pudo leer la lista de mapas.";
+    }
+  }
+
+  async function guardarMapa(sobrescribir = false) {
+    const nombre = $("mapa-nombre").value.trim();
+    if (!nombre) { toast("warning", "Falta el nombre", "Escribí un nombre para el mapa."); return; }
+    const btn = $("mapa-guardar-btn");
+    btn.disabled = true; btn.textContent = "Guardando…";
+    try {
+      const res = await fetch("/api/mapas/guardar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre, sobrescribir }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.existe && confirm(`Ya hay un mapa «${nombre}». ¿Reemplazarlo?`)) {
+        btn.disabled = false; btn.textContent = "Guardar mapa";
+        return guardarMapa(true);
+      }
+      if (!res.ok && !d.existe) toast("error", "No se guardó", d.error || `HTTP ${res.status}`);
+      if (res.ok) $("mapa-nombre").value = "";
+    } catch (_) {
+      toast("error", "Sin conexión", "No llegó la orden a la Jetson.");
+    } finally {
+      btn.disabled = false; btn.textContent = "Guardar mapa";
+      refrescarMapas();
+    }
+  }
+
+  async function cargarMapa(nombre, btn) {
+    if (!confirm(`¿Cargar «${nombre}»?\n\nEl robot tiene que estar en la BASE donde empezaste ese mapa. ` +
+                 `Se reemplazan el mapa actual y el recorrido de patrulla.`)) return;
+    btn.disabled = true; btn.textContent = "Cargando…";
+    try {
+      const res = await fetch("/api/mapas/cargar", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) toast("error", "No se cargó", d.error || `HTTP ${res.status}`);
+    } catch (_) {
+      toast("error", "Sin conexión", "No llegó la orden a la Jetson.");
+    } finally {
+      btn.disabled = false; btn.textContent = "Cargar";
+      refrescarPatrulla();
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Exploración autónoma
+  // ---------------------------------------------------------------
+  function pintarExploracion(d) {
+    $("expl-estado").textContent = d.estado || "detenida";
+    $("expl-pill").className = "pill" + (d.activo ? " ok" : "");
+    $("expl-pulsos").textContent = d.pulsos;
+    $("expl-giros").textContent = d.giros;
+    $("expl-correcciones").textContent = d.correcciones ?? 0;
+    $("expl-desatascos").textContent = d.desatascos;
+    if (d.sendero) {
+      const s = d.sendero;
+      $("sendero-estado").textContent =
+        `${s.estado} · LIDAR ${s.error_lidar_cm ?? "—"} cm · cámara ${s.error_vision_cm ?? "—"} cm` +
+        (s.sendero_rumbo_deg != null ? ` (rumbo ${s.sendero_rumbo_deg}°, ancho ${s.sendero_ancho_cm ?? "—"} cm)` : "") +
+        ` · ${s.vision}`;
+    }
+    $("expl-escaneos").textContent = d.escaneos;
+    $("btn-expl-on").disabled = !!d.activo;
+    $("btn-expl-off").disabled = !d.activo;
+  }
+
+  $("btn-expl-on").addEventListener("click", async () => {
+    if (!confirm("El robot va a moverse solo: avanza, gira y esquiva.\n\n¿Está en el suelo y con espacio alrededor?")) return;
+    const res = await fetch("/api/exploracion/start", { method: "POST" });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) toast("warning", "No se pudo explorar", d.error || d.message || `HTTP ${res.status}`);
+  });
+  $("btn-expl-off").addEventListener("click", () => fetch("/api/exploracion/stop", { method: "POST" }));
+
+  // ---------------------------------------------------------------
+  // Calibración de navegación
+  // ---------------------------------------------------------------
+  let _calInterval = null;
+
+  function pintarCal(d) {
+    if (!d || !$("cal-estado")) return;
+    const activo = !!d.activo;
+    $("cal-estado").textContent = activo ? "grabando" : "inactiva";
+    $("cal-pill").className = "pill" + (activo ? " ok" : "");
+    $("btn-cal-start").disabled = activo;
+    $("btn-cal-stop").disabled = !activo;
+    $("cal-live").style.display = activo ? "" : "none";
+    if (activo) {
+      $("cal-poses").textContent = d.poses ?? 0;
+      $("cal-dist").textContent = (d.distancia_m ?? 0).toFixed(3) + " m";
+      $("cal-wps").textContent = d.waypoints ?? 0;
+      $("cal-pos").textContent = `x=${(d.pose_x ?? 0).toFixed(2)} y=${(d.pose_y ?? 0).toFixed(2)} θ=${(d.pose_theta ?? 0).toFixed(0)}°`;
+      $("cal-lidar-f").textContent = d.frontal_cm != null ? d.frontal_cm + " cm" : "—";
+      $("cal-lidar-i").textContent = d.izq_cm != null ? d.izq_cm + " cm" : "—";
+      $("cal-lidar-d").textContent = d.der_cm != null ? d.der_cm + " cm" : "—";
+    }
+  }
+
+  function pintarResultadoCal(d) {
+    $("cal-result").style.display = "";
+    $("cal-r-poses").textContent = d.poses_count ?? 0;
+    $("cal-r-dist").textContent = (d.distancia_recorrida_m ?? 0).toFixed(2) + " m";
+    $("cal-r-tiempo").textContent = (d.tiempo_total_s ?? 0).toFixed(0) + " s";
+    $("cal-r-vel").textContent = (d.velocidad_promedio_ms ?? 0).toFixed(3) + " m/s";
+    const mejoras = d.mejoras || [];
+    const wrap = $("cal-mejoras");
+    if (!mejoras.length) {
+      wrap.innerHTML = '<div style="color:var(--accent); font-weight:600;">✓ Navegación calibrada correctamente — no hay mejoras críticas.</div>';
+    } else {
+      wrap.innerHTML = mejoras.map(m =>
+        `<div style="margin-bottom:8px; padding:8px 10px; border-radius:8px; border:1px solid ${m.severidad === 'ALTA' ? 'var(--crit)' : 'var(--warn)'};">
+          <div style="font-weight:600; color:${m.severidad === 'ALTA' ? 'var(--crit)' : 'var(--warn)'};">[${m.severidad}] ${m.area}</div>
+          <div style="font-size:13px; margin-top:4px;">${m.problema}</div>
+          <div style="font-size:13px; color:var(--ink-soft); margin-top:2px;">→ ${m.recomendacion}</div>
+        </div>`
+      ).join("");
+    }
+  }
+
+  function refrescarCal() {
+    fetch("/api/nav_cal/status").then(r => r.ok ? r.json() : null).then(d => { if (d) pintarCal(d); }).catch(() => {});
+  }
+
+  $("btn-cal-start").addEventListener("click", async () => {
+    $("cal-result").style.display = "none";
+    const res = await fetch("/api/nav_cal/start", { method: "POST" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast("warning", "No se pudo iniciar", d.error || "error desconocido");
+      return;
+    }
+    if (!_calInterval) _calInterval = setInterval(refrescarCal, 1000);
+    refrescarCal();
+  });
+
+  $("btn-cal-stop").addEventListener("click", async () => {
+    $("btn-cal-stop").disabled = true;
+    $("btn-cal-stop").textContent = "Analizando…";
+    try {
+      const res = await fetch("/api/nav_cal/stop", { method: "POST" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast("warning", "Error", d.error || "error desconocido");
+        return;
+      }
+      const d = await res.json();
+      pintarCal({ activo: false });
+      pintarResultadoCal(d);
+      if (_calInterval) { clearInterval(_calInterval); _calInterval = null; }
+    } finally {
+      $("btn-cal-stop").textContent = "■ Detener y analizar";
+    }
+  });
+
+  $("btn-cal-patrol").addEventListener("click", async () => {
+    const n = parseInt($("patrol-n").textContent, 10) || 0;
+    if (!n) {
+      toast("warning", "Sin recorrido", "Grabá puntos primero en el modo Manual antes de patrullar.");
+      return;
+    }
+    const res = await fetch("/api/mission/start", { method: "POST" });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) {
+      toast("success", "Patrulla iniciada", d.message || "navegando");
+      ponerModo("auto");
+    } else {
+      toast("warning", "No se pudo arrancar", d.message || "error");
+    }
+    refrescarPatrulla();
+  });
+
+  $("btn-cal-again").addEventListener("click", () => {
+    $("cal-result").style.display = "none";
+    $("btn-cal-start").click();
+  });
+
+  // `change` y no `input`: guardar en cada píxel del arrastre sería un POST
+  // por movimiento del dedo.
+  function aplicarConfigAutonomia(a) {
+    if ($("sendero-activo") !== document.activeElement) $("sendero-activo").checked = !!a.sendero_activo;
+    if ($("p-sd-vision") !== document.activeElement) $("p-sd-vision").checked = !!a.sendero_vision;
+    if ($("p-sd-paja") !== document.activeElement) $("p-sd-paja").checked = a.sendero_paja !== false;
+    const pares = [["p-dist-puntos", a.distancia_puntos_cm], ["p-avance", a.avance_libre_cm],
+                   ["p-lado", a.lado_libre_cm], ["p-retro", a.retroceso_libre_cm],
+                   ["p-escala", Math.round(a.escala_velocidad * 100)],
+                   ["p-escaneo", a.escaneo_periodo_s],
+                   ["p-barrido-dur", a.escaneo_duracion_s],
+                   ["p-barrido-min", a.escaneo_angulo_min], ["p-barrido-max", a.escaneo_angulo_max],
+                   ["p-sd-tol", a.sendero_tolerancia_cm], ["p-sd-pared", a.sendero_pared_max_cm],
+                   ["p-sd-peso", Math.round(a.sendero_vision_peso * 100)],
+                   ["p-sd-hmin", a.sendero_verde_h_min], ["p-sd-hmax", a.sendero_verde_h_max],
+                   ["p-sd-smin", a.sendero_verde_s_min]];
+    for (const [id, v] of pares) {
+      if ($(id) !== document.activeElement) { $(id).value = v; liveSliders[id](v); }
+    }
+  }
+
+  $("p-autonomia-save").addEventListener("click", () => saveParams("autonomia", {
+    avance_libre_cm: parseFloat($("p-avance").value),
+    lado_libre_cm: parseFloat($("p-lado").value),
+    retroceso_libre_cm: parseFloat($("p-retro").value),
+    escala_velocidad: parseFloat($("p-escala").value) / 100,
+    escaneo_periodo_s: parseFloat($("p-escaneo").value),
+    escaneo_duracion_s: parseFloat($("p-barrido-dur").value),
+    escaneo_angulo_min: parseFloat($("p-barrido-min").value),
+    escaneo_angulo_max: parseFloat($("p-barrido-max").value),
+  }));
+
+  $("p-sendero-save").addEventListener("click", () => saveParams("autonomia", {
+    sendero_tolerancia_cm: parseFloat($("p-sd-tol").value),
+    sendero_pared_max_cm: parseFloat($("p-sd-pared").value),
+    sendero_vision_peso: parseFloat($("p-sd-peso").value) / 100,
+    sendero_vision: $("p-sd-vision").checked,
+    sendero_paja: $("p-sd-paja").checked,
+    sendero_verde_h_min: parseFloat($("p-sd-hmin").value),
+    sendero_verde_h_max: parseFloat($("p-sd-hmax").value),
+    sendero_verde_s_min: parseFloat($("p-sd-smin").value),
+  }));
+  $("sendero-activo").addEventListener("change", (e) =>
+    saveParams("autonomia", { sendero_activo: e.target.checked }));
+
+  $("p-dist-puntos").addEventListener("change", (e) =>
+    saveParams("autonomia", { distancia_puntos_cm: parseFloat(e.target.value) }));
+
+  $("auto-grabar").addEventListener("change", async (e) => {
+    const res = await fetch("/api/patrol/auto", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activa: e.target.checked }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast("warning", "No se pudo grabar", d.error || `HTTP ${res.status}`);
+      e.target.checked = false;
+    }
+    refrescarPatrulla();
+  });
+
+  $("mapa-guardar-btn").addEventListener("click", () => guardarMapa());
+  $("mapa-nombre").addEventListener("keydown", (e) => { if (e.key === "Enter") guardarMapa(); });
+  refrescarMapas();
+
+  function setDonut(id, valId, value, unit) {
+    const donut = $(id);
+    if (!donut || value == null) { if(donut) donut.style.background = "conic-gradient(var(--line) 0deg, var(--line) 0deg)"; $(valId).textContent = "—"; return; }
+    const deg = Math.max(0, Math.min(100, value)) * 3.6;
+    const color = value > 90 ? "var(--crit)" : value > 70 ? "var(--warn)" : "var(--accent)";
+    donut.style.background = `conic-gradient(${color} ${deg}deg, var(--line) ${deg}deg)`;
+    $(valId).textContent = value.toFixed(0) + unit;
+  }
+
+  const radarCanvas = $("radar-canvas");
+  const radarCanvasDash = $("radar-canvas-dashboard");
+  let lastScan = [];
+
+  function resizeRadar() {
+    if (!radarCanvas) return;
+    const w = radarCanvas.clientWidth, h = radarCanvas.clientHeight;
+    if (!w || !h) return;
+    if (radarCanvas.width === w && radarCanvas.height === h) return;
+    radarCanvas.width = w;
+    radarCanvas.height = h;
+    drawRadar(lastScan, radarCanvas);
+  }
+
+  function resizeRadarDash() {
+    if (!radarCanvasDash) return;
+    const w = radarCanvasDash.clientWidth, h = radarCanvasDash.clientHeight;
+    if (!w || !h) return;
+    if (radarCanvasDash.width === w && radarCanvasDash.height === h) return;
+    radarCanvasDash.width = w;
+    radarCanvasDash.height = h;
+    drawRadar(lastScan, radarCanvasDash);
+  }
+
+  let radarRangeM = 4;
+  let radarRangeDashM = 4;
+
+  function dibujarRadarSiVisible() {
+    if (radarVisible()) drawRadar(lastScan, radarCanvas);
+    if (dashboardVisible()) drawRadar(lastScan, radarCanvasDash);
+  }
+  function radarVisible() {
+    return !document.hidden && $("tab-sistema").classList.contains("active");
+  }
+  function dashboardVisible() {
+    return !document.hidden && $("tab-dashboard").classList.contains("active");
+  }
+
+  function drawRadar(points, canvas) {
+    if (!canvas) return;
+    if (points) lastScan = points;
+    const w = canvas.width, h = canvas.height;
+    if (!w || !h) return;
+    const ctx = canvas.getContext("2d");
+    const cx = w / 2, cy = h / 2, maxR = Math.min(w, h) / 2 - 14;
+    const isDash = canvas === radarCanvasDash;
+    const rangeM = isDash ? radarRangeDashM : radarRangeM;
+    const captionEl = isDash ? $("radar-caption-dashboard") : $("radar-caption");
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = COLOR.linea;
+    ctx.fillStyle = COLOR.tintaSuave;
+    ctx.font = "10px ui-monospace, monospace";
+    ctx.textAlign = "left";
+    [0.25, 0.5, 0.75, 1].forEach((f) => {
+      ctx.beginPath(); ctx.arc(cx, cy, maxR * f, 0, Math.PI*2); ctx.stroke();
+      ctx.fillText((rangeM * f).toFixed(1) + " m", cx + 3, cy - maxR * f - 2);
+    });
+    ctx.beginPath(); ctx.moveTo(cx, cy - maxR); ctx.lineTo(cx, cy + maxR); ctx.moveTo(cx - maxR, cy); ctx.lineTo(cx + maxR, cy); ctx.stroke();
+    ctx.fillStyle = COLOR.acento;
+    ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx - 6, cy + 6); ctx.lineTo(cx + 6, cy + 6); ctx.closePath(); ctx.fill();
+
+    const validos = lastScan.filter(p => p.distance_m > 0);
+    if (!validos.length) {
+      if (captionEl) captionEl.textContent = "sin datos de LIDAR conectados";
+      return;
+    }
+    let fuera = 0;
+    ctx.fillStyle = COLOR.critico;
+    validos.forEach((p) => {
+      let r = (p.distance_m / rangeM) * maxR;
+      if (r > maxR) { r = maxR; fuera++; }
+      const rad = (p.angle_deg - 90) * Math.PI / 180;
+      const x = cx + r * Math.cos(rad), y = cy + r * Math.sin(rad);
+      ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2); ctx.fill();
+    });
+    const cerca = Math.min(...validos.map(p => p.distance_m));
+    if (captionEl) {
+      captionEl.textContent =
+        `${validos.length} puntos · más cercano ${cerca.toFixed(2)} m` +
+        (fuera ? ` · ${fuera} fuera de ${rangeM} m` : "");
+    }
+  }
+
+  $("radar-range").addEventListener("input", (e) => {
+    radarRangeM = parseFloat(e.target.value);
+    $("radar-range-val").textContent = radarRangeM.toFixed(1) + " m";
+    drawRadar(lastScan, radarCanvas);
+  });
+
+  $("radar-range-dash").addEventListener("input", (e) => {
+    radarRangeDashM = parseFloat(e.target.value);
+    $("radar-range-dash-val").textContent = radarRangeDashM.toFixed(1) + " m";
+    drawRadar(lastScan, radarCanvasDash);
+  });
+
+  window.addEventListener("resize", () => { resizeRadar(); resizeRadarDash(); });
+  resizeRadar();
+  resizeRadarDash();
+
+  // ---------------------------------------------------------------
+  // Telemetría ambiental
+  // ---------------------------------------------------------------
+  let lastEnv = {};
+  function updateEnv(d) {
+    lastEnv = d;
+    $("v-co2").innerHTML = `${Math.round(d.co2 ?? 0)}<small> ppm</small>`;
+    $("v-hum").innerHTML = `${(d.humidity ?? 0).toFixed(1)}<small> %</small>`;
+    $("v-temp-scd").innerHTML = `${(d.tempSCD ?? 0).toFixed(1)}<small> °C</small>`;
+    // Barra superior del dashboard
+    $("k-co2-dash").textContent = `${Math.round(d.co2 ?? 0)} ppm`;
+    $("k-temp-dash").textContent = `${(d.tempSCD ?? 0).toFixed(1)}°C`;
+    $("k-hum-dash").textContent = `${(d.humidity ?? 0).toFixed(1)}%`;
+    const caidos = d._sensors_missing || [];
+    $("env-missing-row").style.display = caidos.length ? "flex" : "none";
+    if (caidos.length) $("env-missing").textContent = caidos.join(", ");
+
+    $("v-gyro-x").textContent = (d.gyroX ?? 0).toFixed(1);
+    $("v-gyro-y").textContent = (d.gyroY ?? 0).toFixed(1);
+    $("v-gyro-z").textContent = (d.gyroZ ?? 0).toFixed(1);
+    $("v-accel-x").textContent = (d.accelX ?? 0).toFixed(2);
+    $("v-accel-y").textContent = (d.accelY ?? 0).toFixed(2);
+    $("v-accel-z").textContent = (d.accelZ ?? 0).toFixed(2);
+  }
+
+  // ---------------------------------------------------------------
+  // Histogramas (sparklines SVG)
+  // ---------------------------------------------------------------
+  const sparkData = { co2: [], temp: [], hum: [] };
+  function pushSpark(point) {
+    if (!point) return;
+    ["co2", "temp", "hum"].forEach((k) => {
+      const v = point[k];
+      if (v === undefined) return;
+      sparkData[k].push(v);
+      if (sparkData[k].length > 40) sparkData[k].shift();
+    });
+    renderSpark("spark-co2", sparkData.co2);
+    renderSpark("spark-temp", sparkData.temp);
+    renderSpark("spark-hum", sparkData.hum);
+  }
+  function renderSpark(id, values) {
+    if (values.length < 2) return;
+    const min = Math.min(...values), max = Math.max(...values);
+    const range = max - min || 1;
+    const pts = values.map((v, i) => {
+      const x = (i / (values.length - 1)) * 100;
+      const y = 18 - ((v - min) / range) * 16;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    $(id).innerHTML = `<polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.6"
+      stroke-linejoin="round" stroke-linecap="round" style="color:var(--accent)"/>`;
+  }
+
+  // ---------------------------------------------------------------
+  // Actuador
+  // ---------------------------------------------------------------
+  function updateActuator(d) {
+    if (d.failsafe) setPill("pill-actuator", "crit");
+    $("brand-status").textContent = d.failsafe ? "FAILSAFE ACTIVO" : "modo manual";
+    if ($("v-cmd-echo")) $("v-cmd-echo").textContent = (d.v_cmd ?? 0).toFixed(2);
+    if ($("omega-cmd-echo")) $("omega-cmd-echo").textContent = (d.omega_cmd ?? 0).toFixed(2);
+    if ($("scanning-echo")) $("scanning-echo").textContent = d.scanning ? "sí" : "no";
+    if ($("seq-echo")) $("seq-echo").textContent = d.seq_echo ?? "—";
+    if ($("servo-echo")) $("servo-echo").textContent = (d.servo_angle ?? "—") + "°";
+    if ($("led-echo")) $("led-echo").textContent = d.led_state ? "encendido" : "apagado";
+    $("servo-real").textContent = d.servo_angle ?? "—";
+    $("led-real").textContent = d.led_state ? "ON" : "OFF";
+  }
+
+  // ---------------------------------------------------------------
+  // Detecciones + banner de plaga
+  // ---------------------------------------------------------------
+  let pestBannerTimer = null;
+  let plagasDeHoy = 0;
+  function addDetection(d) {
+    // `detect-log` desapareció del HTML en el rediseño del dashboard, pero
+    // esta función seguía escribiendo en él: cada detección lanzaba un
+    // TypeError que abortaba el resto de la función, incluido el banner de
+    // "plaga detectada". Por eso avisaba de unas detecciones y de otras no.
+    const log_ = $("detect-log");
+    if (log_) {
+      if (log_.querySelector(".empty")) log_.innerHTML = "";
+      const row = document.createElement("div");
+      row.className = "detect-row";
+      const time = new Date((d.ts || Date.now()/1000) * 1000).toLocaleTimeString();
+      row.innerHTML = `<span>${d.class}</span><span class="conf">${(d.confidence*100).toFixed(0)}%</span><span class="ts">${time}</span>`;
+      log_.prepend(row);
+      while (log_.children.length > 30) log_.removeChild(log_.lastChild);
+    }
+
+    plagasDeHoy++;
+
+    if (d.confidence >= 0.6) {
+      // Animación superior
+      const emoji = $("detection-alert-emoji");
+      emoji.style.display = "inline";
+      emoji.style.animation = "none";
+      setTimeout(() => { emoji.style.animation = "pulse 0.5s infinite"; }, 10);
+      $("detection-alert-name").textContent = d.class;
+      $("detection-conf").textContent = `${(d.confidence*100).toFixed(0)}%`;
+      $("detection-led").style.display = "inline-block";
+
+      // Video banner
+      $("video-wrap").classList.add("alert");
+      $("pest-banner").classList.add("show");
+      $("pest-banner-text").textContent = `¡Plaga detectada! ${d.class} · ${(d.confidence*100).toFixed(0)}%`;
+
+      clearTimeout(pestBannerTimer);
+      pestBannerTimer = setTimeout(() => {
+        $("video-wrap").classList.remove("alert");
+        $("pest-banner").classList.remove("show");
+        emoji.style.display = "none";
+        $("detection-led").style.display = "none";
+        $("detection-alert-name").textContent = "—";
+        $("detection-conf").textContent = "—";
+      }, 6000);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Stats CPU/RAM
+  // ---------------------------------------------------------------
+  function updateStats(s) {
+    // Estos tres elementos los reemplazaron los donuts; sin la guarda,
+    // cada refresco de stats moría acá y no se actualizaba nada de abajo.
+    if (s.cpu_pct != null) {
+      const val = $("cpu-val");
+      if (val) val.textContent = s.cpu_pct.toFixed(0);
+      const bar = $("cpu-bar");
+      if (bar) {
+        bar.firstElementChild.style.width = s.cpu_pct + "%";
+        bar.classList.toggle("warn", s.cpu_pct > 70);
+        bar.classList.toggle("crit", s.cpu_pct > 90);
+      }
+    }
+    const ramVal = $("ram-val");
+    if (ramVal && s.ram_pct != null) ramVal.textContent = s.ram_pct.toFixed(0);
+    const cam = s.camera;
+    const badge = $("video-badge-text");
+    if (badge) {
+      if (!cam || cam.estado !== "capturando") badge.textContent = cam ? cam.estado.toUpperCase() : "SIN VIDEO";
+      else badge.textContent = `EN VIVO · ${cam.fps.toFixed(0)} FPS`;
+    }
+    setDonut("donut-cpu", "donut-cpu-val", s.cpu_pct, "%");
+    setDonut("donut-ram", "donut-ram-val", s.ram_pct, "%");
+    setDonut("donut-gpu", "donut-gpu-val", s.gpu_pct, "%");
+    setDonut("donut-temp", "donut-temp-val", s.temp_c, "°");
+    setDonut("donut-temp-wifi", "donut-temp-wifi-val", s.temp_wifi_c, "°");
+  }
+
+  // ---------------------------------------------------------------
+  // Acelerador
+  // ---------------------------------------------------------------
+  let maxVel = { v: 0.55, omega: 1.5 };
+  function speedScale() { return (parseFloat($("speed-scale").value) || 0) / 100; }
+  function refreshSpeedLabel() {
+    const pct = parseFloat($("speed-scale").value) || 0;
+    $("speed-pct").textContent = pct;
+    $("speed-mps").textContent = (maxVel.v * pct / 100).toFixed(2) + " m/s";
+  }
+  try {
+    const guardado = localStorage.getItem("agrobot_speed_scale");
+    if (guardado !== null) $("speed-scale").value = guardado;
+  } catch (e) { }
+  $("speed-scale").addEventListener("input", () => {
+    refreshSpeedLabel();
+    try { localStorage.setItem("agrobot_speed_scale", $("speed-scale").value); } catch (e) {}
+  });
+  refreshSpeedLabel();
+
+  // ---------------------------------------------------------------
+  // Control manual — por pulsos
+  // ---------------------------------------------------------------
+  // Cada toque pide UN movimiento corto que cronometra la Jetson (1 s
+  // adelante/atrás). Antes era "mantener apretado", y en el móvil no
+  // funcionaba: el navegador cancela el toque (pointercancel) en cuanto el
+  // dedo se mueve un píxel o detecta pulsación larga, y el robot recibía un
+  // arranque y una parada a los pocos milisegundos.
+  //
+  // Va por HTTP y no por el WebSocket: si este estaba caído (pantalla
+  // bloqueada, reconexión) el mensaje se tiraba sin avisar a nadie.
+  let maniobra = true;
+  let driveMode = "exterior";
+  try { maniobra = localStorage.getItem("agrobot-maniobra") !== "0"; } catch (_) {}
+  try { driveMode = localStorage.getItem("agrobot-drive-mode") || "exterior"; } catch (_) {}
+  if ($("maniobra-toggle")) {
+    $("maniobra-toggle").checked = maniobra;
+    $("maniobra-toggle").addEventListener("change", (e) => {
+      maniobra = e.target.checked;
+      try { localStorage.setItem("agrobot-maniobra", maniobra ? "1" : "0"); } catch (_) {}
+    });
+  }
+  // Solo pinta la UI; lo llama también el WebSocket cuando el modo se
+  // cambia desde el dashboard de entrenamiento.
+  function mostrarDriveMode(modo) {
+    driveMode = modo;
+    try { localStorage.setItem("agrobot-drive-mode", modo); } catch (_) {}
+    document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.modo === modo));
+    maniobra = modo === "exterior";
+    if ($("maniobra-toggle")) $("maniobra-toggle").checked = maniobra;
+  }
+  async function setDriveMode(modo) {
+    mostrarDriveMode(modo);
+    try {
+      const res = await fetch("/api/drive/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modo }),
+      });
+      if (!res.ok) toast("warning", "Modo no aplicado", `HTTP ${res.status}`);
+    } catch (_) {
+      toast("error", "Sin conexión", "No se pudo cambiar el modo de manejo.");
+    }
+  }
+  document.querySelectorAll(".mode-btn").forEach(b =>
+    b.addEventListener("click", () => setDriveMode(b.dataset.modo)));
+  // Al cargar manda el modo el BACKEND (una recarga no debe pisar lo que
+  // eligió el otro dashboard).
+  fetch("/api/drive/mode").then(r => r.json()).then(d => {
+    if (d.modo) { mostrarDriveMode(d.modo); }
+  }).catch(() => {});
+
+  // PARADA TOTAL. Por HTTP y por WebSocket a la vez: el WebSocket se cae al
+  // bloquear la pantalla del móvil y antes el botón STOP, que solo usaba el
+  // WebSocket, no hacía NADA sin avisar (2026-10-02). El backend
+  // (`_parada_total`) para evasión, pasos robóticos, exploración, patrulla,
+  // Nav2, pulsos y motores, venga por donde venga.
+  async function pararTodo(btn) {
+    if (btn) {
+      btn.classList.add("active");
+      setTimeout(() => btn.classList.remove("active"), 180);
+    }
+    let porWs = false;
+    try {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "emergency_stop" }));
+        porWs = true;
+      }
+    } catch (_) {}
+    for (let intento = 0; intento < 2; intento++) {
+      try {
+        const res = await fetch("/api/emergencia", { method: "POST", keepalive: true });
+        if (res.ok) return true;
+      } catch (_) {}
+    }
+    if (!porWs) toast("error", "¡LA PARADA NO LLEGÓ!", "Sin conexión con la Jetson. Corta la batería de motores.", 10000);
+    return porWs;
+  }
+
+  async function conducir(accion, btn) {
+    if (accion === "parar") return pararTodo(btn);
+    if (btn) {
+      btn.classList.add("active");
+      setTimeout(() => btn.classList.remove("active"), 180);
+    }
+    try {
+      const res = await fetch("/api/drive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accion, escala: speedScale(), maniobra }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast("warning", "No se movió", d.error || `HTTP ${res.status}`);
+      }
+    } catch (_) {
+      toast("error", "Sin conexión", "No llegó la orden a la Jetson.");
+    }
+  }
+
+  const accionDeBoton = { "c-fwd": "adelante", "c-back": "atras", "c-left": "izquierda",
+                          "c-right": "derecha", "c-stop": "parar" };
+  document.querySelectorAll(".ctrl-btn").forEach((btn) => {
+    const clase = Object.keys(accionDeBoton).find((c) => btn.classList.contains(c));
+    if (!clase) return;
+    btn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      conducir(accionDeBoton[clase], btn);
+    }, { passive: false });
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+  });
+
+  const accionDeTecla = { ArrowUp: "adelante", ArrowDown: "atras",
+                          ArrowLeft: "izquierda", ArrowRight: "derecha" };
+  window.addEventListener("keydown", (e) => {
+    const t = e.target;
+    const escribiendo = t && (t.tagName === "TEXTAREA" || t.isContentEditable ||
+      (t.tagName === "INPUT" && !["range", "checkbox"].includes(t.type)));
+    if (escribiendo) return;
+
+    if (e.code === "Space") {
+      // preventDefault: sin esto la barra hace scroll o "pulsa" el botón
+      // que tenga el foco, que podría ser justo el de avanzar.
+      e.preventDefault();
+      pararTodo(document.querySelector(".c-stop"));
+      return;
+    }
+    const accion = accionDeTecla[e.key];
+    if (!accion) return;
+    e.preventDefault();
+    // Mantener la flecha no repite: un toque de tecla = un pulso.
+    if (!e.repeat) conducir(accion, document.querySelector(".c-" + { adelante: "fwd", atras: "back", izquierda: "left", derecha: "right" }[accion]));
+  });
+
+  // ---------------------------------------------------------------
+  // Actuadores auxiliares (servo de cámara + LED)
+  // ---------------------------------------------------------------
+  function sendActuator(patch) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "actuator", ...patch }));
+    }
+  }
+  $("servo-slider").addEventListener("input", (e) => {
+    $("servo-val").textContent = e.target.value;
+    sendActuator({ servo_angle: parseInt(e.target.value, 10) });
+  });
+  $("led-toggle").addEventListener("change", (e) => sendActuator({ led: e.target.checked }));
+  // El barrido lo hace el backend moviendo el servo (antes lo hacía el
+  // firmware con duración fija). Duración y ángulos se ajustan en Parámetros.
+  $("scan-btn").addEventListener("click", async () => {
+    const res = await fetch("/api/patrol/scan", { method: "POST" });
+    toast(res.ok ? "success" : "warning", "Barrido de cámara",
+          res.ok ? "El robot se detiene y barre con la cámara." : "No se pudo iniciar.");
+  });
+
+  // ---------------------------------------------------------------
+  // Grabar video (los MISMOS frames que el stream, con overlay)
+  // ---------------------------------------------------------------
+  let grabandoVideo = false;
+  function pintarBtnVideo() {
+    const btn = $("rec-video-btn"), hint = $("rec-video-hint");
+    if (!btn) return;
+    btn.textContent = grabandoVideo ? "⏹ Detener grabación" : "● Grabar video";
+    btn.classList.toggle("primary", grabandoVideo);
+    if (hint) hint.style.display = grabandoVideo ? "block" : "none";
+  }
+  if ($("rec-video-btn")) {
+    $("rec-video-btn").addEventListener("click", async () => {
+      const accion = grabandoVideo ? "stop" : "start";
+      let d = {};
+      try {
+        const res = await fetch("/api/video/record", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: accion }),
+        });
+        d = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast("warning", "Grabación de video", d.error || "no se pudo");
+          return;
+        }
+      } catch (e) {
+        toast("warning", "Grabación de video", "sin conexión con el robot");
+        return;
+      }
+      grabandoVideo = (accion === "start");
+      pintarBtnVideo();
+      if (grabandoVideo) {
+        $("rec-video-hint").textContent = "Grabando " + (d.file || "") + " · se guarda en el robot (backend/videos/).";
+        toast("success", "Grabando video", d.file || "");
+      } else {
+        toast("success", "Video guardado", d.file || "");
+      }
+    });
+    // Al cargar, sincroniza por si ya había una grabación en curso.
+    fetch("/api/video/record", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "status" }),
+    }).then((r) => r.json()).then((d) => {
+      grabandoVideo = !!d.grabando; pintarBtnVideo();
+      if (grabandoVideo && $("rec-video-hint"))
+        $("rec-video-hint").textContent = "Grabando " + (d.file || "") + "…";
+    }).catch(() => {});
+  }
+
+  function applyActuatorSetpoint(sp) {
+    if (!sp) return;
+    $("servo-slider").value = sp.servo_angle;
+    $("servo-val").textContent = sp.servo_angle;
+    $("led-toggle").checked = !!sp.led;
+  }
+
+  // ---------------------------------------------------------------
+  // Emergency stop
+  // ---------------------------------------------------------------
+  // pointerdown y no click: el click espera a soltar el dedo.
+  $("estop-btn").addEventListener("pointerdown", (e) => { e.preventDefault(); pararTodo($("estop-btn")); },
+                                  { passive: false });
+  $("estop-btn").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pararTodo($("estop-btn")); }
+  });
+
+  // ---------------------------------------------------------------
+  // Modelos IA
+  // ---------------------------------------------------------------
+  let currentActiveModel = null;
+
+  function renderModels(models) {
+    const wrap = $("model-list");
+    if (!models.length) { wrap.innerHTML = `<div class="empty">No hay modelos en jetson/backend/models/</div>`; return; }
+    wrap.innerHTML = "";
+    models.forEach((m) => {
+      const row = document.createElement("div");
+      row.className = "model-row" + (m.active ? " active" : "");
+      row.innerHTML = `<div><div class="name">${m.name}</div><div class="meta">${m.size_mb} MB</div></div>${m.active ? '<span class="badge">✓ ACTIVO</span>' : '<span class="badge" style="background:var(--line); color:var(--ink-soft);">CARGAR</span>'}`;
+      row.addEventListener("click", async () => {
+        const res = await fetch("/api/models/load", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ name: m.name }) });
+        if (res.ok) {
+          currentActiveModel = m.name;
+          $("active-model-display").textContent = m.name;
+          toast("success", "Modelo cargado", `${m.name} está listo para usar.`);
+          refreshModels();
+        } else {
+          toast("error", "Error al cargar", "No se pudo cargar el modelo. Ver servidor.");
+        }
+      });
+      wrap.appendChild(row);
+    });
+
+    const active = models.find(m => m.active);
+    if (active) {
+      currentActiveModel = active.name;
+      $("active-model-display").textContent = active.name;
+    }
+  }
+
+  async function refreshModels() {
+    const res = await fetch("/api/models");
+    if (res.ok) renderModels(await res.json());
+  }
+
+  $("refresh-models-btn").addEventListener("click", refreshModels);
+  $("scan-models-btn").addEventListener("click", async () => {
+    const res = await fetch("/api/models/scan", { method: "POST" });
+    if (res.ok) {
+      toast("success", "Escaneo completado", "Se actualizó la lista de modelos disponibles.");
+      refreshModels();
+    } else {
+      toast("error", "Error", "No se pudo escanear el directorio.");
+    }
+  });
+
+  refreshModels();
+
+  // ---------------------------------------------------------------
+  // Modo manual vs Autónomo
+  // ---------------------------------------------------------------
+  let isAutonomousMode = false;
+
+  $("autonomous-mode-btn").addEventListener("click", async () => {
+    if (!isAutonomousMode) {
+      // Cambiar a autónomo
+      const res = await fetch("/api/mission/start", { method: "POST" });
+      if (res.ok) {
+        isAutonomousMode = true;
+        $("autonomous-mode-btn").textContent = "⏹️ Modo manual";
+        $("autonomous-mode-btn").style.background = "linear-gradient(135deg, #ff2d3f, #ff6b6b)";
+        $("mode-status").textContent = "AUTÓNOMO";
+        $("mode-status").style.color = "var(--accent)";
+        toast("success", "Modo autónomo", "Patrulla en marcha.");
+      } else {
+        // El motivo casi siempre es "no hay waypoints grabados": mostrarlo
+        // en vez de un error genérico ahorra el viaje a los logs.
+        const d = await res.json().catch(() => ({}));
+        toast("error", "No se pudo activar", d.message || "Error desconocido.");
+      }
+    } else {
+      // Cambiar a manual
+      const res = await fetch("/api/mission/stop", { method: "POST" });
+      if (res.ok) {
+        isAutonomousMode = false;
+        $("autonomous-mode-btn").textContent = "🤖 Modo autónomo";
+        $("autonomous-mode-btn").style.background = "linear-gradient(135deg, #1a9850, #5fa560)";
+        $("mode-status").textContent = "MANUAL";
+        $("mode-status").style.color = "var(--accent)";
+        toast("success", "Modo manual", "Control remoto activado.");
+      } else {
+        toast("error", "Error", "No se pudo volver al modo manual.");
+      }
+    }
+  });
+
+  // (Aquí había un POST a /api/nav/mode "localization" en cada carga de la
+  // página. Nunca llegó a ejecutarse: `log` no existía y la excepción lo
+  // cortaba. Se quitó en vez de arreglarlo: abrir el dashboard no debe
+  // cambiar la configuración del robot. 2026-09-30.)
+
+  // ---------------------------------------------------------------
+  // Misión
+  // ---------------------------------------------------------------
+  // Un único indicador de modo, el del Dashboard. Los botones duplicados de
+  // la pestaña Navegación se eliminaron: allí ahora se arranca y se para
+  // desde el panel de patrulla, contra el mismo endpoint.
+  function setMissionUI(active) {
+    isAutonomousMode = !!active;
+    $("autonomous-mode-btn").textContent = active ? "⏹️ Modo manual" : "🤖 Modo autónomo";
+    $("autonomous-mode-btn").style.background = active
+      ? "linear-gradient(135deg, #ff2d3f, #ff6b6b)"
+      : "linear-gradient(135deg, #1a9850, #5fa560)";
+    $("mode-status").textContent = active ? "AUTÓNOMO" : "MANUAL";
+    $("mode-status").style.color = "var(--accent)";
+  }
+
+  // ---------------------------------------------------------------
+  // Hardware config
+  // ---------------------------------------------------------------
+  let currentCalibration = { gyro_bias_x_dps: 0, gyro_bias_y_dps: 0, gyro_bias_z_dps: 0 };
+  function applyConfig(cfg) {
+    if (!cfg) return;
+    if (cfg.hardware) {
+      $("camera-toggle").checked = !!cfg.hardware.camera_enabled;
+      $("lidar-baud").value = cfg.hardware.lidar_baud;
+    }
+    if (cfg.calibration) {
+      currentCalibration = cfg.calibration;
+      $("cal-servo").value = cfg.calibration.servo_offset_deg;
+      $("cal-servo-val").textContent = cfg.calibration.servo_offset_deg + "°";
+      [["cal-gx", "gyro_bias_x_dps"], ["cal-gy", "gyro_bias_y_dps"], ["cal-gz", "gyro_bias_z_dps"]]
+        .forEach(([id, key]) => {
+          $(id).value = cfg.calibration[key];
+          $(id + "-val").textContent = Number(cfg.calibration[key]).toFixed(2) + " °/s";
+        });
+    }
+    if (cfg.detection) {
+      $("p-conf").value = cfg.detection.confidence_threshold; $("p-conf-val").textContent = cfg.detection.confidence_threshold.toFixed(2);
+      $("p-escanear").value = cfg.detection.escanear_al_detectar || "siempre";
+      $("p-clip").value = cfg.detection.clip_record_threshold; $("p-clip-val").textContent = cfg.detection.clip_record_threshold.toFixed(2);
+    }
+    if (cfg.safety) {
+      $("p-warn").value = cfg.safety.heartbeat_stale_warn_s; $("p-warn-val").textContent = cfg.safety.heartbeat_stale_warn_s + " s";
+      $("p-err").value = cfg.safety.heartbeat_stale_err_s; $("p-err-val").textContent = cfg.safety.heartbeat_stale_err_s + " s";
+      $("p-accel-v").value = cfg.safety.max_linear_accel_mps2; $("p-accel-v-val").textContent = Number(cfg.safety.max_linear_accel_mps2).toFixed(1) + " m/s²";
+      $("p-accel-omega").value = cfg.safety.max_angular_accel_rps2; $("p-accel-omega-val").textContent = Number(cfg.safety.max_angular_accel_rps2).toFixed(1) + " rad/s²";
+    }
+    if (cfg.control) {
+      maxVel = { v: cfg.control.max_v_mps, omega: cfg.control.max_omega_rps };
+      $("p-max-v").value = cfg.control.max_v_mps; $("p-max-v-val").textContent = Number(cfg.control.max_v_mps).toFixed(2) + " m/s";
+      $("p-max-omega").value = cfg.control.max_omega_rps; $("p-max-omega-val").textContent = Number(cfg.control.max_omega_rps).toFixed(1) + " rad/s";
+      for (const [id, v] of [["p-duty", Math.round((cfg.control.suavidad_duty ?? 1) * 100)],
+                             ["p-periodo", cfg.control.suavidad_periodo_s ?? 0.3]]) {
+        if ($(id) !== document.activeElement) { $(id).value = v; liveSliders[id](v); }
+      }
+      refreshSpeedLabel();
+    }
+    if (cfg.slam) {
+      if (cfg.odometria_webcam) aplicarConfigOdomWebcam(cfg.odometria_webcam);
+      if (cfg.autonomia) aplicarConfigAutonomia(cfg.autonomia);
+      for (const [id, v] of [["p-largo", cfg.slam.robot_largo_cm], ["p-ancho", cfg.slam.robot_ancho_cm],
+                             ["p-margen", cfg.slam.margen_parada_cm], ["p-desliz", cfg.slam.deslizamiento_cm],
+                             ["p-cono-frontal", cfg.slam.cono_frontal_deg], ["p-cono-lateral", cfg.slam.cono_lateral_deg]]) {
+        if ($(id) !== document.activeElement) { $(id).value = v; liveSliders[id](v); }
+      }
+      $("p-gyro").value = cfg.slam.pose_gyro_trust; $("p-gyro-val").textContent = Number(cfg.slam.pose_gyro_trust).toFixed(2);
+    }
+  }
+  fetch("/api/hardware").then(r => r.json()).then(hw => applyConfig({ hardware: hw }));
+  fetch("/api/calibration").then(r => r.json()).then(cal => applyConfig({ calibration: cal }));
+  fetch("/api/params").then(r => r.json()).then(applyConfig);
+
+  // ---------------------------------------------------------------
+  // Parámetros — sliders en vivo + guardar por sección
+  // ---------------------------------------------------------------
+  const liveSliders = {
+    "p-conf": (v) => $("p-conf-val").textContent = parseFloat(v).toFixed(2),
+    "p-clip": (v) => $("p-clip-val").textContent = parseFloat(v).toFixed(2),
+    "p-warn": (v) => $("p-warn-val").textContent = v + " s",
+    "p-err": (v) => $("p-err-val").textContent = v + " s",
+    "p-accel-v": (v) => $("p-accel-v-val").textContent = parseFloat(v).toFixed(1) + " m/s²",
+    "p-accel-omega": (v) => $("p-accel-omega-val").textContent = parseFloat(v).toFixed(1) + " rad/s²",
+    "ov-altura": (v) => $("ov-altura-val").textContent = parseFloat(v).toFixed(2) + " m",
+    "ov-incl": (v) => $("ov-incl-val").textContent = parseFloat(v).toFixed(1) + "°",
+    "ov-hfov": (v) => $("ov-hfov-val").textContent = v + "°",
+    "ov-adelante": (v) => $("ov-adelante-val").textContent = parseFloat(v).toFixed(2) + " m",
+    "p-dist-puntos": (v) => $("p-dist-puntos-val").textContent = v + " cm",
+    "p-avance": (v) => $("p-avance-val").textContent = v + " cm",
+    "p-lado": (v) => $("p-lado-val").textContent = v + " cm",
+    "p-retro": (v) => $("p-retro-val").textContent = v + " cm",
+    "p-escala": (v) => $("p-escala-val").textContent = Math.round(v) + " %",
+    "p-escaneo": (v) => $("p-escaneo-val").textContent = v + " s",
+    "p-barrido-dur": (v) => $("p-barrido-dur-val").textContent = v + " s",
+    "p-barrido-min": (v) => $("p-barrido-min-val").textContent = v + "°",
+    "p-barrido-max": (v) => $("p-barrido-max-val").textContent = v + "°",
+    "p-sd-tol": (v) => $("p-sd-tol-val").textContent = v + " cm",
+    "p-sd-pared": (v) => $("p-sd-pared-val").textContent = v + " cm",
+    "p-sd-peso": (v) => $("p-sd-peso-val").textContent = v + " %",
+    "p-sd-hmin": (v) => $("p-sd-hmin-val").textContent = v,
+    "p-sd-hmax": (v) => $("p-sd-hmax-val").textContent = v,
+    "p-sd-smin": (v) => $("p-sd-smin-val").textContent = v,
+    "p-largo": (v) => $("p-largo-val").textContent = v + " cm",
+    "p-ancho": (v) => $("p-ancho-val").textContent = v + " cm",
+    "p-margen": (v) => $("p-margen-val").textContent = v + " cm",
+    "p-desliz": (v) => $("p-desliz-val").textContent = v + " cm",
+    "p-cono-frontal": (v) => $("p-cono-frontal-val").textContent = v + "°",
+    "p-cono-lateral": (v) => $("p-cono-lateral-val").textContent = v + "°",
+    "p-gyro": (v) => $("p-gyro-val").textContent = parseFloat(v).toFixed(2),
+    "p-max-v": (v) => { $("p-max-v-val").textContent = parseFloat(v).toFixed(2) + " m/s"; maxVel.v = parseFloat(v); refreshSpeedLabel(); },
+    "p-max-omega": (v) => $("p-max-omega-val").textContent = parseFloat(v).toFixed(1) + " rad/s",
+    "p-duty": (v) => $("p-duty-val").textContent = Math.round(v) + " %",
+    "p-periodo": (v) => $("p-periodo-val").textContent = parseFloat(v).toFixed(2) + " s",
+  };
+  Object.entries(liveSliders).forEach(([id, fn]) => $(id).addEventListener("input", (e) => fn(e.target.value)));
+
+  async function saveParams(section, body) {
+    await fetch(`/api/params/${section}`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+  }
+
+  // ---------------------------------------------------------------
+  // Odometría visual (webcam)
+  // ---------------------------------------------------------------
+  function aplicarConfigOdomWebcam(c) {
+    $("ov-habilitada").checked = !!c.habilitada;
+    $("ov-publicar").checked = !!c.publicar_ros;
+    const pares = [["ov-altura", c.camara_altura_m], ["ov-incl", c.camara_inclinacion_deg],
+                   ["ov-hfov", c.camara_hfov_deg], ["ov-adelante", c.camara_adelante_m]];
+    for (const [id, v] of pares) { $(id).value = v; liveSliders[id](v); }
+  }
+
+  function pintarOdomWebcam(d) {
+    const midiendo = (d.estado || "").startsWith("midiendo");
+    $("ov-estado").textContent = d.estado || "—";
+    $("ov-pill").className = "pill" + (midiendo ? " ok" : d.estado === "deshabilitada" ? "" : " warn");
+    $("ov-vx").textContent = midiendo ? d.vx.toFixed(2) : "—";
+    $("ov-vyaw").textContent = midiendo ? d.vyaw.toFixed(2) : "—";
+    $("ov-calidad").textContent = `${d.rasgos} · ${d.inliers} · ${d.hz}`;
+  }
+
+  function pintarVelEkf(p) {
+    if (p.vx == null) return;
+    $("ov-ekf-vx").textContent = p.vx.toFixed(2);
+    $("ov-ekf-vyaw").textContent = p.vyaw.toFixed(2);
+  }
+
+  function datosOdomWebcam() {
+    return {
+      habilitada: $("ov-habilitada").checked,
+      publicar_ros: $("ov-publicar").checked,
+      camara_altura_m: parseFloat($("ov-altura").value),
+      camara_inclinacion_deg: parseFloat($("ov-incl").value),
+      camara_hfov_deg: parseFloat($("ov-hfov").value),
+      camara_adelante_m: parseFloat($("ov-adelante").value),
+    };
+  }
+  $("ov-guardar").addEventListener("click", () => saveParams("odometria_webcam", datosOdomWebcam()));
+  $("ov-habilitada").addEventListener("change", () => saveParams("odometria_webcam", datosOdomWebcam()));
+  $("ov-publicar").addEventListener("change", (e) => {
+    if (e.target.checked && !confirm("¿Ya comparaste Cámara con EKF moviendo el robot? Una odometría mal calibrada desvía la pose y el mapa.")) {
+      e.target.checked = false; return;
+    }
+    saveParams("odometria_webcam", datosOdomWebcam());
+  });
+  $("p-detection-save").addEventListener("click", () => saveParams("detection", {
+    confidence_threshold: parseFloat($("p-conf").value),
+    clip_record_threshold: parseFloat($("p-clip").value),
+    escanear_al_detectar: $("p-escanear").value,
+  }));
+  $("p-safety-save").addEventListener("click", () => saveParams("safety", {
+    heartbeat_stale_warn_s: parseFloat($("p-warn").value),
+    heartbeat_stale_err_s: parseFloat($("p-err").value),
+    max_linear_accel_mps2: parseFloat($("p-accel-v").value),
+    max_angular_accel_rps2: parseFloat($("p-accel-omega").value),
+  }));
+  $("p-control-save").addEventListener("click", () => saveParams("control", {
+    suavidad_duty: parseFloat($("p-duty").value) / 100,
+    suavidad_periodo_s: parseFloat($("p-periodo").value),
+    max_v_mps: parseFloat($("p-max-v").value),
+    max_omega_rps: parseFloat($("p-max-omega").value),
+  }));
+  $("p-slam-save").addEventListener("click", () => saveParams("slam", {
+    robot_largo_cm: parseFloat($("p-largo").value),
+    robot_ancho_cm: parseFloat($("p-ancho").value),
+    margen_parada_cm: parseFloat($("p-margen").value),
+    deslizamiento_cm: parseFloat($("p-desliz").value),
+    cono_frontal_deg: parseFloat($("p-cono-frontal").value),
+    cono_lateral_deg: parseFloat($("p-cono-lateral").value),
+    pose_gyro_trust: parseFloat($("p-gyro").value),
+  }));
+
+  $("hw-save-btn").addEventListener("click", async () => {
+    const body = {
+      camera_enabled: $("camera-toggle").checked,
+      lidar_baud: parseInt($("lidar-baud").value, 10),
+    };
+    await fetch("/api/hardware", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+    toast("success", "Hardware actualizado", "Configuración guardada.");
+  });
+
+  $("cal-servo").addEventListener("input", (e) => { $("cal-servo-val").textContent = e.target.value + "°"; });
+  ["cal-gx", "cal-gy", "cal-gz"].forEach((id) => {
+    $(id).addEventListener("input", (e) => { $(id + "-val").textContent = parseFloat(e.target.value).toFixed(2) + " °/s"; });
+  });
+
+  $("cal-autozero-btn").addEventListener("click", () => {
+    if (!lastEnv || lastEnv.gyroZ === undefined) {
+      toast("warning", "Sin telemetría", "No llegó ninguna lectura del MPU6050 todavía.");
+      return;
+    }
+    [["cal-gx", "gyroX", "gyro_bias_x_dps"], ["cal-gy", "gyroY", "gyro_bias_y_dps"], ["cal-gz", "gyroZ", "gyro_bias_z_dps"]]
+      .forEach(([id, axis, key]) => {
+        const nuevo = (lastEnv[axis] ?? 0) + Number(currentCalibration[key] ?? 0);
+        $(id).value = nuevo;
+        $(id + "-val").textContent = nuevo.toFixed(2) + " °/s";
+      });
+    toast("success", "Auto-cero aplicado", "Revisá que el robot esté quieto y guardá para persistirlo.");
+  });
+
+  $("cal-save-btn").addEventListener("click", async () => {
+    const body = {
+      servo_offset_deg: parseInt($("cal-servo").value, 10),
+      gyro_bias_x_dps: parseFloat($("cal-gx").value),
+      gyro_bias_y_dps: parseFloat($("cal-gy").value),
+      gyro_bias_z_dps: parseFloat($("cal-gz").value),
+    };
+    await fetch("/api/calibration", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+  });
+
+  // --- FUNCIONES MOTOR v2.0 ---
+  async function cambiarPotencia(valor) {
+    document.getElementById('pwmValue').textContent = valor + '%';
+    try {
+      const response = await fetch('/api/motor/comando', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          v: 0.5,
+          omega: 0.0,
+          duty: parseInt(valor)
+        })
+      });
+      if (response.ok) {
+        toast("success", "Motor", "Potencia: " + valor + "%");
+      }
+    } catch(e) {
+      console.error('Error:', e);
+      toast("error", "Error", "No se pudo cambiar la potencia");
+    }
+  }
+
+  async function motorParar() {
+    try {
+      const response = await fetch('/api/motor/parar', {
+        method: 'POST'
+      });
+      if (response.ok) {
+        toast("warning", "PARADA", "🛑 Motor detenido");
+        document.getElementById('pwmSlider').value = 0;
+        document.getElementById('pwmValue').textContent = '0%';
+      }
+    } catch(e) {
+      console.error('Error:', e);
+      toast("error", "Error", "No se pudo detener el motor");
+    }
+  }
+
+  async function cambiarRed() {
+    const modo = prompt('Ingresa "patrullaje" o "estacion":');
+    if (!modo) return;
+
+    if (modo !== 'patrullaje' && modo !== 'estacion') {
+      toast("warning", "Modo inválido", 'Debe ser "patrullaje" o "estacion"');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/wifi/modo', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({modo: modo})
+      });
+
+      if (response.ok) {
+        toast("success", "WiFi", "✓ Cambiando a " + modo + "...");
+      } else {
+        toast("error", "Error", "No se pudo cambiar la red");
+      }
+    } catch(e) {
+      console.error('Error:', e);
+      toast("error", "Error de conexión", "No se pudo conectar con el servidor");
+    }
+  }
+
+  // ⭐ NUEVO: toggle safeguard (timeout de seguridad)
+  let safeguardEnabled = true;  // por defecto activo
+  async function toggleSafeguard() {
+    try {
+      const response = await fetch('/api/motor/toggle-safeguard', {
+        method: 'POST'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        safeguardEnabled = data.safeguard_enabled;
+        const btn = document.getElementById('safeguard-btn');
+        if (safeguardEnabled) {
+          btn.style.background = '#ff9500';
+          btn.textContent = '🔐 Modo demo (safeguard ON)';
+          toast("success", "Safeguard", "✓ Protección de seguridad activada");
+        } else {
+          btn.style.background = '#c4141f';
+          btn.textContent = '⚠️  Modo demo (safeguard OFF)';
+          toast("warning", "Safeguard", "⚠️ Protección desactivada — modo prueba");
+        }
+      }
+    } catch(e) {
+      console.error('Error:', e);
+      toast("error", "Error", "No se pudo cambiar el safeguard");
+    }
+  }
+
+  log("Dashboard iniciado.");   // definido junto a setPill
+})();
+</script>
+
+<style>#fieldCapture{display:none;position:fixed;right:16px;bottom:74px;width:min(620px,calc(100vw - 32px));max-height:75vh;overflow:auto;margin:0;padding:20px;border:1px solid #39ba88;border-radius:16px;background:#122820;color:#eefaf5;z-index:1000}#fieldCapture button,#fieldCapture a{display:inline-block;margin:6px;padding:12px;border-radius:8px;border:1px solid #67b89a;background:#244839;color:white;cursor:pointer}#captureStatus{white-space:pre-wrap;font:14px monospace}</style>
+<button id="openFieldCapture" style="position:fixed;right:16px;bottom:16px;z-index:1001;background:#126b44;color:white;padding:14px;border:0;border-radius:12px;cursor:pointer">Datos de campo / Fotos / Video</button><section id="fieldCapture"><h2>Recolección para la simulación</h2><p>Variables y LiDAR a 5 Hz · Fotos a 2 Hz · Video MJPEG hasta 10 FPS. Captura sin órdenes de movimiento.</p>
+<button data-capture="start">Recolectar datos</button><button data-capture="stop">Terminar sesión</button><button data-capture="photo">Tomar foto</button><button data-capture="video" id="captureVideo">Grabar / detener video</button><a href="/api/recoleccion-export">Descargar sesión ZIP</a><div id="captureStatus">Consultando…</div></section>
+<script>
+(()=>{document.getElementById('openFieldCapture').onclick=()=>{const p=document.getElementById('fieldCapture');p.style.display=p.style.display==='block'?'none':'block'};const out=document.getElementById('captureStatus');let busy=false;
+async function update(action){if(busy)return;busy=true;try{const r=await fetch('/api/recoleccion'+(action?'/'+action:''),{method:action?'POST':'GET'});const d=await r.json();if(!r.ok)throw Error(d.error||r.status);out.textContent=(d.active?'● RECOLECTANDO':'○ Detenido')+' | Video: '+(d.video?'grabando':'apagado')+' | Muestras: '+d.samples+' | Descartadas: '+d.dropped+' | Cola: '+d.queue+' | Disco libre: '+d.free_gb+' GB\nSesión: '+(d.session||'—')+(d.error?'\nERROR: '+d.error:'');}catch(e){out.textContent='Error: '+e.message}finally{busy=false}}
+document.querySelectorAll('[data-capture]').forEach(b=>b.onclick=()=>update(b.dataset.capture));update();setInterval(()=>update(),2000)})();
+</script>
+
+</body>
+</html>

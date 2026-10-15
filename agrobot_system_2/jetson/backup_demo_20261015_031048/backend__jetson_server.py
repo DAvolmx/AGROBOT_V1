@@ -1,0 +1,3749 @@
+"""
+AgroBot — backend en la Jetson (`jetson_server.py`).
+====================================================
+El nombre del archivo importa: antes este módulo y el de la Raspberry Pi se
+llamaban los DOS `server.py`. Como Python importa por NOMBRE de módulo (no
+por ruta), un `import server` cargaba el que estuviera primero en sys.path
+— el archivo equivocado, sin ningún aviso. Ahora cada uno tiene un nombre
+único: `jetson_server.py` acá y `gateway_server.py` en la Raspberry Pi.
+
+Une en un solo proceso asyncio:
+
+  - Servidor UDP puerto 5001  <- ESP32 LoRa V3 (telemetría ambiental JSON)
+  - Servidor UDP puerto 5002 <-> ESP32-C3 Mini (comandos binarios / status)
+  - WebSocket /ws              -> dashboard (push inmediato, sin polling)
+  - MJPEG      /video          -> cámara + overlay de detección YOLO
+  - REST       /api/*          -> modelos, hardware, calibración, misión
+  - Estáticos  /                -> dashboard/index.html
+
+Diseño para latencia mínima: todo es push (ver README). Nada aquí depende
+de internet — este proceso corre dentro de la red aislada del AP.
+"""
+import asyncio
+import json
+import math
+import os
+import subprocess
+import time
+from pathlib import Path
+
+import aiohttp
+from aiohttp import web, WSMsgType
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+from protocol import SERVO_HOME_DEG, clamp_servo
+from ble_link import BleActuatorLink
+from enlace_c3 import EnlaceC3
+import udp_actuator_link
+import config_store
+import perfiles_entorno
+import health
+from slam import PoseEstimator, LidarReactive, MapManager
+from costmap_local import CostmapLocal
+from ros_bridge import AgroBotROSBridge, ROS_UNAVAILABLE_REASON
+from camera import CameraWorker
+from obstacle_avoidance import ControladorEvasion, LecturasSensoresLIDAR
+from patrol import PatrolController
+from pulse_drive import ConductorPulsos, ACCIONES, MODOS
+from mapas import GestorMapas, ErrorMapa
+from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
+from explorador import ExploradorReactivo
+from sendero import SeguidorSendero
+from navigation_logger import NavigationLogger, analizar_sesion
+from aprendizaje import Aprendizaje
+from paso_robotico import PasoRobotico
+from suelo_libre import SueloLibre
+from barrido_tilt import (BarridoTilt, FrenoProactivo, EstimadorAltura,
+                          inclinacion_por_servo, SERVO_LEJOS_DEG, SERVO_CERCA_DEG)
+from grabador import Grabador, TELEMETRIA_HZ
+import evasion as evasion_mod
+from cabeceo import CabeceoIMU
+from politica import Politica
+from deslizamiento import MonitorDeslizamiento
+from modo_seguro import ModoSeguro, SEGURO, PRECAUCION
+from supervisor_movimiento import SupervisorMovimiento
+from auto_comunicacion import inicializar_auto_comunicacion
+
+# =============================================
+# ===== CONFIG =====
+# =============================================
+JETSON_AP_IP = "192.168.12.1"
+LORA_UDP_PORT = 5001
+HTTP_PORT = 8080
+CMD_SEND_HZ = 20
+# Gateway de la Raspberry Pi. Las alarmas que hay que hacer llegar al
+# celular del operador se empujan al gateway por LAN y él las publica en
+# Telegram. La Pi va por cable al router "LoRa-Wan" (DIR-615 en modo router),
+# que le reserva 192.168.0.10 por MAC; la Jetson llega a ella como cliente
+# WiFi de esa misma red. Si el gateway está apagado, esto falla en silencio:
+# avisar es deseable, pero nunca a costa de frenar la detección o el control.
+GATEWAY_ALERT_URL = os.environ.get(
+    "AGROBOT_GATEWAY_URL", "http://192.168.0.10:8092") + "/api/alert"
+GATEWAY_ALERT_TIMEOUT_S = 4
+
+# UNA sola sesion HTTP para todo el proceso, no una por aviso.
+#
+# `aiohttp.ClientSession()` no es un objeto barato: monta su propio conector,
+# su pool de conexiones y su resolutor de DNS. Crear una por deteccion —que es
+# lo que hacia `_avisar_al_gateway`— significa montarlos y tirarlos cientos de
+# veces por hora, y aiohttp avisa en su documentacion de que cerrar una sesion
+# no libera los transportes de inmediato.
+#
+# Encaja con lo medido el 2026-09-06: la memoria crecia ~6 MB/min SOLO cuando
+# habia detecciones, y quedaba plana con la camara viendo pero sin detectar.
+_sesion_http: "aiohttp.ClientSession | None" = None
+
+# Tareas sueltas lanzadas desde el camino de deteccion, con referencia y tope.
+#
+# Dos motivos, los dos reales:
+#   · asyncio guarda solo una referencia DEBIL a las tareas creadas con
+#     create_task(). Sin guardarlas aqui, el recolector puede llevarse una a
+#     medias y el trabajo se pierde en silencio (esta documentado en asyncio).
+#   · sin tope, una racha de detecciones con el gateway lento encola tareas
+#     sin limite, y la de guardar la captura retiene un FOTOGRAMA COMPLETO
+#     cada una. Es la via mas directa a quedarse sin memoria.
+_tareas_sueltas: set = set()
+MAX_TAREAS_SUELTAS = 24
+
+
+def _lanzar(coro, etiqueta: str = ""):
+    """Lanza una corrutina de fondo con referencia fuerte y tope."""
+    if len(_tareas_sueltas) >= MAX_TAREAS_SUELTAS:
+        # Se DESCARTA en vez de encolar. Si hay 24 avisos pendientes, el
+        # problema no se arregla apilando el numero 25: se arregla dejando
+        # que se vacien. Perder un aviso es preferible a perder el proceso.
+        coro.close()
+        print(f"[tareas] descartada '{etiqueta}': ya hay {len(_tareas_sueltas)} "
+              f"pendientes (tope {MAX_TAREAS_SUELTAS})")
+        return None
+    t = asyncio.create_task(coro)
+    _tareas_sueltas.add(t)
+    t.add_done_callback(_tareas_sueltas.discard)
+    return t
+# Tope del paso de tiempo de la rampa de velocidad: 3 periodos de comando.
+# Absorbe jitter normal del stream sin permitir que una pausa larga se
+# traduzca en un salto de velocidad grande (ver _apply_ramp).
+RAMP_MAX_DT = 3.0 / CMD_SEND_HZ
+# Hombre muerto: si nadie pide velocidad en este tiempo, el objetivo pasa a
+# cero. Nav2 publica /cmd_vel a 10 Hz y el conductor por pulsos a 20 Hz, así
+# que 0,5 s son 5 mensajes perdidos seguidos: solo salta si el que mandaba
+# desapareció (navegador cerrado, WiFi caído, Nav2 muerto).
+DEADMAN_S = 0.5
+# Relativas a ESTE archivo, no al directorio de trabajo. Con `Path("./models")`
+# el backend usaba carpetas distintas según desde dónde se lo lanzara:
+# `arrancar.sh` hace `cd` y funcionaba, pero un `python3 jetson/backend/
+# jetson_server.py` desde la raíz del repo creaba `./models` y `./captures`
+# ahí, no encontraba los modelos y guardaba las fotos en otro lado — todo en
+# silencio, sin un solo error.
+_AQUI = Path(__file__).resolve().parent
+SESSION_REPORT_DIR = _AQUI / "session_reports"
+MODELS_DIR = _AQUI / "models"
+CAPTURES_DIR = _AQUI / "captures"
+MAPS_DIR = Path(__file__).parent.parent.parent / "ros2_ws" / "src" / "agrobot_navigation" / "maps"
+
+SESSION_REPORT_DIR.mkdir(exist_ok=True)
+MODELS_DIR.mkdir(exist_ok=True)
+CAPTURES_DIR.mkdir(exist_ok=True)
+
+# Fallback casero (slam.py) — se sigue usando si ROS/rclpy no está
+# disponible en este entorno, o como respaldo del filtro complementario
+# mientras el EKF de robot_localization no haya publicado pose todavía.
+pose_estimator = PoseEstimator()
+# Cabeceo del chasis a partir del MPU6050. Se crea aquí porque la telemetría
+# empieza a llegar antes de que arranque la cámara; el signo se ajusta al
+# cargar la configuración.
+cabeceo_imu = CabeceoIMU()
+lidar_reactive = LidarReactive()
+# Suelo libre por cámara: lo bajo que el LIDAR no ve (cobija, pesa: 2026-10-02).
+suelo_libre = SueloLibre()
+lidar_reactive.hueco_camara = lambda: suelo_libre.hueco_delante(
+    state.config["slam"]["robot_ancho_cm"] / 100.0)
+# Barrido de tilt + freno proactivo por envolvente de vuelco (ver barrido_tilt.py).
+# Se activa con autonomia.barrido_tilt (OFF por defecto): mueve el servo para ver
+# lo bajo que el LIDAR no ve y frena antes de volcar/atrancarse.
+barrido_tilt_ctrl = BarridoTilt()
+freno_proactivo = FrenoProactivo()
+# Estima la altura del montículo por paralaje al acercarse (ver barrido_tilt.py).
+# h_cam ~ altura de la cámara sobre el suelo.
+estimador_altura = EstimadorAltura(h_cam=0.4)
+costmap = CostmapLocal()
+map_manager = MapManager()
+
+ros_fused_pose: dict | None = None
+# Monotónico de cuándo llegó la última pose del EKF. Sin esto, `current_pose()`
+# devolvía la última pose para siempre aunque el EKF dejara de publicar: una
+# pose CONGELADA que el dashboard y la lógica tomaban como viva (auditoría
+# 2026-10-07). Con el sello se puede saber su antigüedad y no confiar en ella.
+ros_fused_pose_t: float | None = None
+# Pasado este umbral sin pose nueva del EKF, la localización deja de ser fiable.
+POSE_VIEJA_S = 1.5
+ros_last_map: dict | None = None
+
+# Sistema de evasión de obstáculos (NUEVO 2026-09-13)
+obstacle_controller: "ControladorEvasion | None" = None
+
+
+# =============================================
+# ===== ESTADO COMPARTIDO =====
+# =============================================
+class SharedState:
+    def __init__(self):
+        self.env_telemetry = {}
+        self.env_history = []          # para histogramas del dashboard
+        self.actuator_status = {}
+        self.detections = []
+        self.captures = []             # fotos guardadas al detectar plaga (galería de misión)
+        self.system_stats = {}
+        self.mission_active = False
+        self.config = config_store.load()
+        self.ws_clients: set[web.WebSocketResponse] = set()
+        self._seq = 0
+        # Estado deseado de los actuadores auxiliares. Es PEGAJOSO a
+        # propósito: los comandos de movimiento salen a 20 Hz y también los
+        # manda Nav2 por /cmd_vel, así que el servo y el LED no pueden
+        # viajar en cada mensaje de control — si no, mover el robot con las
+        # flechas reposicionaría la cámara y apagaría la luz. Se guardan
+        # acá y se adjuntan a TODO paquete saliente.
+        # Arranca mirando al frente, no en 0: 0° está fuera del recorrido útil
+        # del servo montado y el primer comando lo mandaba contra el tope.
+        self.servo_angle = SERVO_HOME_DEG   # ángulo del operador (sin offset)
+        self.led_on = False
+
+    def next_seq(self) -> int:
+        self._seq = (self._seq + 1) & 0xFFFF
+        return self._seq
+
+    def push_env_history(self, d: dict):
+        self.env_history.append({
+            "t": time.time(),
+            "co2": d.get("co2", 0),
+            "temp": d.get("tempSCD", 0),
+            "hum": d.get("humidity", 0),
+        })
+        cutoff = time.time() - 120
+        self.env_history = [p for p in self.env_history if p["t"] >= cutoff]
+
+    async def broadcast(self, message: dict):
+        """Manda el mensaje a todos los clientes EN PARALELO.
+
+        Antes era un `await ws.send_str()` por cliente en serie: un cliente
+        lento (Wi-Fi malo, pestaña en segundo plano) hacía esperar a todos
+        los demás, y a 10 Hz de scan eso se acumula. Con `gather` el lento
+        solo se retrasa a sí mismo."""
+        # El grabador ve TODO lo anunciado, haya o no un dashboard abierto.
+        if grabador is not None:
+            grabador.evento(message)
+        clientes = list(self.ws_clients)
+        if not clientes:
+            return
+        payload = json.dumps(message)
+        resultados = await asyncio.gather(
+            *(ws.send_str(payload) for ws in clientes),
+            return_exceptions=True)
+        for ws, res in zip(clientes, resultados):
+            if isinstance(res, Exception):
+                self.ws_clients.discard(ws)
+
+
+state = SharedState()
+
+
+# =============================================
+# ===== UDP: TELEMETRÍA AMBIENTAL (ESP32 LoRa V3, puerto 5001) =====
+# =============================================
+# Campos que la ESP32 LoRa V3 manda en cada trama (ver §5 del MANIFEST).
+ENV_FIELDS = ("accelX", "accelY", "accelZ", "gyroX", "gyroY", "gyroZ",
+              "co2", "tempSCD", "humidity")
+
+# Cada cuánto se refresca lo que mira una persona. El nodo manda a 20 Hz para
+# el EKF; el dashboard no necesita ni la décima parte.
+DASHBOARD_PERIODO_S = 0.5
+_ultimo_envio_dashboard = 0.0
+
+
+def _unit(value, lo: float = -1.0, hi: float = 1.0) -> float:
+    """Fracción del mando manual, saneada. Un cliente WebSocket es entrada
+    no confiable: un `null`, un texto o un 99 no pueden convertirse en un
+    comando de motores, así que lo que no sea un número usable vale 0."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if v != v:          # NaN: cualquier comparación con NaN da False, así
+        return 0.0      # que el clamp de abajo lo dejaría pasar entero
+    return max(lo, min(hi, v))
+
+
+def normalize_env(payload: dict) -> dict:
+    """
+    Garantiza que TODO campo esperado exista como float finito. Si un sensor
+    no llegó a inicializarse (I2C sin responder, cable flojo) el campo puede
+    venir ausente, en null, o como NaN/inf; en cualquiera de esos casos se
+    entrega `0.0`, que es lo pedido para que nada aguas abajo se rompa —
+    el filtro de pose, el EKF y el dashboard siempre reciben un número.
+
+    Pero 0.0 por "sensor caído" y 0.0 por "medición real de cero" NO son lo
+    mismo, y confundirlos sería inventar datos. Por eso se agrega
+    `_sensors_missing`: la lista de campos que fueron sustituidos. La UI
+    muestra el 0.0 marcado como no disponible en vez de graficarlo como si
+    fuera una lectura buena.
+    """
+    missing = []
+    for field in ENV_FIELDS:
+        value = payload.get(field)
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            number = None
+        if number is None or not math.isfinite(number):
+            payload[field] = 0.0
+            missing.append(field)
+        else:
+            payload[field] = number
+    payload["_sensors_missing"] = missing
+    return payload
+
+
+# Pérdidas y reinicios del nodo LoRa V3, deducidos de su `seq`.
+enlace_lora = health.ContadorSecuencia()
+
+
+class SesgoGiroscopio:
+    """Sesgo del giroscopio estimado solo, con el robot quieto.
+
+    En la configuración estaba en 0 (nunca se calibró) y el MPU6050 marca
+    +0,92 °/s en Z estando quieto: la pose giraba 53° por minuto sin moverse
+    (2026-09-30). Cada vez que el robot lleva ZUPT_TRAS_S sin orden de
+    moverse, las lecturas son puro sesgo + ruido: se promedian (media simple
+    al principio, luego media móvil de TAU_S) y se restan. Así se corrige
+    también en marcha, y se sigue la deriva térmica del sensor."""
+
+    TAU_S = 30.0
+    MIN_MUESTRAS = 100          # ~5 s a 20 Hz antes de aplicarlo
+    SALTO_DPS = 20.0            # una lectura así en reposo es un golpe, no sesgo
+
+    def __init__(self):
+        self.sesgo = {"gyroX": 0.0, "gyroY": 0.0, "gyroZ": 0.0}
+        self.muestras = 0
+        self._t = None
+
+    @property
+    def listo(self) -> bool:
+        return self.muestras >= self.MIN_MUESTRAS
+
+    def actualizar(self, lectura: dict, quieto: bool, ahora: float):
+        if not quieto:
+            self._t = None
+            return
+        if any(abs(lectura.get(e, 0.0) - b) > self.SALTO_DPS for e, b in self.sesgo.items()) and self.listo:
+            return
+        dt = 0.05 if self._t is None else min(max(ahora - self._t, 0.0), 0.5)
+        self._t = ahora
+        self.muestras += 1
+        a = 1.0 / self.muestras if not self.listo else dt / self.TAU_S
+        for eje in self.sesgo:
+            self.sesgo[eje] += a * (lectura.get(eje, 0.0) - self.sesgo[eje])
+
+
+sesgo_giro = SesgoGiroscopio()
+
+
+from lora_sensor_codec import SampleGate
+lora_sample_gate=SampleGate()
+
+class EnvTelemetryProtocol(asyncio.DatagramProtocol):
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def datagram_received(self, data, addr):
+        try:
+            payload = json.loads(data.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return
+        if not isinstance(payload, dict):
+            return
+
+        # Comando bajado por LoRaWAN y reenviado por el nodo LoRa V3. Llega
+        # por el MISMO puerto que la telemetría porque el nodo ya tenía ese
+        # socket abierto: abrir un segundo puerto solo para esto habría
+        # añadido una pieza más que puede quedar mal configurada, para un
+        # mensaje que llega como mucho una vez cada media hora.
+        #
+        # Es la vía de último recurso: cuando el robot está fuera del alcance
+        # del AP, el enlace LoRa es lo único que queda. Por eso la parada de
+        # emergencia se ejecuta aquí directamente en vez de pasar por el
+        # dashboard, que en ese escenario no tiene a nadie mirándolo.
+        if payload.get("type") == "lora_downlink":
+            comando = payload.get("cmd")
+            print(f"[lora] comando por downlink desde {addr[0]}: {comando}")
+            if comando in ("emergency_stop", "park"):
+                # `actuator_proto` es None hasta que el socket del C3 se abre
+                # en el arranque. Sin esta guarda, un downlink que llegara
+                # antes (o con el socket caído) lanzaría AttributeError
+                # DENTRO del callback de UDP, que asyncio se traga: la
+                # parada fallaría sin dejar rastro. Justo el caso en el que
+                # menos se puede fallar en silencio.
+                if actuator_proto is None:
+                    print("[lora] ✗ PARADA NO EJECUTADA: el enlace con el "
+                          "ESP32-C3 todavía no está abierto")
+                    return
+                _parada_total(f"LoRa {comando}")
+                _lanzar(state.broadcast({
+                    "type": "emergency_stop",
+                    "data": {"origen": "lora_downlink", "comando": comando},
+                }))
+                # Se avisa al gateway para que lo publique en Telegram: una
+                # parada disparada por radio es justo el evento que el
+                # operador NO está viendo en pantalla.
+                _lanzar(_avisar_al_gateway({
+                    "titulo": "Parada de emergencia por LoRa",
+                    "detalle": f"El robot ejecutó '{comando}' recibido por "
+                               f"downlink LoRaWAN.",
+                    "tipo": "sistema",
+                }))
+            return
+
+        if payload.get("sensor_v") == 3 and not lora_sample_gate.accept(payload):
+            return
+
+        seq = payload.get("seq")
+        if isinstance(seq, (int, float)) and enlace_lora.registrar(int(seq)):
+            print(f"[lora] el nodo LoRa V3 se reinició (#{enlace_lora.reinicios} desde que "
+                  f"arrancó el backend): si se repite, revisa su alimentación", flush=True)
+        payload = normalize_env(payload)
+        # Corrección de bias del giroscopio (calibración). Se aplica ACÁ, lo
+        # más cerca posible de la entrada, para que todo lo de aguas abajo
+        # (pose casera, EKF de ROS, dashboard) vea el mismo dato corregido.
+        # Antes estos offsets se guardaban en la config y no se aplicaban en
+        # ningún lado: calibrar desde el dashboard no hacía absolutamente nada.
+        cal = state.config["calibration"]
+        for axis, bias_key in (("gyroX", "gyro_bias_x_dps"),
+                               ("gyroY", "gyro_bias_y_dps"),
+                               ("gyroZ", "gyro_bias_z_dps")):
+            if axis in payload:
+                payload[axis] = payload[axis] - cal[bias_key]
+        # Autocalibración en reposo (ver SesgoGiroscopio). Sin enlace con la
+        # C3 el robot no puede moverse: también cuenta como quieto.
+        quieto = actuator_proto is None or actuator_proto.segundos_quieto() > ZUPT_TRAS_S
+        sesgo_giro.actualizar(payload, quieto, time.monotonic())
+        if sesgo_giro.listo:
+            for axis, b in sesgo_giro.sesgo.items():
+                if axis in payload:
+                    payload[axis] = payload[axis] - b
+
+        payload["_received_at"] = time.time()
+        payload["_source"] = addr[0]
+        state.env_telemetry = payload
+        health.beat("lora_v3")
+
+        # --- CAMINO RÁPIDO: todo lo que consume el estimador de pose ---
+        # Va a la frecuencia completa del nodo (20 Hz desde 2026-09-06), que
+        # es justo la `frequency: 20.0` del EKF en ekf.yaml.
+        pose_estimator.on_gyro(payload.get("gyroZ", 0.0))
+        # El mismo paquete sirve para saber cuánto cabecea el chasis, que es
+        # lo que descuadra la vista del sendero (ver cabeceo.py).
+        cabeceo_imu.actualizar(payload.get("accelX", 0.0), payload.get("accelY", 0.0),
+                               payload.get("accelZ", 0.0), payload.get("gyroX", 0.0),
+                               time.monotonic())
+        # IMU montado con Y adelante, X a los lados. ROS quiere X adelante,
+        # Y izquierda, Z arriba. Remap: ROS_x=sensor_y, ROS_y=-sensor_x.
+        ros_bridge.publish_imu(
+            {"x": payload.get("accelY", 0.0), "y": -payload.get("accelX", 0.0), "z": payload.get("accelZ", 0.0)},
+            {"x": payload.get("gyroY", 0.0), "y": -payload.get("gyroX", 0.0), "z": payload.get("gyroZ", 0.0)},
+        )
+
+        # --- CAMINO LENTO: lo que solo mira una persona ---
+        # El dashboard y el histórico se limitan a 2 Hz a propósito. A 20 Hz
+        # serían 20 mensajes WebSocket por segundo a cada navegador —más
+        # rápido de lo que un ojo distingue y suficiente para que el gráfico
+        # se atragante— y `push_env_history()` reconstruye su lista entera en
+        # cada llamada, así que a 20 Hz pasa a ser trabajo O(n) 20 veces por
+        # segundo sobre 2400 puntos.
+        #
+        # El dato de navegación NO se toca: ese ya salió arriba, entero.
+        global _ultimo_envio_dashboard
+        ahora = payload["_received_at"]
+        if ahora - _ultimo_envio_dashboard >= DASHBOARD_PERIODO_S:
+            _ultimo_envio_dashboard = ahora
+            state.push_env_history(payload)
+            _lanzar(state.broadcast({"type": "env_telemetry", "data": payload}), "env_telemetry")
+
+
+# =============================================
+# ===== ACTUADOR (ESP32-C3 Mini, por UART) =====
+# =============================================
+# Esta clase conserva TODA la logica de seguridad que tenia el camino UDP
+# —rampa, tope por LIDAR, odometria, calibracion del servo— y solo cambia el
+# transporte por debajo: en vez de un datagrama al 192.168.12.50 escribe en
+# un puerto serie. Ver uart_link.py para por que se dejaron el WiFi y el BLE.
+class ActuatorController:
+    def __init__(self, link):
+        self.link = link
+        self._ramp_v = 0.0
+        self._ramp_omega = 0.0
+        self._ramp_last_t = time.monotonic()
+        # Velocidad PEDIDA, distinta de la aplicada (`_ramp_*`). La rampa
+        # avanza hacia este objetivo en cada `tick()`, llegue o no un mensaje.
+        self._obj_v = 0.0
+        self._obj_omega = 0.0
+        self._obj_t = 0.0
+        self._ultimo_aviso_t = 0.0
+        # Último instante en que se mandó moverse (tras rampa y freno).
+        self._t_movimiento = 0.0
+
+    def _apply_ramp(self, v_target: float, omega_target: float,
+                    safety_cfg: dict) -> tuple[float, float]:
+        """
+        Limitador de rampa (slew-rate), NO es PID: no hay encoder que mida
+        la velocidad real del robot, así que no hay error que corregir en
+        lazo cerrado. Esto solo evita saltos bruscos entre el comando
+        anterior y el nuevo, limitando cuánto puede cambiar v/omega por
+        segundo (`safety.max_linear_accel_mps2` / `max_angular_accel_rps2`).
+
+        El tope de `dt` va atado al periodo nominal de comando (CMD_SEND_HZ)
+        para que un hueco largo no se traduzca en un salto grande. La rampa ya
+        no depende de que lleguen mensajes: la hace avanzar `tick()` a 20 Hz.
+        """
+        now = time.monotonic()
+        dt = max(0.0, min(now - self._ramp_last_t, RAMP_MAX_DT))
+        self._ramp_last_t = now
+
+        max_dv = safety_cfg["max_linear_accel_mps2"] * dt
+        max_domega = safety_cfg["max_angular_accel_rps2"] * dt
+
+        dv = max(-max_dv, min(max_dv, v_target - self._ramp_v))
+        domega = max(-max_domega, min(max_domega, omega_target - self._ramp_omega))
+
+        self._ramp_v += dv
+        self._ramp_omega += domega
+        return self._ramp_v, self._ramp_omega
+
+    def on_status(self, status: dict):
+        """Llega desde una trama del C3 por el serie, no desde un socket."""
+        state.actuator_status = status
+        health.beat("esp32c3")
+        _schedule(state.broadcast({"type": "actuator_status", "data": status}))
+
+    def send_command(self, v_ref: float, omega_ref: float, scan_cmd: int):
+        """Fija la velocidad pedida y aplica un paso de rampa.
+
+        Quien llama (Nav2, el conductor por pulsos, la patrulla) solo dice
+        a dónde quiere ir; llegar ahí lo resuelve `tick()`, que sigue
+        empujando la rampa aunque no vuelva a llegar ningún mensaje.
+        """
+        self._obj_v, self._obj_omega = v_ref, omega_ref
+        self._obj_t = time.monotonic()
+        self._aplicar(scan_cmd)
+
+    def tick(self):
+        """Avanza la rampa hacia el objetivo. Se llama a 20 Hz.
+
+        Arregla un fallo real, medido el 2026-09-16: la rampa solo avanzaba
+        al llegar un mensaje. Al soltar un botón llegaba UN único (0, 0),
+        que la bajaba 0,24 m/s, y `uart_link` reenviaba al C3 el valor
+        residual a 20 Hz para siempre: soltando a 0,90 m/s el robot seguía
+        a 0,66 m/s sin nadie al mando. El watchdog de 300 ms del firmware no
+        lo salvaba porque la trama nunca dejaba de llegar.
+        """
+        if time.monotonic() - self._obj_t > DEADMAN_S:
+            self._obj_v = self._obj_omega = 0.0
+        en_reposo = (self._ramp_v == 0.0 and self._ramp_omega == 0.0
+                     and self._obj_v == 0.0 and self._obj_omega == 0.0)
+        if not en_reposo:
+            self._aplicar(0)
+
+    def en_reposo(self) -> bool:
+        return self._ramp_v == 0.0 and self._ramp_omega == 0.0
+
+    def segundos_quieto(self) -> float:
+        """Tiempo desde la última orden de moverse que salió hacia la C3."""
+        return time.monotonic() - self._t_movimiento
+
+    def velocidades(self) -> dict:
+        """Lo que pidió el software y lo que salió tras la rampa. Sin esto el
+        registro de calibración guardaba velocidades en cero (2026-09-19) y
+        no se podía comparar lo comandado con lo real."""
+        return {"v_pedida": self._obj_v, "omega_pedida": self._obj_omega,
+                "v_aplicada": self._ramp_v, "omega_aplicada": self._ramp_omega}
+
+    def _aplicar(self, scan_cmd: int):
+        v_ref, omega_ref = self._apply_ramp(
+            self._obj_v, self._obj_omega, state.config["safety"])
+
+        # Frenado por LIDAR DESHABILITADO: permite manejo manual sin restricciones en pasillos
+        # (comentado 2026-10-07 — usuario pide control total sin bloqueos automáticos)
+        # v_seg, aviso = lidar_reactive.limitar_velocidad(v_ref, state.config["slam"])
+        # if v_seg != v_ref:
+        #     self._ramp_v = v_seg
+        #     ahora = time.monotonic()
+        #     if aviso is not None and ahora - self._ultimo_aviso_t > 0.25:
+        #         self._ultimo_aviso_t = ahora
+        #         _schedule(state.broadcast({"type": "obstacle_warning", "data": aviso}))
+        #     v_ref = v_seg
+
+        # Patinaje y modo seguro DESHABILITADOS: control manual sin restricciones
+        # (comentado 2026-10-07 — usuario pide control total sin limitaciones automáticas)
+        # factor = min(monitor_desliz.factor_velocidad(),
+        #              modo_seg.factor(manual=not _autonomia_activa()))
+        # if factor < 1.0:
+        #     v_ref *= factor
+        #     omega_ref *= factor
+        # monitor_desliz.on_orden(v_ref, omega_ref)  # DESHABILITADO: sin monitoreo restrictivo
+
+        # PROTECCIÓN FINAL COMÚN (supervisor): único punto por el que pasa TODO
+        # lo que mueve el robot (manual, Nav2, patrulla, exploración), así que
+        # es el lugar correcto para enclavar la emergencia y unificar límites.
+        # OFF por defecto (`safety.supervisor_activo`): activar tras validar.
+        # NO reemplaza el freno por LIDAR (capa aparte, sigue bajo tu control).
+        if state.config.get("safety", {}).get("supervisor_activo", False):
+            v_ref, omega_ref, _mot_sup = supervisor.proteccion_final(v_ref, omega_ref)
+
+        if abs(v_ref) > 1e-3 or abs(omega_ref) > 1e-3:
+            self._t_movimiento = time.monotonic()
+        pose_estimator.on_command(v_ref, omega_ref)
+        ros_bridge.publish_wheel_odom(v_ref, omega_ref)
+        self.link.set_actuators(self._servo_angle_with_offset(), state.led_on)
+        self.link.send_command(v_ref, self._giro_signo() * omega_ref, scan_cmd)
+
+    def send_actuator_update(self):
+        """Manda servo/LED sin tocar el movimiento: reusa la velocidad que
+        la rampa ya tiene aplicada, en vez de forzar 0 (si el robot va en
+        marcha y el operador toca el LED, no debe dar un tirón)."""
+        self.link.set_actuators(self._servo_angle_with_offset(), state.led_on)
+        self.link.send_command(self._ramp_v, self._giro_signo() * self._ramp_omega, 0)
+
+    def _giro_signo(self) -> int:
+        """-1 si el giro está invertido por hardware (config control.invertir_giro).
+
+        Corrige por SOFTWARE el caso "pido izquierda y va a la derecha" sin
+        reflashear: se niega omega JUSTO al enviar a la C3. No se toca el omega
+        LÓGICO (el que va a la odometría/EKF y respeta la convención ROS
+        omega>0=izquierda): es solo una corrección de cableado en el borde del
+        actuador, así el giroscopio y lo comandado quedan con el mismo signo."""
+        return -1 if state.config.get("control", {}).get("invertir_giro", False) else 1
+
+    def _servo_angle_with_offset(self) -> int:
+        """Aplica el offset de calibración al ángulo pedido. Antes este
+        offset se guardaba en la config y NO se usaba en ningún lado — la
+        pestaña de calibración del servo era puramente decorativa."""
+        return state.servo_angle + state.config["calibration"]["servo_offset_deg"]
+
+    def emergency_stop(self):
+        """Parada real e inmediata: NO pasa por la rampa de suavizado (que
+        frenaría gradual) — resetea la rampa a 0 y manda el paquete de una.
+        También apaga el LED: el estado deseado de los actuadores auxiliares
+        se resetea para que al soltar la emergencia nada se reactive solo."""
+        self._ramp_v = 0.0
+        self._ramp_omega = 0.0
+        # Sin esto `tick()` volvería a acelerar hacia la velocidad de antes.
+        self._obj_v = 0.0
+        self._obj_omega = 0.0
+        self._ramp_last_t = time.monotonic()
+        state.led_on = False
+        # Enclava la emergencia en el supervisor SOLO si está activo: así, con
+        # el flag OFF el supervisor queda dormido y no acumula estado (a
+        # `emergency_stop` también lo llaman `park`/desconexión/watchdog, que no
+        # son emergencias reales). Con el flag ON, la protección final rechaza
+        # todo movimiento hasta un rearme explícito (supervisor.rearmar, salud OK).
+        if state.config.get("safety", {}).get("supervisor_activo", False):
+            supervisor.emergencia()
+        pose_estimator.on_command(0.0, 0.0)
+        ros_bridge.publish_wheel_odom(0.0, 0.0)
+        self.link.emergency_stop()
+        self.link.set_actuators(self._servo_angle_with_offset(), False)
+
+
+# =============================================
+# ===== PUENTE ROS 2 (opcional — ver ros_bridge.py) =====
+# =============================================
+# Estos callbacks corren en el hilo del executor de rclpy (NO en el loop
+# de asyncio de aiohttp), así que cualquier cosa que toque `state` o mande
+# WebSocket tiene que cruzar al loop principal con run_coroutine_threadsafe.
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _schedule(coro):
+    """Cruza del hilo del executor de rclpy al loop de asyncio.
+
+    El `close()` importa: el puente ROS arranca al importar el módulo, ANTES
+    de que `start_background` fije `_main_loop`. Los scans que llegan en esa
+    ventana creaban una corrutina que nadie ejecutaba nunca, y Python la
+    denunciaba con "coroutine ... was never awaited" en cada arranque.
+    Descartarla explícitamente deja claro que es intencional y libera lo que
+    tenga agarrado."""
+    if _main_loop is None:
+        coro.close()
+        return
+    asyncio.run_coroutine_threadsafe(coro, _main_loop)
+
+
+def _ros_on_cmd_vel(v_ref: float, omega_ref: float):
+    """Nav2 publicó /cmd_vel — se manda por el mismo UDP binario de siempre.
+    Solo (v, omega): el robot es diferencial, no hay componente lateral."""
+    if actuator_proto is not None:
+        actuator_proto.send_command(v_ref, omega_ref, 0)
+
+
+# El radar del dashboard mide ~300 px de lado: más de ~200 puntos caen en el
+# mismo píxel y no aportan nada visible. Un scan completo del C1 son ~600
+# puntos = 30 KB de JSON, 10 veces por segundo y POR CLIENTE (300 KB/s).
+# Se diezma SOLO lo que se difunde; la evasión reactiva sigue recibiendo el
+# scan completo, que es donde la resolución sí importa: perder el único rayo
+# que da contra una rama fina es perder el frenado.
+RADAR_MAX_PUNTOS = 200
+_ultimo_envio_lidar = 0.0
+_ultimo_envio_pose = 0.0
+
+
+def _decimar(points: list[dict], maximo: int) -> list[dict]:
+    """Diezma y REDONDEA para la difusión.
+
+    El scan entra con precisión de float64 —`0.14875000715255737` m,
+    `-180.00000500895632`°— que en JSON son ~40 caracteres por punto de puro
+    ruido: el C1 tiene un error de ±3 cm, así que todo lo que hay más allá
+    del milímetro es dígito inventado. Redondear a mm y a centésimas de
+    grado no pierde nada real y achica el mensaje a la mitad."""
+    if len(points) > maximo:
+        paso = len(points) / maximo
+        points = [points[int(i * paso)] for i in range(maximo)]
+    return [{"angle_deg": round(p["angle_deg"], 2),
+             "distance_m": round(p["distance_m"], 3)} for p in points]
+
+
+def _ros_on_scan_points(points: list[dict]):
+    """sllidar_ros2 publicó /scan — alimenta la evasión reactiva + el radar."""
+    lidar_reactive.ingest_scan(points)
+    cfg_slam = state.config["slam"]
+    costmap.update(points, cfg_slam["robot_largo_cm"], cfg_slam["robot_ancho_cm"])
+    health.beat("lidar")
+    # Al dashboard se manda a 4 Hz, no a 10: el scan decimado son ~10 kB por
+    # mensaje y por WiFi compartido eso era ~100 kB/s solo de radar, que es
+    # parte de la latencia que se notaba. La evasión sigue usando los 10 Hz.
+    global _ultimo_envio_lidar
+    ahora = time.monotonic()
+    if ahora - _ultimo_envio_lidar < 0.25:
+        return
+    _ultimo_envio_lidar = ahora
+    cfg = state.config["slam"]
+    _schedule(state.broadcast({"type": "lidar_scan",
+                               "data": _decimar(points, RADAR_MAX_PUNTOS)}))
+    # Al dashboard en CENTÍMETROS: a estas distancias es lo que se entiende
+    # de un vistazo, y es como se configuran los umbrales.
+    d = lidar_reactive.distancias(cfg)
+    _schedule(state.broadcast({"type": "lidar_distancias", "data": {
+        **{lado: (None if v is None else round(v * 100)) for lado, v in d.items()},
+        "umbral_cm": cfg["margen_parada_cm"] + cfg["deslizamiento_cm"],
+    }}))
+
+
+def _ros_on_fused_pose(pose: dict):
+    """robot_localization publicó /odometry/filtered — reemplaza al PoseEstimator casero."""
+    global ros_fused_pose, ros_fused_pose_t, _ultimo_envio_pose
+    ros_fused_pose = pose
+    ros_fused_pose_t = time.monotonic()
+    ahora = time.monotonic()
+    if ahora - _ultimo_envio_pose < 0.12:      # ~8 Hz al dashboard
+        return
+    _ultimo_envio_pose = ahora
+    _schedule(state.broadcast({"type": "pose", "data": pose, "source": "ros_ekf"}))
+
+
+_last_map_broadcast = 0.0
+
+
+def _ros_on_map(map_dict: dict):
+    """slam_toolbox publicó /map — se manda al dashboard, limitado a 1 Hz (es pesado)."""
+    global ros_last_map, _last_map_broadcast
+    health.beat("slam")
+    ros_last_map = map_dict
+    now = time.time()
+    if now - _last_map_broadcast < 1.0:
+        return
+    _last_map_broadcast = now
+    _schedule(state.broadcast({"type": "map", "data": map_dict}))
+
+
+# Patinaje / atasco (ver deslizamiento.py) y modo seguro (ver modo_seguro.py):
+# lo ordenado se compara con lo que mide el LIDAR, y los fallos serios
+# llevan al robot a un estado seguro en vez de dejarlo seguir a ciegas.
+monitor_desliz = MonitorDeslizamiento()
+modo_seg = ModoSeguro()
+
+# Supervisor central de movimiento (ver supervisor_movimiento.py). Por ahora
+# solo se usa su PROTECCIÓN FINAL COMÚN (emergencia enclavada + límites), y SOLO
+# si `safety.supervisor_activo` está en true (OFF por defecto): así se puede
+# validar sin cambiar el comportamiento actual. Los límites salen de los topes
+# FÍSICOS reales del firmware (V_MAX/OMEGA_MAX), no de los ficticios del backend.
+supervisor = SupervisorMovimiento(v_max=0.55, omega_max=1.5)
+
+
+def _ros_on_odom_lidar(v: float, w: float):
+    """Velocidad medida por rf2o (hilo de ROS): solo actualiza números."""
+    monitor_desliz.on_medida(v, w)
+
+
+ros_bridge = AgroBotROSBridge(_ros_on_cmd_vel, _ros_on_scan_points, _ros_on_fused_pose, _ros_on_map,
+                              on_odom_lidar=_ros_on_odom_lidar)
+
+# Se crea en start_background, cuando ya existe el event loop al que el hilo
+# de captura tiene que despachar los frames.
+camera: CameraWorker | None = None
+
+
+def current_pose() -> dict:
+    """Pose fusionada real (EKF de robot_localization) si ROS está corriendo
+    y ya publicó al menos una vez; si no, cae al filtro complementario
+    casero de slam.py para que el dashboard nunca se quede sin lectura."""
+    return ros_fused_pose if ros_fused_pose is not None else pose_estimator.snapshot()
+
+
+def pose_edad_s() -> float | None:
+    """Segundos desde la última pose del EKF, o None si nunca llegó una.
+
+    Reloj monótono (no time.time): inmune a saltos del reloj del sistema, que
+    en esta Jetson sin RTC pueden ser de años al arrancar (ver memoria)."""
+    if ros_fused_pose_t is None:
+        return None
+    return time.monotonic() - ros_fused_pose_t
+
+
+def pose_confiable() -> bool:
+    """¿La localización es de fiar AHORA? False si el EKF no corre o si su
+    última pose es más vieja que POSE_VIEJA_S (pose congelada). Los modos que
+    dependen de localización deben consultarlo antes de navegar con la pose."""
+    edad = pose_edad_s()
+    return edad is not None and edad <= POSE_VIEJA_S
+
+
+# =============================================
+# ===== WEBSOCKET =====
+# =============================================
+async def ws_handler(request: web.Request):
+    ws = web.WebSocketResponse(heartbeat=10)
+    await ws.prepare(request)
+    state.ws_clients.add(ws)
+
+    await ws.send_str(json.dumps({
+        "type": "snapshot",
+        "data": {
+            "env_telemetry": state.env_telemetry,
+            "env_history": state.env_history,
+            "actuator_status": state.actuator_status,
+            "detections": state.detections[-20:],
+            "captures": list(reversed(state.captures[-40:])),
+            "system_stats": state.system_stats,
+            "mission_active": state.mission_active,
+            "config": state.config,
+            "models": list_model_files(),
+            "health": _salud_completa(),
+            "pose": current_pose(),
+            "pose_source": "ros_ekf" if ros_fused_pose is not None else "dead_reckoning",
+            "pose_edad_s": (round(e, 2) if (e := pose_edad_s()) is not None else None),
+            "pose_confiable": pose_confiable(),
+            "lidar_scan": _decimar(lidar_reactive.last_scan or [], RADAR_MAX_PUNTOS),
+            "map": ros_last_map,
+            "ros_available": ros_bridge.available,
+            "ros_reason": ROS_UNAVAILABLE_REASON,
+            "navigation": state.config["navigation"],
+            "actuator_setpoint": {"servo_angle": state.servo_angle, "led": state.led_on},
+        },
+    }))
+
+    last_cmd_sent = 0.0
+    min_interval = 1.0 / CMD_SEND_HZ
+
+    try:
+        async for msg in ws:
+            if msg.type != WSMsgType.TEXT:
+                continue
+            try:
+                cmd = json.loads(msg.data)
+            except json.JSONDecodeError:
+                continue
+
+            if cmd.get("type") == "control":
+                now = time.monotonic()
+                # Un "parar" nunca se descarta por el limitador: antes, si
+                # llegaba a menos de 50 ms del último comando (un toque corto
+                # en el móvil), se tiraba y el robot seguía con el anterior.
+                es_parada = not cmd.get("v") and not cmd.get("omega")
+                if now - last_cmd_sent < min_interval and not es_parada:
+                    continue
+                last_cmd_sent = now
+                # El mando manual manda FRACCIÓN (-1..1), no m/s: el
+                # dashboard no tiene por qué conocer los límites físicos del
+                # robot, y así el acelerador (`scale`) es una sola
+                # multiplicación acá en vez de tres cuentas en el navegador.
+                # Antes se mandaba v=1 crudo y el firmware lo recortaba a
+                # V_MAX en silencio: la UI decía 1.0 m/s y el robot iba a
+                # 0.55, y no había forma de pedir marcha lenta.
+                ctrl = state.config["control"]
+                scale = _unit(cmd.get("scale", 1.0), lo=0.0)
+                v = _unit(cmd.get("v", 0.0)) * ctrl["max_v_mps"] * scale
+                omega = _unit(cmd.get("omega", 0.0)) * ctrl["max_omega_rps"] * scale
+                scan = int(bool(cmd.get("scan", False)))
+                actuator_proto.send_command(v, omega, scan)
+
+            elif cmd.get("type") == "actuator":
+                # Servo / LED. Va por su propio mensaje y NO pasa por el
+                # throttle de `control`: el operador puede mover el slider
+                # con el robot detenido, y en ese caso no hay comandos de
+                # movimiento saliendo que arrastren el cambio.
+                if "servo_angle" in cmd:
+                    state.servo_angle = clamp_servo(float(cmd["servo_angle"]))
+                if "led" in cmd:
+                    state.led_on = bool(cmd["led"])
+                actuator_proto.send_actuator_update()
+                await state.broadcast({"type": "actuator_setpoint", "data": {
+                    "servo_angle": state.servo_angle,
+                    "led": state.led_on,
+                }})
+
+            elif cmd.get("type") == "emergency_stop":
+                _parada_total("dashboard WebSocket")
+
+    finally:
+        state.ws_clients.discard(ws)
+
+    return ws
+
+
+# =============================================
+# ===== VIDEO EN VIVO + DETECCIÓN YOLO =====
+# =============================================
+async def video_handler(request: web.Request):
+    """Sirve el MJPEG. No toca la cámara: solo consume lo que el hilo de
+    captura ya dejó listo (ver camera.py). Antes este handler abría su
+    propio `VideoCapture(0)` por petición —dos pestañas del dashboard eran
+    dos capturas peleando por la misma cámara— y hacía la lectura y la
+    compresión bloqueando el event loop."""
+    response = web.StreamResponse(
+        status=200,
+        headers={
+            "Content-Type": "multipart/x-mixed-replace; boundary=frame",
+            # Sin esto algunos navegadores y proxies cachean el stream y el
+            # video queda congelado en el primer frame.
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+    )
+    await response.prepare(request)
+
+    if camera is None:
+        return response
+
+    cola = camera.subscribe()
+    try:
+        while True:
+            jpeg = await cola.get()
+            await response.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+                                 + jpeg + b"\r\n")
+    except (ConnectionError, asyncio.CancelledError):
+        # ConnectionError cubre BrokenPipe y ConnectionReset: es lo normal
+        # cuando el navegador cierra la pestaña, no un fallo que reportar.
+        pass
+    finally:
+        camera.unsubscribe(cola)
+
+    return response
+
+
+# =============================================
+# ===== MODO AUTÓNOMO =====
+# =============================================
+patrol: PatrolController | None = None
+conductor: ConductorPulsos | None = None
+paso_robotico: PasoRobotico | None = None
+grabador: Grabador | None = None
+explorador: ExploradorReactivo | None = None
+nav_logger: NavigationLogger | None = None
+_nav_cal_task: asyncio.Task | None = None
+_nav_cal_stats: dict = {}
+seguidor_sendero: SeguidorSendero | None = None
+
+WAYPOINTS_PATH = _AQUI / "patrol_waypoints.json"
+
+
+odom_webcam: OdometriaWebcam | None = None
+
+
+def _servo_al_frente() -> tuple[bool, str]:
+    """¿La cámara mira al frente y quieta? Si no, la odometría visual leería
+    el giro del servo como giro del robot. Se mira lo que REPORTA el C3, no lo
+    que se le pidió: durante un barrido el firmware ignora el ángulo pedido."""
+    st = state.actuator_status or {}
+    if not st or time.time() - st.get("_received_at", 0) > 1.0:
+        return False, "sin estado del servo (¿C3 desconectado?)"
+    if st.get("scanning"):
+        return False, "cámara escaneando"
+    angulo = st.get("servo_angle")
+    frentes = {SERVO_HOME_DEG, SERVO_HOME_DEG + state.config["calibration"]["servo_offset_deg"]}
+    if angulo is None or min(abs(angulo - f) for f in frentes) > SERVO_TOLERANCIA_DEG:
+        return False, f"cámara girada ({angulo}°)"
+    return True, ""
+
+
+# Con el robot quieto se le dice al EKF "velocidad cero" (ZUPT). Sin LIDAR el
+# EKF no recibía ninguna velocidad lineal y extrapolaba la última durante
+# horas: el 2026-09-30 la pose llegó a x = 1771 m y el mapa a 9,7 km. Sin
+# scan fresco el freno por LIDAR ya impide avanzar, así que en ese caso el
+# robot siempre está quieto. Se espera ZUPT_TRAS_S tras la última orden
+# porque el chasis desliza ~80 cm al soltar.
+ZUPT_TRAS_S = 3.0
+ZUPT_HZ = 10
+
+
+async def _bucle_zupt():
+    while True:
+        try:
+            if actuator_proto is not None and actuator_proto.segundos_quieto() > ZUPT_TRAS_S:
+                ros_bridge.publish_zupt()
+        except Exception as exc:
+            print(f"[zupt] falló: {type(exc).__name__}: {exc}")
+        await asyncio.sleep(1.0 / ZUPT_HZ)
+
+
+def _autonomia_activa() -> bool:
+    """Algo que no es el operador está moviendo (o puede mover) el robot."""
+    return bool(state.mission_active
+                or (patrol is not None and patrol.activo)
+                or (explorador is not None and explorador.activo))
+
+
+def _barrido_activo() -> bool:
+    """¿Activo el barrido de tilt + freno proactivo? (flag de config, OFF def.)"""
+    return bool(state.config["autonomia"].get("barrido_tilt"))
+
+
+def _barrido_estable() -> bool:
+    """Con el barrido activo, ¿el servo está quieto en un ángulo conocido del
+    barrido? Entonces la geometría (corregida por tilt) vale para suelo_libre."""
+    if not _barrido_activo():
+        return False
+    st = state.actuator_status or {}
+    if not st or st.get("scanning") or time.time() - st.get("_received_at", 0) > 1.0:
+        return False
+    ang = st.get("servo_angle")
+    if ang is None:
+        return False
+    off = state.config["calibration"]["servo_offset_deg"]
+    return min(abs(ang - (SERVO_LEJOS_DEG + off)),
+               abs(ang - (SERVO_CERCA_DEG + off))) <= SERVO_TOLERANCIA_DEG
+
+
+def _detener_autonomia():
+    """Lo mismo que el botón de parar misión: la patrulla y el explorador
+    primero (si no, vuelven a mandar velocidad o una meta a Nav2)."""
+    if patrol is not None:
+        patrol.detener()
+    if explorador is not None:
+        explorador.detener()
+    ros_bridge.cancel_nav_goal()
+    state.mission_active = False
+    if actuator_proto is not None:
+        actuator_proto.emergency_stop()
+
+
+MODO_SEGURO_HZ = 5
+
+
+def _imu_vuelco() -> dict:
+    """Acelerómetro (g) y velocidad de balanceo (gyroY, eje de avance) del
+    último paquete del IMU, para que modo_seguro detecte inclinación/vuelco.
+    Vacío si aún no hay IMU: así no dispara nada."""
+    env = state.env_telemetry or {}
+    if "accelZ" not in env:
+        return {}
+    return {
+        "acc": (env.get("accelX", 0.0), env.get("accelY", 0.0), env.get("accelZ", 0.0)),
+        "giro_roll_dps": env.get("gyroY", 0.0),
+    }
+
+
+def _entradas_modo_seguro() -> dict:
+    ahora = time.time()
+    vistos = health._last_seen
+    edad = lambda k: (ahora - vistos[k]) if k in vistos else None
+    return {
+        "moviendose": actuator_proto is not None and not actuator_proto.en_reposo(),
+        "autonomia": _autonomia_activa(),
+        "edad_lidar_s": edad("lidar"),
+        "edad_c3_s": edad("esp32c3"),
+        "atascado": monitor_desliz.atascado,
+        "patinaje": monitor_desliz.patinaje,
+        "temp_c": (state.system_stats or {}).get("temp_c"),
+        "ekf_var_vx": (ros_fused_pose or {}).get("var_vx") if ros_bridge.available else None,
+        "mapa_corrupto": bool((ros_last_map or {}).get("corrupto")),
+        **_imu_vuelco(),
+    }
+
+
+def estado_seguridad() -> dict:
+    return {**modo_seg.estado(), "deslizamiento": monitor_desliz.estado()}
+
+
+async def _bucle_modo_seguro():
+    """Monitores de fallos a 5 Hz (ver modo_seguro.py). Al ENTRAR en SEGURO
+    detiene la autonomía, avisa al dashboard y a Telegram (vía la Pi)."""
+    nivel_previo = modo_seg.nivel
+    ultimo_envio = 0.0
+    while True:
+        try:
+            if not modo_seguro_habilitado:
+                # Modo seguro desactivado: ignorar evaluación
+                nivel = NORMAL
+                est = {"nivel": NORMAL, "motivos": [], "factor": 1.0}
+            else:
+                est = modo_seg.evaluar(_entradas_modo_seguro())
+                nivel = est["nivel"]
+            if nivel != nivel_previo:
+                motivo = "; ".join(est["motivos"]) or "todo en orden"
+                print(f"[seguridad] {nivel_previo} -> {nivel}: {motivo}")
+                if nivel == SEGURO:
+                    _detener_autonomia()
+                    await state.broadcast({"type": "toast", "data": {
+                        "kind": "error", "title": "MODO SEGURO",
+                        "message": f"Robot detenido: {motivo}. Revisar y rearmar."}})
+                    _schedule(_avisar_al_gateway({
+                        "tipo": "seguridad", "titulo": "AgroBot en MODO SEGURO",
+                        "mensaje": motivo}))
+                elif nivel == PRECAUCION:
+                    await state.broadcast({"type": "toast", "data": {
+                        "kind": "warning", "title": "Precaución",
+                        "message": f"Velocidad reducida: {motivo}"}})
+                nivel_previo = nivel
+                ultimo_envio = 0.0
+            if time.monotonic() - ultimo_envio > 2.0:
+                ultimo_envio = time.monotonic()
+                await state.broadcast({"type": "seguridad", "data": estado_seguridad()})
+        except Exception as exc:
+            print(f"[seguridad] bucle falló: {type(exc).__name__}: {exc}")
+        await asyncio.sleep(1.0 / MODO_SEGURO_HZ)
+
+
+async def seguridad_get_handler(request: web.Request):
+    return web.json_response(estado_seguridad())
+
+
+async def seguridad_rearmar_handler(request: web.Request):
+    ok, msg = modo_seg.rearmar()
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success" if ok else "warning", "title": "Modo seguro", "message": msg}})
+    return web.json_response({"ok": ok, "message": msg, **estado_seguridad()},
+                             status=200 if ok else 409)
+
+
+async def modo_seguro_toggle_handler(request: web.Request):
+    """Activa/desactiva el modo seguro completamente."""
+    global modo_seguro_habilitado
+    try:
+        data = await request.json()
+        nuevo_estado = data.get("habilitado")
+        if not isinstance(nuevo_estado, bool):
+            return web.json_response({"error": "habilitado debe ser true/false"}, status=400)
+
+        modo_seguro_habilitado = nuevo_estado
+        estado = "DESACTIVADO" if not nuevo_estado else "ACTIVADO"
+        print(f"[seguridad] modo seguro {estado}", flush=True)
+
+        await state.broadcast({"type": "toast", "data": {
+            "kind": "warning",
+            "title": "Modo Seguro",
+            "message": f"Modo seguro {estado}"}})
+
+        return web.json_response({
+            "ok": True,
+            "modo_seguro_habilitado": modo_seguro_habilitado,
+            "estado": estado
+        })
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400)
+
+
+async def _bucle_rampa():
+    """Hace avanzar la rampa del actuador a 20 Hz, llegue o no un comando."""
+    while True:
+        try:
+            if actuator_proto is not None:
+                actuator_proto.tick()
+        except Exception as exc:
+            print(f"[rampa] tick falló: {type(exc).__name__}: {exc}")
+        await asyncio.sleep(1.0 / CMD_SEND_HZ)
+
+
+# Con el adaptador USB CP2102N el LIDAR se caía del bus (4 veces en 15 min el
+# 2026-09-19) y sllidar_node quedaba bloqueado sobre el puerto viejo: el
+# `respawn` nunca actuaba y /scan callaba hasta reiniciar ROS. Sin scans el
+# freno por LIDAR bloquea adelante/atrás. Matar el driver colgado deja que
+# el respawn lo relance.
+# El puerto se elige como en scripts/elegir_puerto_lidar.sh: el USB si está
+# enchufado, si no la UART del conector (pines 8/10). La UART existe siempre,
+# así que "puerto presente" no dice que el LIDAR esté conectado: por eso los
+# reinicios se espacian si no sirven.
+LIDAR_USB = Path("/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_"
+                 "Bridge_Controller_5e723775cd73ef11b311cf8c8fcc3fa0-if00-port0")
+LIDAR_UART = Path("/dev/ttyTHS1")
+
+
+def _puerto_lidar() -> Path:
+    """El mismo criterio que scripts/elegir_puerto_lidar.sh: el adaptador
+    conocido, si no cualquier CP210x por by-id, si no la UART."""
+    if LIDAR_USB.exists():
+        return LIDAR_USB
+    for otro in sorted(Path("/dev/serial/by-id").glob("usb-Silicon_Labs_CP210*")):
+        return otro
+    return LIDAR_UART
+
+
+LIDAR_MUDO_S = 4.0          # sin scan este tiempo con el puerto presente = colgado
+LIDAR_ENTRE_REINICIOS_S = 20.0   # arranque del driver + respawn_delay, con holgura
+LIDAR_ESPERA_MAX_S = 300.0       # tope de la espera cuando reiniciar no lo trae
+_SLLIDAR_PATRON = "sllidar_ros2/lib/sllidar_ros2/sllidar_node"
+
+
+def _matar_sllidar() -> bool:
+    """SIGTERM y, si sigue vivo (bloqueado en el puerto), SIGKILL."""
+    r = subprocess.run(["pkill", "-TERM", "-f", _SLLIDAR_PATRON], capture_output=True)
+    if r.returncode != 0:
+        return False
+    time.sleep(1.5)
+    subprocess.run(["pkill", "-KILL", "-f", _SLLIDAR_PATRON], capture_output=True)
+    return True
+
+
+async def _vigia_lidar():
+    ultimo_reinicio = time.monotonic()
+    fallidos = 0                  # reinicios seguidos que no trajeron scans
+    puerto_antes = _puerto_lidar()
+    while True:
+        await asyncio.sleep(1.0)
+        try:
+            if not ros_bridge.available:
+                continue
+            ahora = time.monotonic()
+            if lidar_reactive.edad_scan_s() < LIDAR_MUDO_S:
+                if fallidos:
+                    print(f"[lidar] vuelven los scans tras {fallidos} reinicios", flush=True)
+                fallidos = 0
+                continue
+            espera = min(LIDAR_ESPERA_MAX_S, LIDAR_ENTRE_REINICIOS_S * (2 ** min(fallidos, 4)))
+            puerto = _puerto_lidar()
+            # Si cambió el puerto (se volvió a enchufar el USB tras caer a la
+            # UART) se relanza YA: con la espera acumulada, el 2026-09-30 el
+            # LIDAR podía tardar hasta 5 min en volver después de enchufarlo.
+            if puerto != puerto_antes:
+                print(f"[lidar] el puerto cambió: {puerto_antes} -> {puerto}; relanzo el driver",
+                      flush=True)
+                puerto_antes = puerto
+                fallidos = 0
+                ultimo_reinicio = 0.0
+                espera = 0.0
+            if not puerto.exists() or ahora - ultimo_reinicio < espera:
+                continue
+            ultimo_reinicio = ahora
+            if await asyncio.to_thread(_matar_sllidar):
+                fallidos += 1
+                print(f"[lidar] sin scans con {puerto} presente — driver relanzado "
+                      f"(intento {fallidos}, siguiente en {espera:.0f} s)", flush=True)
+                if fallidos <= 2:
+                    via = "USB" if puerto == LIDAR_USB else "UART (pines 8/10)"
+                    await state.broadcast({"type": "toast", "data": {
+                        "kind": "warning", "title": "LIDAR sin datos",
+                        "message": (f"Se relanzó el driver del LIDAR ({via}). Si sigue sin "
+                                    f"datos, revisá cable y alimentación."),
+                    }})
+        except Exception as exc:
+            print(f"[lidar] vigía falló: {type(exc).__name__}: {exc}", flush=True)
+
+
+# =============================================
+# ===== MANEJO MANUAL POR PULSOS =====
+# =============================================
+def _suelo_para_grabar() -> dict | None:
+    r = suelo_libre.ultimo
+    if r is None:
+        return None
+    return {"hueco": suelo_libre.hueco_delante(state.config["slam"]["robot_ancho_cm"] / 100.0),
+            "suelo_pct": r["suelo_pct"], "objeto_en_referencia": r["objeto_en_referencia"]}
+
+
+async def _bucle_grabador():
+    """Graba la sesión a 10 Hz en un hilo aparte (escribir disco, comprimir
+    scans y codificar JPEG no debe frenar el bucle del control)."""
+    while True:
+        await asyncio.sleep(1.0 / TELEMETRIA_HZ)
+        try:
+            await asyncio.to_thread(grabador.tick)
+        except Exception as exc:
+            print(f"[grabador] tick falló: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(2.0)
+
+
+SUELO_HZ = 8.0
+
+
+async def _bucle_suelo_libre():
+    """Analiza el suelo delante con cada fotograma (~8 Hz). Solo con la
+    cámara al frente y quieta: con el servo girado la geometría no vale y un
+    obstáculo saldría a una distancia falsa."""
+    ultimo_n = None
+    recorrido = 0.0        # distancia avanzada, para el paralaje de altura
+    while True:
+        await asyncio.sleep(1.0 / SUELO_HZ)
+        try:
+            if cv2 is None or camera is None:
+                continue
+            dato = camera.ultimo_frame()
+            if dato is None or dato[2] == ultimo_n:
+                continue
+            ultimo_n = dato[2]
+            al_frente, _ = _servo_al_frente()
+            # Con el barrido activo la cámara mira a propósito al suelo cercano o
+            # al sendero: si está quieta en un ángulo conocido, la geometría
+            # corregida por tilt (ver _geometria_camara) sí vale.
+            if not al_frente and not _barrido_estable():
+                suelo_libre.ultimo = None          # nada de datos con la cámara girada
+                continue
+            await asyncio.to_thread(suelo_libre.analizar, cv2, dato[0], _geometria_camara())
+            # Paralaje: con el barrido activo, acumula avance y alimenta el
+            # estimador de altura con la distancia al obstáculo que ve la cámara.
+            if _barrido_activo():
+                recorrido += abs(getattr(actuator_proto, "_ramp_v", 0.0)) / SUELO_HZ
+                hueco = suelo_libre.hueco_delante(
+                    state.config["slam"]["robot_ancho_cm"] / 100.0)
+                estimador_altura.alimentar(recorrido, hueco, time.monotonic())
+        except Exception as exc:
+            print(f"[suelo] análisis falló: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(1.0)
+
+
+async def _bucle_barrido_tilt():
+    """Mueve el servo de tilt en barrido (lejos=sendero / cerca=suelo) cuando el
+    barrido está activo y hay autonomía. Con el flag OFF no toca el servo: lo
+    maneja el operador. A ~5 Hz, suficiente para el dwell del barrido."""
+    t0 = time.monotonic()
+    anterior = None
+    while True:
+        await asyncio.sleep(0.2)
+        try:
+            if not _barrido_activo() or not _autonomia_activa() or actuator_proto is None:
+                anterior = None
+                continue
+            v = abs(getattr(actuator_proto, "_ramp_v", 0.0))
+            ang = clamp_servo(barrido_tilt_ctrl.angulo(time.monotonic() - t0, v))
+            if ang != anterior:
+                state.servo_angle = ang
+                actuator_proto.send_actuator_update()
+                anterior = ang
+        except Exception as exc:
+            print(f"[barrido] falló: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(1.0)
+
+
+async def suelo_vista_handler(request: web.Request):
+    """GET /api/suelo/vista.jpg — suelo libre por cámara: verde = suelo,
+    rojo = base de obstáculos, recuadro = franja de referencia."""
+    if cv2 is None or camera is None:
+        return web.json_response({"error": "cámara no disponible"}, status=503)
+    dato = camera.ultimo_frame()
+    if dato is None:
+        return web.json_response({"error": "sin fotograma"}, status=503)
+    img = cv2.resize(suelo_libre.dibujar(cv2, dato[0]), (480, 360), interpolation=cv2.INTER_NEAREST)
+    ok, jpg = cv2.imencode(".jpg", img)
+    return web.Response(body=jpg.tobytes(), content_type="image/jpeg",
+                        headers={"Cache-Control": "no-store"})
+
+
+async def suelo_estado_handler(request: web.Request):
+    """GET /api/suelo — resumen del suelo libre (sin la máscara)."""
+    r = suelo_libre.ultimo
+    if r is None:
+        return web.json_response({"activo": False})
+    return web.json_response({
+        "activo": True, "edad_s": round(time.monotonic() - r["t"], 2),
+        "hueco_delante_m": suelo_libre.hueco_delante(state.config["slam"]["robot_ancho_cm"] / 100.0),
+        "obstaculos": len(r["puntos"]), "objeto_en_referencia": r["objeto_en_referencia"],
+        "referencia_dudosa": r["referencia_dudosa"], "suelo_pct": r["suelo_pct"],
+        "distancia_min_visible_m": r["distancia_min_visible_m"]})
+
+
+# ----- Evasión autónoma: decide con evasion.py, se mueve con paso_robotico -----
+evasion_estado = {"activo": False, "decisiones": 0, "ultima": None, "resultado": None}
+_evasion_tarea: asyncio.Task | None = None
+RUTA_EVASION = Path.home() / ".agrobot" / "evasion"
+
+
+def _puntos_camara() -> list[dict]:
+    r = suelo_libre.ultimo
+    if r is None or time.monotonic() - r["t"] > 0.6:
+        return []
+    puntos = list(r["puntos"])
+    if r.get("objeto_en_referencia"):
+        # Algo pegado delante que la cámara no alcanza a medir: se pone justo
+        # en el frontal para que ninguna decisión avance hacia ahí.
+        ml = state.config["slam"]["robot_largo_cm"] / 200.0
+        puntos += [{"angle_deg": a, "distance_m": ml + 0.05} for a in (-10.0, 0.0, 10.0)]
+    return puntos
+
+
+async def _bucle_evasion(segundos: float, objetivo_deg: float):
+    cfg_slam = state.config["slam"]
+    umbral = (cfg_slam["margen_parada_cm"] + cfg_slam["deslizamiento_cm"]) / 100.0
+    fin = time.monotonic() + segundos
+    giros_fallidos = 0
+    RUTA_EVASION.mkdir(parents=True, exist_ok=True)
+    archivo = RUTA_EVASION / time.strftime("evasion_%Y%m%d_%H%M%S.jsonl")
+    evasion_estado.update(activo=True, decisiones=0, ultima=None, resultado=None)
+    resultado = "tiempo"
+    try:
+        while time.monotonic() < fin:
+            if lidar_reactive.edad_scan_s() > 1.0:
+                resultado = "sin_lidar"
+                break
+            d = evasion_mod.decidir(lidar_reactive.last_scan, _puntos_camara(),
+                                    objetivo_deg=objetivo_deg, umbral_m=umbral,
+                                    robot_largo_m=cfg_slam["robot_largo_cm"] / 100.0,
+                                    robot_ancho_m=cfg_slam["robot_ancho_cm"] / 100.0)
+            resumen = {k: v for k, v in d.items() if k != "libre"}
+            evasion_estado["decisiones"] += 1
+            evasion_estado["ultima"] = resumen
+            await state.broadcast({"type": "evasion", "data": evasion_estado})
+            if d["accion"] == "atascado":
+                resultado = "atascado"
+                break
+            if d["accion"] == "avanzar":
+                res = await paso_robotico.avanzar(d["cm"] / 100.0)
+            elif d["accion"] == "retroceder":
+                res = await paso_robotico.avanzar(-d["cm"] / 100.0)
+            else:
+                res = await paso_robotico.girar(d["grados"])
+                # El giro en sitio rinde muy poco en este chasis (2026-10-02):
+                # si dos giros seguidos no progresan, se para y se avisa.
+                giros_fallidos = giros_fallidos + 1 if res["resultado"] == "sin_progreso" else 0
+            with open(archivo, "a") as f:
+                f.write(json.dumps({"t": time.strftime("%H:%M:%S"), "decision": resumen,
+                                    "paso": res, "camara_pts": len(_puntos_camara())},
+                                   ensure_ascii=False) + "\n")
+            if giros_fallidos >= 2:
+                resultado = "no_gira"
+                break
+            if res["resultado"] in ("sin_lidar",):
+                resultado = res["resultado"]
+                break
+    except asyncio.CancelledError:
+        resultado = "detenido"
+        raise
+    finally:
+        conductor.parar()
+        evasion_estado.update(activo=False, resultado=resultado)
+        _schedule(state.broadcast({"type": "evasion", "data": evasion_estado}))
+        print(f"[evasion] fin: {resultado} tras {evasion_estado['decisiones']} decisiones", flush=True)
+
+
+def _detener_evasion():
+    global _evasion_tarea
+    if _evasion_tarea is not None and not _evasion_tarea.done():
+        _evasion_tarea.cancel()
+    _evasion_tarea = None
+
+
+async def evasion_start_handler(request: web.Request):
+    """POST /api/evasion/start {"segundos": 120, "objetivo_deg": 0}"""
+    global _evasion_tarea
+    if paso_robotico is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    if (_evasion_tarea is not None and not _evasion_tarea.done()) \
+            or (patrol is not None and patrol.activo) or (explorador is not None and explorador.activo):
+        return web.json_response({"error": "ya hay autonomía en marcha"}, status=409)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    segundos = max(5.0, min(1800.0, float(body.get("segundos", 120))))
+    objetivo = float(body.get("objetivo_deg", 0.0))
+    _evasion_tarea = asyncio.create_task(_bucle_evasion(segundos, objetivo))
+    return web.json_response({"ok": True, "segundos": segundos, "objetivo_deg": objetivo})
+
+
+async def evasion_stop_handler(request: web.Request):
+    _detener_evasion()
+    if paso_robotico is not None:
+        paso_robotico.detener()
+    return web.json_response({"ok": True, **evasion_estado})
+
+
+async def evasion_get_handler(request: web.Request):
+    return web.json_response(evasion_estado)
+
+
+def _parada_total(origen: str) -> list[str]:
+    """PARADA DE EMERGENCIA: detiene TODO lo que puede mover el robot.
+
+    Un solo sitio para todos los caminos (botón del dashboard por HTTP o
+    WebSocket, /api/drive "parar", downlink LoRa). Antes cada camino paraba
+    una lista distinta y el botón no conocía la evasión ni el paso robótico:
+    el lazo de pasos veía cortado su pulso, esperaba quieto, medía y mandaba
+    el SIGUIENTE (2026-10-02, "no vale el stop de emergencia").
+
+    Orden: primero lo que DECIDE (para que no vuelva a mandar nada), luego lo
+    que ejecuta, y al final la trama de parada al C3. Síncrona y sin await:
+    sirve también desde el callback UDP del LoRa."""
+    hecho = []
+    pasos = [
+        ("evasion", _detener_evasion),
+        ("paso_robotico", lambda: paso_robotico is not None and paso_robotico.detener()),
+        ("exploracion", lambda: explorador is not None and explorador.detener()),
+        ("patrulla", lambda: patrol is not None and patrol.detener()),
+        ("nav2", ros_bridge.cancel_nav_goal),
+        ("pulsos", lambda: conductor is not None and conductor.parar()),
+        ("motores", lambda: actuator_proto is not None and actuator_proto.emergency_stop()),
+    ]
+    for nombre, fn in pasos:
+        try:
+            fn()
+            hecho.append(nombre)
+        except Exception as exc:          # una pieza rota no impide parar el resto
+            print(f"[emergencia] {nombre} falló al parar: {type(exc).__name__}: {exc}", flush=True)
+    state.mission_active = False
+    print(f"[emergencia] PARADA TOTAL ({origen}): {', '.join(hecho)}", flush=True)
+    _schedule(state.broadcast({"type": "mission_state", "data": {"active": False}}))
+    _schedule(state.broadcast({"type": "toast", "data": {
+        "kind": "error", "title": "PARADA DE EMERGENCIA",
+        "message": f"Todo detenido ({origen})."}}))
+    return hecho
+
+
+async def emergencia_handler(request: web.Request):
+    """POST /api/emergencia — parada total por HTTP (el WebSocket se cae al
+    bloquear la pantalla del móvil; una petición HTTP llega o da error)."""
+    hecho = _parada_total("dashboard HTTP")
+    return web.json_response({"ok": True, "detenido": hecho})
+
+
+def _pulso_robotico(accion: str, escala: float, maniobra: bool):
+    """Un pulso para paso_robotico, con el acelerador de la config."""
+    ctrl = state.config["control"]
+    conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * escala,
+                      omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
+
+
+async def paso_get_handler(request: web.Request):
+    """GET /api/paso — en qué va el movimiento robótico por pulsos."""
+    if paso_robotico is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    return web.json_response(paso_robotico.estado)
+
+
+async def paso_post_handler(request: web.Request):
+    """POST /api/paso  {"accion": "avanzar", "cm": 50} | {"accion": "girar",
+    "grados": -90} | {"accion": "parar"}; opcional "escala" (0,1-1).
+
+    Movimiento cerrado por sensores: pulso, esperar quieto, medir, decidir
+    (ver paso_robotico.py). Responde enseguida; el progreso en GET."""
+    if paso_robotico is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    accion = body.get("accion")
+    if accion == "parar":
+        paso_robotico.detener()
+        return web.json_response({"ok": True, **paso_robotico.estado})
+    if accion not in ("avanzar", "girar"):
+        return web.json_response({"error": "accion = avanzar | girar | parar"}, status=400)
+    if (patrol is not None and patrol.activo) or (explorador is not None and explorador.activo):
+        return web.json_response({"error": "hay autonomía en marcha — detenela primero"}, status=409)
+    try:
+        cantidad = float(body["cm"] if accion == "avanzar" else body["grados"])
+    except (KeyError, TypeError, ValueError):
+        return web.json_response({"error": "falta cm (avanzar) o grados (girar)"}, status=400)
+    if "escala" in body:
+        paso_robotico.escala = _unit(body.get("escala"), lo=0.1)
+    if not paso_robotico.iniciar(accion, cantidad):
+        return web.json_response({"error": "ya hay un movimiento en curso"}, status=409)
+    return web.json_response({"ok": True, "accion": accion, "cantidad": cantidad,
+                              "escala": paso_robotico.escala})
+
+
+async def drive_handler(request: web.Request):
+    """POST /api/drive  {"accion": "adelante|atras|izquierda|derecha|parar",
+                         "escala": 0.1..1, "maniobra": true}
+
+    HTTP y no WebSocket a propósito: en el móvil el WebSocket se cae al
+    bloquear la pantalla y `sendControl` descartaba el mensaje en silencio
+    si no estaba abierto. Una petición HTTP o llega o devuelve error."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    accion = body.get("accion", "")
+
+    if accion == "parar":
+        # Parar lo para TODO (misma parada que el botón de emergencia).
+        hecho = _parada_total("/api/drive parar")
+        return web.json_response({"ok": True, "accion": "parar", "detenido": hecho})
+
+    if accion not in ACCIONES:
+        return web.json_response({"error": f"acción desconocida: {accion!r}"}, status=400)
+    if patrol is not None and patrol.activo:
+        return web.json_response(
+            {"error": "la patrulla autónoma está en marcha — detenela para manejar a mano"},
+            status=409)
+
+    # El operador toma el mando: la evasión y el paso robótico se cancelan.
+    _detener_evasion()
+    if paso_robotico is not None and paso_robotico.estado.get("activo"):
+        paso_robotico.detener()
+    ctrl = state.config["control"]
+    escala = _unit(body.get("escala", 1.0), lo=0.0)
+    conductor.ordenar(accion,
+                      v_max=ctrl["max_v_mps"] * escala,
+                      omega_max=ctrl["max_omega_rps"] * escala,
+                      maniobra=bool(body.get("maniobra", True)))
+    return web.json_response({"ok": True, "accion": accion})
+
+
+def _tilt_servo_extra() -> float:
+    """Inclinación extra de la cámara por el ÁNGULO DEL SERVO, respecto a HOME.
+
+    Corregido el 2026-10-14. Antes esto solo se sumaba con `barrido_tilt`
+    activo (flag OFF por defecto), así que con el servo parado fuera de HOME la
+    proyección al suelo seguía suponiendo la inclinación de HOME. Con el servo
+    a 76° —el ángulo que se usa para mirar el sendero— la cámara mira ~33°
+    abajo y la geometría asumía 15,5°: el suelo estimado se va al doble de
+    distancia y el sendero aparece corrido. El tilt del servo se conoce
+    siempre (es una orden propia), así que se aplica siempre.
+
+    Se prefiere el ángulo CONFIRMADO por el actuador y, si su telemetría está
+    vieja, el último ordenado: es la mejor estimación disponible y suponer HOME
+    es peor que suponer la orden. El modelo (ganancia 0,8°/°) sigue sin
+    verificar físicamente -> calibracion_camara.VERIFICADO.
+    """
+    st = state.actuator_status or {}
+    ang = st.get("servo_angle")
+    if ang is None or time.time() - st.get("_received_at", 0) > 1.0:
+        ang = state.servo_angle            # último ordenado (ya sin offset)
+    else:
+        ang -= state.config["calibration"]["servo_offset_deg"]
+    return inclinacion_por_servo(ang)
+
+
+def _geometria_camara() -> dict:
+    """La geometría de la cámara, corregida con el tilt del servo y con lo que
+    cabecea el chasis.
+
+    El detector de senderos proyecta la imagen al suelo suponiendo una
+    inclinación fija de la cámara. En la huerta el robot cabecea en cada surco
+    y 2° de error desplazan el suelo estimado 5 cm a un metro: el sendero
+    aparece corrido y el robot corrige hacia donde no debe. Medido en el
+    simulador, suponer cero da 2,6° de error medio; con el IMU, 0,2°.
+
+    Solo se corrige aquí, para la cámara. La odometría visual sigue con la
+    geometría cruda a propósito: alimenta el EKF y no se toca sin medirlo.
+    """
+    g = state.config["odometria_webcam"]
+    extra = _tilt_servo_extra()
+    if state.config["autonomia"].get("compensar_cabeceo", True):
+        cabeceo = cabeceo_imu.grados
+        if cabeceo is not None:            # None = sin telemetría todavía
+            extra += cabeceo
+    if not extra:
+        return g
+    return {**g, "camara_inclinacion_deg": g["camara_inclinacion_deg"] + extra}
+
+
+async def sendero_vista_handler(request: web.Request):
+    """GET /api/sendero/vista.jpg — lo que ve el detector de hileras ahora:
+    cámara con las plantas marcadas + vista cenital con hileras y sendero.
+    Para ajustar en campo el rango de verde y la geometría de la cámara."""
+    if cv2 is None or camera is None or seguidor_sendero is None:
+        return web.json_response({"error": "cámara no disponible"}, status=503)
+    dato = camera.ultimo_frame()
+    if dato is None:
+        return web.json_response({"error": "sin fotograma de la cámara"}, status=503)
+
+    def _render():
+        import sendero as sd
+        res = seguidor_sendero.vision.detectar(cv2, dato[0], state.config["autonomia"],
+                                               _geometria_camara())
+        ok, jpg = cv2.imencode(".jpg", sd.dibujar(cv2, dato[0], res),
+                               [cv2.IMWRITE_JPEG_QUALITY, 80])
+        return jpg.tobytes() if ok else None
+
+    datos = await asyncio.to_thread(_render)
+    if datos is None:
+        return web.json_response({"error": "no se pudo codificar la imagen"}, status=500)
+    return web.Response(body=datos, content_type="image/jpeg",
+                        headers={"Cache-Control": "no-store"})
+
+
+async def drive_mode_handler(request: web.Request):
+    """GET: modo actual. POST {"modo": ..., "perfil": bool}: cambia el modo.
+
+    `modo` cambia la duración de los pulsos (pulse_drive.MODOS). Con
+    `"perfil": true` aplica ADEMÁS los umbrales espaciales de ese entorno
+    (perfiles_entorno): hasta el 2026-10-14 el modo solo tocaba los pulsos, y
+    el robot seguía exigiendo 1 m libre por delante para moverse —el perfil de
+    huerta— lo que en una sala con macetas lo deja clavado.
+    """
+    if request.method == "GET":
+        actual = conductor.modo if conductor else "exterior"
+        return web.json_response({
+            "modo": actual, "modos": list(MODOS.keys()),
+            "perfiles": list(perfiles_entorno.PERFILES.keys()),
+            # Qué cambiaría al aplicar cada perfil, sin aplicarlo.
+            "perfil_pendiente": {
+                n: {k: {"antes": a, "despues": d}
+                    for k, (a, d) in perfiles_entorno.diferencias(state.config, n).items()}
+                for n in perfiles_entorno.PERFILES}})
+    body = await request.json()
+    modo = body.get("modo", "exterior")
+    if modo not in MODOS:
+        return web.json_response({"error": f"modo desconocido: {modo!r}"}, status=400)
+    if conductor:
+        conductor.modo = modo
+    # Se guarda: antes cada reinicio del backend volvía a "exterior" (pulsos
+    # de 1 s a toda velocidad) sin avisar (2026-10-02).
+    state.config = config_store.update_section("control", {"modo_manejo": modo})
+
+    difs = {}
+    if body.get("perfil") and modo in perfiles_entorno.PERFILES:
+        try:
+            difs = perfiles_entorno.aplicar(config_store, state.config, modo)
+        except perfiles_entorno.PerfilIncoherente as exc:
+            # No se aplica a medias: el margen de parada y la velocidad van
+            # juntos o no van.
+            return web.json_response({"error": f"perfil incoherente: {exc}"},
+                                     status=400)
+        state.config = config_store.load()
+
+    await state.broadcast({"type": "drive_mode", "data": {"modo": modo,
+                                                          "perfil": difs}})
+    detalle = (f"Cambiado a modo {modo}" if not difs else
+               f"Modo {modo} + perfil de entorno ({len(difs)} umbrales)")
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Modo de manejo", "message": detalle,
+    }})
+    return web.json_response({"ok": True, "modo": modo, "perfil": difs})
+
+
+def _foco(encendido: bool):
+    """Enciende o apaga el foco de escaneo."""
+    state.led_on = encendido
+
+
+async def _barrido_camara():
+    """Barrido de la cámara HECHO AQUÍ, moviendo el servo paso a paso.
+
+    Antes se levantaba el flag FLAG_SCAN y el barrido lo hacía el firmware,
+    con duración y recorrido fijos (10 s, 25→110°). Haciéndolo por software
+    se ajustan desde el dashboard sin reprogramar el ESP32, y se puede ir
+    más lento para que las fotos salgan nítidas.
+
+    El robot se deja parado durante el barrido: un servo barriendo mientras
+    el robot avanza da fotos movidas."""
+    cfg = state.config["autonomia"]
+    dur = max(0.5, float(cfg["escaneo_duracion_s"]))
+    a0, a1 = int(cfg["escaneo_angulo_min"]), int(cfg["escaneo_angulo_max"])
+    paso_s = 0.05                      # 20 pasos por segundo
+    n = max(1, int(dur / paso_s))
+    volver = state.servo_angle
+    foco_previo = state.led_on
+    try:
+        if actuator_proto is not None:
+            actuator_proto.send_command(0.0, 0.0, 0)
+        if cfg["escaneo_enciende_foco"]:
+            _foco(True)
+        for i in range(n + 1):
+            state.servo_angle = clamp_servo(a0 + (a1 - a0) * i / n)
+            if actuator_proto is not None:
+                actuator_proto.send_actuator_update()
+            await asyncio.sleep(paso_s)
+    finally:
+        # Vuelve a donde estaba el slider: si no, la odometría visual se
+        # queda pausada para siempre por "cámara girada".
+        state.servo_angle = volver
+        state.led_on = foco_previo          # el foco vuelve como estaba
+        if actuator_proto is not None:
+            actuator_proto.send_actuator_update()
+        await state.broadcast({"type": "actuator_setpoint", "data": {
+            "servo_angle": state.servo_angle, "led": state.led_on}})
+
+
+aprendizaje = None
+politica = None
+
+
+def _percepcion_robot() -> dict:
+    """Lo que percibe el robot, con los MISMOS nombres que en el simulador.
+
+    De esto dependen las maniobras aprendidas y la política entrenada: si
+    aquí se llamara distinto, lo aprendido en simulación no valdría."""
+    d = lidar_reactive.distancias(state.config["slam"])
+    v = seguidor_sendero.vision if seguidor_sendero is not None else None
+    pose = current_pose()
+    cm_centro, cm_ancho = costmap.hueco_libre()
+    return {
+        "lidar_adelante_m": d.get("adelante"), "lidar_atras_m": d.get("atras"),
+        "lidar_izquierda_m": d.get("izquierda"), "lidar_derecha_m": d.get("derecha"),
+        "costmap_hueco_m": cm_centro, "costmap_ancho_m": cm_ancho,
+        "sendero_lateral_m": getattr(v, "lateral_m", None),
+        "sendero_rumbo_deg": getattr(v, "angulo_deg", None),
+        "sendero_ancho_m": getattr(v, "ancho_m", None),
+        "sendero_confianza": getattr(v, "confianza", 0.0),
+        "v_actual": round(float(pose.get("vx", 0.0)), 3),
+        "omega_actual": round(float(pose.get("vyaw", 0.0)), 3),
+    }
+
+
+def _conducir_pulso(accion: str, maniobra: bool = True):
+    """Un pulso del conductor manual, con el acelerador de la config.
+
+    `maniobra` la decide quien llama (el explorador): con una pared cerca la
+    maniobra de tierra blanda haría girar al robot rozándola."""
+    ctrl = state.config["control"]
+    escala = state.config["autonomia"]["escala_velocidad"]
+    v_max = ctrl["max_v_mps"] * escala
+    # Freno proactivo: si la cámara ve un montículo bajo delante (lo que el
+    # LIDAR alto no ve), baja a la velocidad segura de la envolvente de vuelco
+    # ANTES de llegar. Solo con el barrido activo y para ir hacia delante.
+    if _barrido_activo() and accion == "adelante":
+        hueco = suelo_libre.hueco_delante(state.config["slam"]["robot_ancho_cm"] / 100.0)
+        # Altura estimada por paralaje; si aún no hay estimación, tope_velocidad
+        # usa el peor caso conservador.
+        altura = estimador_altura.altura()
+        v_max = min(v_max, freno_proactivo.tope_velocidad(hueco, v_max, altura_m=altura))
+    conductor.ordenar(accion, v_max=v_max,
+                      omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
+
+
+def _evento(tipo: str, data: dict):
+    print(f"[{tipo}] {data}", flush=True)
+    _lanzar(state.broadcast({"type": f"{tipo}_event", "data": data}), tipo)
+
+
+def _patrol_event(data: dict):
+    # Al log ADEMÁS de al dashboard: sin esto no había forma de saber qué hizo
+    # la patrulla si el navegador no estaba abierto (pasó el 2026-09-17).
+    print(f"[patrulla] {data}", flush=True)
+    _lanzar(state.broadcast({"type": "patrol_event", "data": data}), "patrulla")
+
+
+async def _cargar_modelo_si_falta(app: web.Application):
+    """Deja el YOLO activo cargado antes de soltar al robot solo."""
+    if camera is None or app.get("yolo_model") is not None:
+        return
+    try:
+        active_model = state.config.get("ai", {}).get("active_model", "")
+        if not active_model:
+            return
+        model_path = MODELS_DIR / active_model
+        if model_path.exists():
+            # Import local, como en el cargador del dashboard: faltaba y cada
+            # arranque autónomo fallaba con NameError sin cargar el modelo.
+            from ultralytics import YOLO
+            modelo = await asyncio.to_thread(YOLO, str(model_path))
+            app["yolo_model"] = modelo
+            camera.set_model(modelo)
+    except Exception as e:
+        print(f"[AUTO] Error cargando modelo: {e}")
+
+
+# =============================================
+# ===== PATRULLA (recorrido por waypoints) =====
+# =============================================
+async def patrol_status_handler(request: web.Request):
+    if patrol is None:
+        return web.json_response({"error": "patrulla no inicializada"}, status=503)
+    return web.json_response(patrol.snapshot())
+
+
+async def patrol_record_handler(request: web.Request):
+    """Graba el punto donde está el robot ahora mismo.
+
+    Es la vía prevista para armar el recorrido: se conduce el robot a mano
+    hasta cada planta o cabecera de surco y se pulsa grabar."""
+    if patrol is None:
+        return web.json_response({"error": "patrulla no inicializada"}, status=503)
+
+    wp = patrol.grabar_pose_actual()
+    if wp is None:
+        return web.json_response(
+            {"error": "sin pose todavía — ¿está corriendo el SLAM?"}, status=409)
+
+    await state.broadcast({"type": "patrol_event",
+                           "data": {"evento": "waypoint_grabado", "waypoint": wp}})
+    return web.json_response({"ok": True, "waypoint": wp,
+                              "total": len(patrol.waypoints)})
+
+
+async def exploracion_start_handler(request: web.Request):
+    """POST /api/exploracion/start — autonomía reactiva: recorre y mapea."""
+    if explorador is None:
+        return web.json_response({"error": "explorador no inicializado"}, status=503)
+    if patrol is not None and patrol.activo:
+        return web.json_response(
+            {"ok": False, "error": "detené la patrulla antes de explorar"}, status=409)
+    await _cargar_modelo_si_falta(request.app)
+    ok, msg = explorador.iniciar()
+    state.mission_active = ok
+    await state.broadcast({"type": "mission_state", "data": {"active": ok}})
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success" if ok else "warning", "title": "Exploración", "message": msg}})
+    return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 409)
+
+
+async def exploracion_stop_handler(request: web.Request):
+    if explorador is not None:
+        explorador.detener()
+    state.mission_active = False
+    actuator_proto.emergency_stop()
+    await state.broadcast({"type": "mission_state", "data": {"active": False}})
+    return web.json_response({"ok": True})
+
+
+async def patrol_auto_handler(request: web.Request):
+    """POST /api/patrol/auto {"activa": true} — graba un punto cada 1,5 m
+    mientras el operador conduce, para no tener que ir pulsando Grabar."""
+    if patrol is None:
+        return web.json_response({"error": "patrulla no inicializada"}, status=503)
+    body = await request.json()
+    ok, msg = patrol.grabacion_auto(bool(body.get("activa", False)))
+    if not ok:
+        return web.json_response({"ok": False, "error": msg}, status=409)
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Grabación de recorrido", "message": msg}})
+    return web.json_response({"ok": True, "activa": patrol.auto_activa, "message": msg})
+
+
+async def patrol_clear_handler(request: web.Request):
+    if patrol is None:
+        return web.json_response({"error": "patrulla no inicializada"}, status=503)
+    if patrol.activo:
+        return web.json_response(
+            {"error": "no se borra el recorrido con la patrulla corriendo"}, status=409)
+    patrol.borrar_waypoints()
+    return web.json_response({"ok": True})
+
+
+async def patrol_scan_handler(request: web.Request):
+    """Barrido manual bajo demanda, sin esperar a los 2 minutos."""
+    if patrol is None:
+        return web.json_response({"error": "patrulla no inicializada"}, status=503)
+    asyncio.create_task(patrol.escanear("manual"))
+    return web.json_response({"ok": True})
+
+# =============================================
+# ===== GRABACIÓN DE VIDEO =====
+# =============================================
+video_recording = False
+_video_task: "asyncio.Task | None" = None
+_video_file: str | None = None
+VIDEO_DIR = _AQUI / "videos"
+VIDEO_DIR.mkdir(exist_ok=True)
+VIDEO_FPS = 15          # metadato de reproducción; aproxima el ritmo del stream
+
+
+async def _bucle_grabar_video(filename: str):
+    """Graba a disco los MISMOS frames que ve el stream (con overlay YOLO).
+
+    El handler anterior creaba el VideoWriter pero NADIE le pasaba frames: el
+    .mp4 salía vacío. Acá nos suscribimos a la cámara (igual que el MJPEG),
+    decodificamos cada JPEG a BGR y lo escribimos. El writer se crea con el
+    TAMAÑO REAL del primer frame (antes se fijaba 1920x1080 a ciegas y, si no
+    coincidía, write() fallaba en silencio)."""
+    global video_recording, _video_file
+    import numpy as np          # np no está en el scope global de este módulo
+    if camera is None or cv2 is None:
+        video_recording = False
+        return
+    cola = camera.subscribe()
+    writer = None
+    n = 0
+    try:
+        while video_recording:
+            try:
+                jpeg = await asyncio.wait_for(cola.get(), timeout=2.0)
+            except asyncio.TimeoutError:
+                continue
+            frame = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+            if frame is None:
+                continue
+            if writer is None:
+                h, w = frame.shape[:2]
+                writer = cv2.VideoWriter(
+                    str(VIDEO_DIR / filename),
+                    cv2.VideoWriter_fourcc(*"mp4v"), VIDEO_FPS, (w, h))
+                if not writer.isOpened():
+                    print(f"[VIDEO] no se pudo abrir el writer para {filename}", flush=True)
+                    video_recording = False
+                    break
+            writer.write(frame)
+            n += 1
+    except asyncio.CancelledError:
+        pass
+    finally:
+        camera.unsubscribe(cola)
+        if writer is not None:
+            writer.release()
+        print(f"[VIDEO] grabación cerrada: {filename} ({n} frames)", flush=True)
+
+
+async def video_record_handler(request: web.Request):
+    """Inicia o detiene la grabación de video desde la cámara.
+    POST {"action": "start"|"stop"|"status"}."""
+    global video_recording, _video_task, _video_file
+
+    body = await request.json()
+    action = body.get("action", "start")
+
+    if action == "status":
+        return web.json_response({"grabando": video_recording, "file": _video_file})
+
+    if action == "start":
+        if video_recording:
+            return web.json_response({"error": "ya hay una grabación en curso",
+                                      "file": _video_file}, status=400)
+        if camera is None:
+            return web.json_response({"error": "cámara no disponible"}, status=503)
+        _video_file = f"agrobot_video_{int(time.time())}.mp4"
+        video_recording = True
+        _video_task = asyncio.create_task(_bucle_grabar_video(_video_file))
+        print(f"[VIDEO] iniciando grabación: {_video_file}", flush=True)
+        return web.json_response({"ok": True, "file": _video_file})
+
+    if action == "stop":
+        if not video_recording:
+            return web.json_response({"error": "no hay grabación en curso"}, status=400)
+        video_recording = False
+        if _video_task is not None:
+            try:
+                await asyncio.wait_for(_video_task, timeout=3.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                _video_task.cancel()
+            _video_task = None
+        archivo = _video_file
+        _video_file = None
+        print(f"[VIDEO] grabación detenida: {archivo}", flush=True)
+        return web.json_response({"ok": True, "file": archivo})
+
+    return web.json_response({"error": "acción inválida"}, status=400)
+
+
+async def _avisar_al_gateway(payload: dict):
+    """Empuja una alarma al gateway de la RPi para que la publique en Telegram.
+
+    Cualquier fallo (gateway apagado, LAN caída, timeout) se traga a
+    propósito: el aviso remoto es un extra, y un `raise` acá cancelaría la
+    tarea que además guarda la captura en disco.
+    """
+    global _sesion_http
+    try:
+        if _sesion_http is None or _sesion_http.closed:
+            _sesion_http = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=GATEWAY_ALERT_TIMEOUT_S))
+        async with _sesion_http.post(GATEWAY_ALERT_URL, json=payload) as resp:
+            await resp.read()
+    except Exception as exc:
+        print(f"[alerta] no se pudo avisar al gateway ({type(exc).__name__}) — "
+              f"la detección igual quedó guardada en la galería")
+
+
+def _on_detection(detection: dict, frame=None):
+    """Llega desde el hilo de inferencia, ya en el event loop."""
+    state.detections.append(detection)
+    if len(state.detections) > 200:
+        state.detections.pop(0)
+    _lanzar(state.broadcast({"type": "detection", "data": detection}), "deteccion")
+
+    # Detectar una planta dispara el barrido de cámara, con patrulla o sin
+    # ella. El propio controlador aplica la ventana anti-repetición: YOLO
+    # detecta la misma planta varias veces por segundo y sin ese freno el
+    # robot se quedaría barriendo delante del primer arbusto que viera.
+    if patrol is not None:
+        patrol.solicitar_escaneo_por_deteccion(
+            state.config["detection"].get("escanear_al_detectar", "siempre"))
+
+    if frame is not None:
+        _lanzar(state.broadcast({"type": "toast", "data": {
+            "kind": "warning", "title": "Plaga detectada",
+            "message": f"{detection['class']} · {detection['confidence']*100:.0f}% de confianza",
+        }}), "aviso")
+        _lanzar(save_capture(frame, detection["class"],
+                             detection["confidence"]), "captura")
+        # Solo se avisa al operador de lo que superó el umbral de "grabar
+        # clip" (el mismo que dispara la captura), no de cada caja que pinta
+        # el modelo: con el umbral bajo de visualización el chat sería ruido.
+        _lanzar(_avisar_al_gateway({
+            "tipo": "plaga",
+            "clase": detection["class"],
+            "confianza": detection["confidence"],
+            "origen": "jetson-yolo",
+        }), "gateway")
+
+
+# =============================================
+# ===== GALERÍA DE MISIÓN (capturas de plagas) =====
+# =============================================
+# Cuando una detección supera el umbral de "grabar clip", la foto real de
+# la cámara (no un placeholder) se guarda en disco y queda disponible para
+# que el dashboard la descargue — esta es la parte de "el robot llega y
+# descarga lo que encontró" que antes faltaba: antes solo había un log de
+# texto, ahora cada hallazgo trae su evidencia fotográfica.
+async def save_capture(frame, cls_name: str, conf: float):
+    import cv2
+
+    ts = time.time()
+    cap_id = f"{int(ts * 1000)}"
+    filename = f"{cap_id}_{cls_name}.jpg"
+
+    def _comprimir_y_guardar():
+        ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        if not ok:
+            return False
+        (CAPTURES_DIR / filename).write_bytes(jpeg.tobytes())
+        return True
+
+    # Comprimir a JPEG de calidad 90 y escribir a disco son dos operaciones
+    # bloqueantes; en el event loop frenarían los comandos al robot justo en
+    # el momento en que se detecta algo, que es cuando menos conviene.
+    if not await asyncio.get_running_loop().run_in_executor(None, _comprimir_y_guardar):
+        return
+
+    capture = {
+        "id": cap_id,
+        "class": cls_name,
+        "confidence": conf,
+        "ts": ts,
+        "image_url": f"/captures/{filename}",
+    }
+    state.captures.append(capture)
+    if len(state.captures) > 500:
+        oldest = state.captures.pop(0)
+        old_path = CAPTURES_DIR / oldest["image_url"].split("/")[-1]
+        old_path.unlink(missing_ok=True)
+
+    await state.broadcast({"type": "capture", "data": capture})
+
+
+async def captures_list_handler(request: web.Request):
+    limit = int(request.query.get("limit", "60"))
+    cls_filter = request.query.get("class")
+    items = state.captures
+    if cls_filter:
+        items = [c for c in items if c["class"] == cls_filter]
+    return web.json_response(list(reversed(items))[:limit])
+
+
+async def captures_clear_handler(request: web.Request):
+    for c in state.captures:
+        (CAPTURES_DIR / c["image_url"].split("/")[-1]).unlink(missing_ok=True)
+    state.captures = []
+    await state.broadcast({"type": "captures_cleared", "data": {}})
+    return web.json_response({"ok": True})
+
+
+# =============================================
+# ===== GESTOR DE MODELOS =====
+# =============================================
+def list_model_files() -> list[dict]:
+    out = []
+    for ext in ("*.engine", "*.pt", "*.onnx"):
+        for p in MODELS_DIR.glob(ext):
+            out.append({
+                "name": p.name,
+                "size_mb": round(p.stat().st_size / (1024 * 1024), 1),
+                "active": p.name == state.config["ai"]["active_model"],
+            })
+    return out
+
+
+async def models_list_handler(request: web.Request):
+    return web.json_response(list_model_files())
+
+
+async def models_load_handler(request: web.Request):
+    body = await request.json()
+    name = body.get("name")
+
+    # DESCARGAR EL MODELO: `name` vacío o nulo deja el video sin detección.
+    if name in (None, "", "none"):
+        request.app["yolo_model"] = None
+        if camera is not None:
+            camera.set_model(None)
+        config_store.update_section("ai", {"active_model": ""})
+        state.config = config_store.load()
+        await state.broadcast({"type": "toast", "data": {
+            "kind": "info", "title": "Modelo descargado", "message": "Video sin detección",
+        }})
+        return web.json_response({"ok": True, "active_model": ""})
+
+    if not isinstance(name, str) or not name or "/" in name or "\\" in name or name.startswith("."):
+        return web.json_response({"error": "Nombre de modelo inválido"}, status=400)
+
+    model_path = MODELS_DIR / name
+    if not model_path.exists():
+        print(f"[YOLO] Modelo no encontrado: {model_path} (MODELS_DIR={MODELS_DIR})")
+        disponibles = list_model_files()
+        return web.json_response({"error": f"Modelo '{name}' no encontrado. Disponibles: {[m['name'] for m in disponibles]}"}, status=404)
+
+    try:
+        from ultralytics import YOLO
+        print(f"[YOLO] Cargando {name}...")
+        modelo = await asyncio.to_thread(YOLO, str(model_path))
+        print(f"[YOLO] {name} cargado OK")
+    except ImportError:
+        return web.json_response({"error": "Librería ultralytics no instalada. Instala: pip install ultralytics"}, status=500)
+    except Exception as exc:
+        err = str(exc)
+        print(f"[YOLO] Error cargando {name}: {err}")
+        return web.json_response({"error": f"Error al cargar modelo: {err}"}, status=400)
+
+    # Un modelo de CLASIFICACIÓN no produce cajas: `results.boxes` viene en
+    # None y el hilo de inferencia revienta en cada frame. Degradaba
+    # "bien" (se recupera y reintenta) pero la detección no funcionaba nunca
+    # y el motivo solo se veía en `estado`. Mejor rechazarlo acá con el
+    # motivo claro. Pasó de verdad: un yolo11s-cls bajado de Kaggle.
+    tarea = getattr(modelo, "task", None)
+    if tarea != "detect":
+        return web.json_response(
+            {"error": f"el modelo es de tipo '{tarea}', y el robot necesita "
+                      f"uno de detección ('detect'): un clasificador no "
+                      f"produce cajas y no se puede dibujar ni ubicar la plaga"},
+            status=400)
+
+    request.app["yolo_model"] = modelo
+    # Sin esto el modelo quedaba guardado en la config y el dashboard decía
+    # "Modelo cargado", pero el HILO DE INFERENCIA nunca se enteraba: la
+    # detección no corría nunca y no había ningún error que lo delatara.
+    if camera is not None:
+        camera.set_model(modelo)
+
+    config_store.update_section("ai", {"active_model": name})
+    state.config = config_store.load()
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Modelo cargado", "message": name,
+    }})
+    return web.json_response({"ok": True, "active_model": name})
+
+
+# =============================================
+# ===== HARDWARE / CALIBRACIÓN =====
+# =============================================
+async def hardware_get_handler(request: web.Request):
+    return web.json_response(state.config["hardware"])
+
+
+async def hardware_update_handler(request: web.Request):
+    body = await request.json()
+    data = config_store.update_section("hardware", body)
+    state.config = data
+    await state.broadcast({"type": "config_update", "data": state.config})
+    return web.json_response(data["hardware"])
+
+
+async def calibration_get_handler(request: web.Request):
+    return web.json_response(state.config["calibration"])
+
+
+async def calibration_update_handler(request: web.Request):
+    body = await request.json()
+    data = config_store.update_section("calibration", body)
+    state.config = data
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Calibración guardada", "message": "Offsets escritos en EEPROM local.",
+    }})
+    await state.broadcast({"type": "config_update", "data": state.config})
+    return web.json_response(data["calibration"])
+
+
+# =============================================
+# ===== PARÁMETROS (SLAM / DETECCIÓN / SEGURIDAD) =====
+# =============================================
+PARAM_SECTIONS = ("slam", "detection", "safety", "control", "odometria_webcam", "autonomia")
+
+# Topes que un cliente NO puede sobrepasar por más que mande cualquier cosa
+# al POST. La sección `control` multiplica directamente lo que sale hacia
+# los motores, así que un valor absurdo (o un texto) no puede quedar
+# guardado: se guardaría en disco y seguiría vigente en el próximo arranque.
+CONTROL_LIMITS = {
+    "max_v_mps": (0.05, 1.5),
+    "max_omega_rps": (0.1, 4.0),
+}
+
+
+def sanitize_control(body: dict) -> dict:
+    limpio = {}
+    for clave, (lo, hi) in CONTROL_LIMITS.items():
+        if clave not in body:
+            continue
+        try:
+            valor = float(body[clave])
+        except (TypeError, ValueError):
+            continue
+        if valor != valor:      # NaN
+            continue
+        limpio[clave] = max(lo, min(hi, valor))
+    return limpio
+
+
+async def params_get_handler(request: web.Request):
+    return web.json_response({k: state.config[k] for k in PARAM_SECTIONS})
+
+
+async def params_update_handler(request: web.Request):
+    section = request.match_info["section"]
+    if section not in PARAM_SECTIONS:
+        return web.json_response({"error": "sección desconocida"}, status=404)
+    body = await request.json()
+    if section == "control":
+        body = sanitize_control(body)
+    data = config_store.update_section(section, body)
+    state.config = data
+    if section == "slam" and "pose_gyro_trust" in body:
+        pose_estimator.gyro_weight = float(body["pose_gyro_trust"])
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Parámetros actualizados", "message": section,
+    }})
+    await state.broadcast({"type": "config_update", "data": state.config})
+    return web.json_response(data[section])
+
+
+# =============================================
+# ===== LIDAR (ingesta de scan 2D) =====
+# =============================================
+async def lidar_scan_handler(request: web.Request):
+    """
+    Punto de enganche para quien lea el RPLIDAR C1 (por ejemplo un script
+    con la librería `rplidar` corriendo aparte, o el nodo sllidar_ros2):
+    POST /api/lidar/scan  con {"points": [{"angle_deg": .., "distance_m": ..}, ...]}
+    """
+    body = await request.json()
+    points = body.get("points", [])
+    lidar_reactive.ingest_scan(points)
+    cfg_slam = state.config["slam"]
+    costmap.update(points, cfg_slam["robot_largo_cm"], cfg_slam["robot_ancho_cm"])
+    health.beat("lidar")
+
+    # Procesar LIDAR para evasión de obstáculos (NUEVO 2026-09-13)
+    global obstacle_controller
+    if obstacle_controller and points:
+        try:
+            ranges = [p.get("distance_m", 10.0) for p in points]
+            angles = [math.radians(p.get("angle_deg", 0)) for p in points]
+            lecturas = LecturasSensoresLIDAR.desde_scan_lidar(ranges, angles, time.time())
+            obstacle_controller.procesar_lidar(lecturas)
+        except Exception as e:
+            print(f"[EVASION] Error procesando LIDAR: {e}")
+
+    await state.broadcast({"type": "lidar_scan", "data": points})
+    return web.json_response({"ok": True, "points_received": len(points)})
+
+
+async def obstacle_status_handler(request: web.Request):
+    """Retorna el estado actual del sistema de evasión de obstáculos."""
+    global obstacle_controller
+    if obstacle_controller:
+        return web.json_response(obstacle_controller.get_estado_json())
+    return web.json_response({"error": "Sistema de evasión no disponible", "estado": "deshabilitado"})
+
+
+# =============================================
+# ===== COSTMAP LOCAL =====
+# =============================================
+
+async def costmap_status_handler(request: web.Request):
+    """GET /api/costmap — resumen del costmap local."""
+    res = costmap.resumen()
+    centro, ancho = costmap.hueco_libre()
+    res["hueco_centro_cm"] = None if centro is None else round(centro * 100)
+    res["hueco_ancho_cm"] = None if ancho is None else round(ancho * 100)
+    return web.json_response(res)
+
+
+async def costmap_grid_handler(request: web.Request):
+    """GET /api/costmap/grid — rejilla como lista de listas (para debug/visor)."""
+    grid = costmap.as_occupancy_grid()
+    return web.json_response({"grid": grid.tolist(),
+                              "cells": costmap.cells, "res_m": costmap.res})
+
+
+async def costmap_reset_handler(request: web.Request):
+    """POST /api/costmap/reset"""
+    import numpy as np
+    costmap.grid = np.full((costmap.cells, costmap.cells), 0.5, dtype=np.float32)
+    costmap._scan_count = 0
+    return web.json_response({"ok": True})
+
+
+async def local_map_save_handler(request: web.Request):
+    """POST /api/costmap/save — guarda el costmap local con nombre."""
+    body = await request.json()
+    name = body.get("name", "costmap_auto")
+    pose = current_pose()
+    path = map_manager.save(name, costmap, pose)
+    return web.json_response({"ok": True, "path": str(path)})
+
+
+async def local_map_load_handler(request: web.Request):
+    """POST /api/costmap/load — restaura un costmap guardado."""
+    body = await request.json()
+    name = body.get("name", "costmap_auto")
+    meta = map_manager.load(name, costmap)
+    if meta is None:
+        return web.json_response({"error": f"mapa '{name}' no existe"}, status=404)
+    return web.json_response({"ok": True, "meta": meta})
+
+
+async def local_map_list_handler(request: web.Request):
+    """GET /api/costmap/maps — lista de mapas locales guardados."""
+    return web.json_response(map_manager.list_maps())
+
+
+async def local_map_delete_handler(request: web.Request):
+    """POST /api/costmap/delete — borra un mapa guardado."""
+    body = await request.json()
+    name = body.get("name", "")
+    ok = map_manager.delete(name)
+    if not ok:
+        return web.json_response({"error": f"mapa '{name}' no existe"}, status=404)
+    return web.json_response({"ok": True})
+
+
+# =============================================
+# ===== SALUD DE TÓPICOS =====
+# =============================================
+# Varianza de la velocidad de avance del EKF por encima de la cual ya no le
+# llega ninguna medida (rf2o ni /zupt): crece ~0,1 (m/s)² por segundo.
+EKF_VARIANZA_DISPARADA = 1.0
+# La Intel 8265 se protege sola hacia 100 °C (apaga la radio: sin AP, sin
+# dashboard y sin C3 por WiFi). Aviso con margen.
+TEMP_RADIO_AVISO_C = 75.0
+
+
+def _salud_completa() -> list[dict]:
+    """Latidos de cada fuente + el MOTIVO cuando algo falla. El dashboard, el
+    WebSocket y /api/health usan esta misma lista."""
+    cfg = state.config["safety"]
+    filas = health.snapshot(cfg["heartbeat_stale_warn_s"], cfg["heartbeat_stale_err_s"])
+    for f in filas:
+        f["detail"] = ""
+        try:
+            if f["key"] == "lidar":
+                puerto = _puerto_lidar()
+                f["detail"] = ("USB (CP2102N)" if puerto != LIDAR_UART
+                               else "sin adaptador USB: ¿cable suelto? (probando la UART)")
+            elif f["key"] == "esp32c3" and enlace_c3 is not None:
+                r = enlace_c3.resumen()
+                wifi = r["wifi"] or {}
+                partes = ["BLE ✓" if r["ble"] else (
+                    f"BLE buscando hace {r['buscando_s'] // 60} min" if r["buscando_s"] is not None
+                    else "BLE ✗")]
+                partes.append(f"WiFi ✓ {wifi['ip']}" if wifi.get("conectado") else "WiFi ✗")
+                partes.append(f"{r['reconexiones']} conexiones BLE")
+                if r["reinicios_c3"]:
+                    partes.append(f"{r['reinicios_c3']} reinicios")
+                f["detail"] = " · ".join(partes)
+            elif f["key"] == "lora_v3":
+                r = enlace_lora.resumen()
+                if r["perdida_pct"] is not None:
+                    f["detail"] = f"UDP · pérdida {r['perdida_pct']}% · {r['reinicios']} reinicios"
+            elif f["key"] == "slam" and ros_last_map:
+                ext = ros_last_map.get("extension_m")
+                if ext is not None:
+                    f["detail"] = f"mapa de {ext:.0f} m"
+                if ros_last_map.get("corrupto"):
+                    f["status"] = "err"
+                    f["detail"] = (f"mapa corrupto ({ext / 1000:.1f} km): la pose saltó. "
+                                   "Reinicia el mapa")
+        except Exception as exc:
+            f["detail"] = f"({type(exc).__name__})"
+    # ROS no tiene heartbeat (no es un nodo que mande datos periódicos), pero
+    # sí es un servicio del que depende media pestaña de Navegación — así que
+    # aparece en la misma lista, con el MOTIVO cuando no está.
+    filas.append({
+        "key": "ros",
+        "label": "ROS 2 / Nav2",
+        "icon": "🧭",
+        "status": "ok" if ros_bridge.available else "warn",
+        "age_s": None,
+        "detail": "" if ros_bridge.available else ROS_UNAVAILABLE_REASON,
+    })
+    t_radio = _temperatura_zona("iwlwifi_1")
+    if t_radio is not None:
+        filas.append({
+            "key": "radio",
+            "label": "Tarjeta WiFi/Bluetooth",
+            "icon": "🌡️",
+            "status": "ok" if t_radio < TEMP_RADIO_AVISO_C else ("warn" if t_radio < 90 else "err"),
+            "age_s": None,
+            "detail": f"{t_radio:.0f} °C" + ("" if t_radio < TEMP_RADIO_AVISO_C
+                                            else " — caliente: ventilación o menos carga de radio"),
+        })
+    if ros_fused_pose is not None:
+        var = ros_fused_pose.get("var_vx") or 0.0
+        disparada = var > EKF_VARIANZA_DISPARADA
+        filas.append({
+            "key": "ekf",
+            "label": "Odometría fusionada (EKF)",
+            "icon": "🧮",
+            "status": "err" if disparada else "ok",
+            "age_s": None,
+            "detail": ("sin medida de velocidad: extrapola (¿LIDAR y ZUPT caídos?)" if disparada
+                       else f"x={ros_fused_pose['x']:.1f} y={ros_fused_pose['y']:.1f} m · "
+                            f"sesgo del giro {sesgo_giro.sesgo['gyroZ']:+.2f} °/s"
+                            + ("" if sesgo_giro.listo else " (calibrando)")),
+        })
+    return filas
+
+
+async def health_handler(request: web.Request):
+    return web.json_response(_salud_completa())
+
+
+# =============================================
+# ===== NAVEGACIÓN (Nav2 vía ros_bridge.py) =====
+# =============================================
+async def nav_set_goal_handler(request: web.Request):
+    """
+    POST /api/nav/set_goal  {"x": .., "y": .., "theta_deg": ..}
+    El click en el mini-mapa del dashboard llega aquí ya convertido a
+    coordenadas del mundo (metros, frame "map") usando la resolución/
+    origen que trae el propio mensaje /map.
+    """
+    if not ros_bridge.available:
+        return web.json_response({"error": "ROS no disponible en este backend — instala rclpy/nav2 y corre agrobot_navigation.launch.py"}, status=503)
+    body = await request.json()
+    x, y = float(body.get("x", 0.0)), float(body.get("y", 0.0))
+    theta = float(body.get("theta_deg", 0.0))
+    ok = ros_bridge.send_nav_goal(x, y, theta)
+    if ok:
+        config_store.update_section("navigation", {"last_goal": {"x": x, "y": y, "theta_deg": theta}})
+        state.config = config_store.load()
+        await state.broadcast({"type": "toast", "data": {
+            "kind": "success", "title": "Meta enviada a Nav2", "message": f"x={x:.2f} y={y:.2f}",
+        }})
+    else:
+        await state.broadcast({"type": "toast", "data": {
+            "kind": "error", "title": "Nav2 no respondió", "message": "¿Está corriendo agrobot_navigation.launch.py?",
+        }})
+    return web.json_response({"ok": ok})
+
+
+async def nav_restart_handler(request: web.Request):
+    """Reinicia el servicio Nav2 (killea y relanza)"""
+    try:
+        # Matar nodos Nav2
+        await asyncio.to_thread(
+            subprocess.run,
+            ["ros2", "node", "kill", "/nav2_bringup/lifecycle_manager_navigation"],
+            capture_output=True, timeout=5)
+        await asyncio.sleep(2)
+        await state.broadcast({"type": "toast", "data": {
+            "kind": "ok", "title": "Nav2 reiniciándose", "message": "El servicio se está reiniciando. Espera 5-10 segundos.",
+        }})
+        return web.json_response({"ok": True})
+    except Exception as e:
+        print(f"[NAV2] Error reiniciando: {e}")
+        await state.broadcast({"type": "toast", "data": {
+            "kind": "error", "title": "Error", "message": f"No se pudo reiniciar Nav2: {str(e)}",
+        }})
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def nav_cancel_handler(request: web.Request):
+    ros_bridge.cancel_nav_goal()
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "warning", "title": "Misión cancelada", "message": "Meta de navegación cancelada por el operador.",
+    }})
+    return web.json_response({"ok": True})
+
+
+async def nav_save_map_handler(request: web.Request):
+    """
+    POST /api/nav/save_map  — cierra la sesión de mapeo: le pide a
+    nav2_map_server que escriba maps/agrobot_map.{yaml,pgm} a partir del
+    mapa que slam_toolbox tiene armado en memoria en ese momento. Requiere
+    correr esto MIENTRAS agrobot_mapping.launch.py sigue vivo.
+    """
+    name = state.config["navigation"]["map_name"]
+    MAPS_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = str(MAPS_DIR / name)
+    try:
+        # En un hilo: bloquear el bucle de eventos 15 s tira el WebSocket
+        # (latido de 10 s) y corta el vídeo. Era una de las causas de "se
+        # pierde el enlace Jetson".
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["ros2", "run", "nav2_map_server", "map_saver_cli", "-f", out_path],
+            capture_output=True, text=True, timeout=15,
+        )
+        ok = result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        ok = False
+        result = None
+        err_msg = str(e)
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success" if ok else "error",
+        "title": "Mapa guardado" if ok else "No se pudo guardar el mapa",
+        "message": f"{name}.yaml" if ok else (result.stderr[-200:] if result else err_msg),
+    }})
+    return web.json_response({"ok": ok, "path": out_path if ok else None})
+
+
+async def nav_reset_map_handler(request: web.Request):
+    """POST /api/nav/reset_map — borra el mapa de slam_toolbox y empieza de cero.
+
+    También borra el recorrido grabado: los waypoints son coordenadas del
+    mapa viejo, y tras el reset el origen pasa a ser donde está el robot
+    ahora. Conservarlos mandaría la patrulla a sitios equivocados."""
+    if patrol is not None and patrol.activo:
+        return web.json_response(
+            {"ok": False, "error": "detené la patrulla antes de resetear el mapa"}, status=409)
+
+    def _llamar():
+        return subprocess.run(
+            ["ros2", "service", "call", "/slam_toolbox/reset",
+             "slam_toolbox/srv/Reset", "{pause_new_measurements: false}"],
+            capture_output=True, text=True, timeout=20)
+
+    try:
+        res = await asyncio.to_thread(_llamar)
+        ok = res.returncode == 0 and "result=0" in res.stdout
+        detalle = "" if ok else (res.stderr or res.stdout)[-200:]
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        ok, detalle = False, str(exc)
+
+    borrados = 0
+    if ok and patrol is not None:
+        borrados = len(patrol.waypoints)
+        patrol.borrar_waypoints()
+
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success" if ok else "error",
+        "title": "Mapa reseteado" if ok else "No se pudo resetear el mapa",
+        "message": (f"Mapa en blanco. Se borraron {borrados} punto(s) del recorrido."
+                    if ok else detalle or "¿Está corriendo slam_toolbox?"),
+    }})
+    return web.json_response({"ok": ok, "waypoints_borrados": borrados},
+                             status=200 if ok else 502)
+
+
+# =============================================
+# ===== MAPAS CON NOMBRE =====
+# =============================================
+# Carpeta propia, distinta de MAPS_DIR (esa es la del map_saver de Nav2).
+mapas = GestorMapas(_AQUI.parent.parent / "maps")
+
+
+async def mapas_listar_handler(request: web.Request):
+    return web.json_response({"mapas": mapas.listar()})
+
+
+async def mapas_guardar_handler(request: web.Request):
+    """POST /api/mapas/guardar  {"nombre": "invernadero", "sobrescribir": false}"""
+    body = await request.json()
+    try:
+        info = await mapas.guardar(body.get("nombre", ""), patrol.waypoints if patrol else [],
+                                   bool(body.get("sobrescribir", False)))
+    except ErrorMapa as exc:
+        existe = "ya existe" in str(exc)
+        return web.json_response({"ok": False, "error": str(exc), "existe": existe},
+                                 status=409 if existe else 400)
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Mapa guardado",
+        "message": f"«{info['nombre']}» con {info['puntos']} punto(s) de recorrido.",
+    }})
+    return web.json_response({"ok": True, **info})
+
+
+async def mapas_cargar_handler(request: web.Request):
+    """POST /api/mapas/cargar  {"nombre": "invernadero"}
+
+    Reemplaza el mapa en memoria de slam_toolbox y el recorrido de la
+    patrulla. El robot tiene que estar en la base donde empezó ese mapa."""
+    if patrol is not None and patrol.activo:
+        return web.json_response(
+            {"ok": False, "error": "detené la patrulla antes de cargar otro mapa"}, status=409)
+    body = await request.json()
+    try:
+        waypoints = await mapas.cargar(body.get("nombre", ""))
+    except ErrorMapa as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    if patrol is not None:
+        patrol.reemplazar_waypoints(waypoints)
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Mapa cargado",
+        "message": f"«{body.get('nombre')}» con {len(waypoints)} punto(s). El SLAM sigue ampliándolo.",
+    }})
+    return web.json_response({"ok": True, "puntos": len(waypoints)})
+
+
+async def nav_mode_handler(request: web.Request):
+    """GET: modo actual. POST {"mode": "mapping"|"localization"}: solo lo anota
+    para la UI — relanzar los nodos ROS correctos se hace a mano (ver README),
+    cambiar este valor no reinicia ningún proceso."""
+    if request.method == "GET":
+        return web.json_response(state.config["navigation"])
+    body = await request.json()
+    mode = body.get("mode")
+    if mode not in ("mapping", "localization"):
+        return web.json_response({"error": "mode debe ser 'mapping' o 'localization'"}, status=400)
+    data = config_store.update_section("navigation", {"mode": mode})
+    state.config = data
+    await state.broadcast({"type": "config_update", "data": state.config})
+    return web.json_response(data["navigation"])
+
+
+# =============================================
+# ===== MISIÓN =====
+# =============================================
+async def mission_start_handler(request: web.Request):
+    """
+    MODO AUTÓNOMO. Único punto de entrada: arranca la patrulla por los
+    waypoints grabados y carga el YOLO.
+
+    Antes esto solo levantaba una bandera y sacaba un aviso diciéndole al
+    operador que fuera a mandar metas a mano — o sea que "modo autónomo"
+    dejaba el robot parado. Había además un segundo par de endpoints
+    (/api/autonomous/*) que hacía casi lo mismo y al que no llamaba nadie;
+    se eliminaron para que exista UN solo camino.
+    """
+    await _cargar_modelo_si_falta(request.app)
+
+    # Un pulso manual a medio ejecutar pelearía con Nav2 por el actuador.
+    if conductor is not None and conductor.activo:
+        conductor.parar()
+    if explorador is not None and explorador.activo:
+        explorador.detener()
+
+    ok, msg = (False, "patrulla no inicializada")
+    if patrol is not None:
+        ok, msg = patrol.iniciar()
+
+    state.mission_active = ok
+    await state.broadcast({"type": "mission_state", "data": {"active": ok}})
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success" if ok else "warning",
+        "title": "Modo autónomo" if ok else "No se pudo arrancar",
+        "message": msg,
+    }})
+    print(f"[AUTO] {msg}")
+    return web.json_response({"active": ok, "message": msg}, status=200 if ok else 409)
+
+
+async def mission_stop_handler(request: web.Request):
+    # La patrulla primero: parar el actuador antes dejaría el bucle vivo y
+    # volvería a mandarle una meta a Nav2 acto seguido.
+    if patrol is not None:
+        patrol.detener()
+        patrol.grabacion_auto(False)
+    if explorador is not None:
+        explorador.detener()
+    state.mission_active = False
+    actuator_proto.emergency_stop()
+    await state.broadcast({"type": "mission_state", "data": {"active": False}})
+    return web.json_response({"active": False})
+
+
+# =============================================
+# ===== REPORTE DE SESIÓN =====
+# =============================================
+async def session_report_handler(request: web.Request):
+    report = {
+        "generated_at": time.time(),
+        "detections_summary": _summarize_detections(state.detections),
+        "captures_count": len(state.captures),
+        "captures": state.captures,
+        "env_last": state.env_telemetry,
+        # Para comprobar el signo del IMU: levantar el morro a mano y ver si
+        # `cabeceo_deg` se vuelve negativo (ver calibration.imu_cabeceo_signo).
+        "cabeceo_imu": cabeceo_imu.resumen(),
+    }
+    out_path = SESSION_REPORT_DIR / f"session_{int(time.time())}.json"
+    out_path.write_text(json.dumps(report, indent=2))
+    return web.json_response(report)
+
+
+def _summarize_detections(detections: list[dict]) -> dict:
+    summary: dict[str, int] = {}
+    for d in detections:
+        summary[d["class"]] = summary.get(d["class"], 0) + 1
+    return summary
+
+
+# =============================================
+# ===== ESTADÍSTICAS DEL SISTEMA (CPU/RAM) =====
+# =============================================
+_GPU_CARGA = Path("/sys/devices/platform/bus@0/17000000.gpu/load")
+_muestras_gpu: list[float] = []
+
+
+def _carga_gpu_pct() -> float | None:
+    """Media de las últimas lecturas: el valor instantáneo salta de 0 a 90
+    entre dos inferencias de YOLO."""
+    try:
+        _muestras_gpu.append(int(_GPU_CARGA.read_text()) / 10.0)
+    except (OSError, ValueError):
+        return None
+    del _muestras_gpu[:-5]
+    return round(sum(_muestras_gpu) / len(_muestras_gpu), 1)
+
+
+def _temperatura_zona(tipo: str) -> float | None:
+    """Temperatura de la zona térmica del kernel de ese tipo (p. ej.
+    "tj-thermal", la unión del chip, o "iwlwifi_1", la tarjeta WiFi/BT)."""
+    for zona in Path("/sys/class/thermal").glob("thermal_zone*"):
+        try:
+            if (zona / "type").read_text().strip() == tipo:
+                t = int((zona / "temp").read_text()) / 1000.0
+                return round(t, 1) if 0 < t < 150 else None
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def _temperatura_c() -> float | None:
+    """La del chip (unión, "tj"). NO la zona más caliente: esa era la tarjeta
+    WiFi a 79 °C y el dashboard la mostraba como la del sistema."""
+    return _temperatura_zona("tj-thermal") or _temperatura_zona("cpu-thermal")
+
+
+async def stats_loop():
+    try:
+        import psutil
+    except ImportError:
+        psutil = None
+
+    # jtop (jetson-stats) da GPU/temperatura reales en Jetson; si no está
+    # instalado (`pip install jetson-stats`, requiere reinicio del daemon
+    # jtop una vez), esos campos quedan honestamente en None.
+    jtop_reader = None
+    try:
+        from jtop import jtop
+        jtop_reader = jtop()
+        jtop_reader.start()
+    except Exception:
+        jtop_reader = None
+
+    while True:
+        stats = {
+            "cpu_pct": psutil.cpu_percent(interval=None) if psutil else None,
+            "ram_pct": psutil.virtual_memory().percent if psutil else None,
+            "gpu_pct": None,
+            "temp_c": None,
+            # FPS REALES de captura, medidos en el hilo. Sin esto no había
+            # forma de saber desde la interfaz si el video iba a 30 o a 5.
+            "camera": camera.snapshot() if camera is not None else None,
+        }
+        if jtop_reader is not None:
+            try:
+                stats["gpu_pct"] = jtop_reader.stats.get("GPU")
+                # jtop nombra las zonas en minúscula ("Temp tj", "Temp cpu"):
+                # con "Temp CPU" esto salía siempre vacío.
+                stats["temp_c"] = (jtop_reader.stats.get("Temp tj")
+                                   or jtop_reader.stats.get("Temp cpu"))
+            except Exception:
+                pass
+        # jtop no da la carga de la GPU en esta Orin (salía siempre vacía):
+        # se lee del propio driver, en tantos por mil.
+        if stats["gpu_pct"] is None:
+            stats["gpu_pct"] = _carga_gpu_pct()
+        if stats["temp_c"] is None:
+            stats["temp_c"] = _temperatura_c()
+        # La tarjeta WiFi/BT va aparte: es la que se calienta (AP + cliente +
+        # Bluetooth en una sola radio) y la que se apaga sola si pasa de ~100.
+        stats["temp_wifi_c"] = _temperatura_zona("iwlwifi_1")
+
+        state.system_stats = stats
+        health_data = _salud_completa()
+
+        # --- ACTUALIZAR COMUNICACIÓN AUTOMÁTICA ---
+        if auto_comunicacion and enlace_c3:
+            auto_comunicacion.actualizar_estado_vias(
+                ble_conectado=enlace_c3.ble.connected,
+                wifi_conectado=(enlace_c3.wifi.conectado
+                               if enlace_c3.wifi else False)
+            )
+        # --- FIN ACTUALIZACIÓN ---
+
+        await state.broadcast({"type": "system_stats", "data": stats})
+        if odom_webcam is not None:
+            await state.broadcast({"type": "odom_webcam", "data": odom_webcam.snapshot()})
+        if explorador is not None:
+            await state.broadcast({"type": "exploracion", "data": explorador.snapshot()})
+        await state.broadcast({"type": "health", "data": health_data})
+        # solo emite el fallback casero si ROS todavía no ha mandado una
+        # pose fusionada real — evita pisar la buena con la de dead-reckoning
+        if ros_fused_pose is None:
+            # La procedencia viaja CON la pose. Antes los dos caminos —el EKF
+            # real y este fallback de dead-reckoning— mandaban el mismo
+            # mensaje pelado y el dashboard asumía que toda pose venía del
+            # EKF: con ROS caído seguía anunciando "EKF (robot_localization)"
+            # sobre una pose integrada a mano, que es justo el dato que el
+            # operador necesita para NO confiar en ella.
+            await state.broadcast({"type": "pose",
+                                   "data": pose_estimator.snapshot(),
+                                   "source": "dead_reckoning"})
+        await asyncio.sleep(2)
+
+
+# =============================================
+# ===== APP =====
+# =============================================
+actuator_proto: ActuatorController | None = None
+ble_link: BleActuatorLink | None = None
+enlace_c3: EnlaceC3 | None = None
+auto_comunicacion = None  # Sistema automático de comunicación
+modo_seguro_habilitado = True  # Botón para desactivar/activar modo seguro
+
+
+async def _bind_udp(loop, protocol_factory, port: int, label: str):
+    """
+    Intenta escuchar en la IP del AP de la Jetson (192.168.12.1). Si esa IP
+    no está asignada —el AP no está levantado todavía, o la Jetson está
+    conectada a otra red como cliente— cae a 0.0.0.0 con un aviso claro en
+    vez de reventar con un `OSError: [Errno 99]` sin contexto, que era lo
+    que pasaba antes y dejaba el backend sin arrancar sin explicar por qué.
+    """
+    try:
+        transport, proto = await loop.create_datagram_endpoint(
+            protocol_factory, local_addr=(JETSON_AP_IP, port)
+        )
+        print(f"[UDP] {label} ↔ {JETSON_AP_IP}:{port}")
+        return transport, proto
+    except OSError:
+        try:
+            transport, proto = await loop.create_datagram_endpoint(
+                protocol_factory, local_addr=("0.0.0.0", port)
+            )
+        except OSError as exc:
+            # Si TAMBIÉN falla 0.0.0.0 el motivo ya no es "el AP no existe":
+            # lo normal es que otra instancia del backend siga viva. Sin este
+            # mensaje salía un traceback de asyncio de 30 líneas terminado en
+            # "Address already in use" sin decir de qué puerto ni de quién.
+            raise SystemExit(
+                f"\n[UDP] no se pudo escuchar {label} en el puerto {port}: {exc}\n"
+                f"      Suele ser otra instancia del backend todavía viva. Verificá con:\n"
+                f"        ss -lunp | grep {port}\n"
+                f"      y cerrala antes de volver a arrancar.\n"
+            ) from exc
+        print(f"[UDP] {label} ↔ 0.0.0.0:{port}")
+        print(f"      ⚠️  {JETSON_AP_IP} no está asignada en esta máquina — el AP "
+              f"de la Jetson no está levantado. Se escucha en todas las interfaces "
+              f"para poder trabajar igual, pero los ESP32 configurados contra el AP "
+              f"no van a encontrar al robot hasta que el AP exista (ver README).")
+        return transport, proto
+
+
+async def start_background(app: web.Application):
+    global camera
+    loop = asyncio.get_running_loop()
+    global _main_loop
+    _main_loop = loop
+
+    await _bind_udp(loop, EnvTelemetryProtocol, LORA_UDP_PORT, "telemetría LoRa")
+
+    global actuator_proto, ble_link, enlace_c3
+    ctrl = state.config["control"]
+    ble_link = BleActuatorLink(
+        v_max=ctrl["max_v_mps"], omega_max=ctrl["max_omega_rps"])
+    # Vía de respaldo por WiFi (ver enlace_c3.py). Si el puerto no se puede
+    # abrir, queda solo el BLE, como antes.
+    wifi_c3 = await udp_actuator_link.abrir(lambda _trama: None)
+    enlace_c3 = EnlaceC3(ble_link, wifi_c3, wifi_only=bool(ctrl.get("c3_wifi_only", False)))
+    actuator_proto = ActuatorController(enlace_c3)
+    enlace_c3._on_status = actuator_proto.on_status
+    enlace_c3.start()
+
+    # --- SISTEMA AUTOMÁTICO DE COMUNICACIÓN ---
+    global auto_comunicacion
+    try:
+        if os.environ.get("AGROBOT_AUTO_COMUNICACION", "0") != "1":
+            raise RuntimeError("desactivado: requiere corregir interfaz WiFi y contrato de configuración")
+        auto_comunicacion = await inicializar_auto_comunicacion(
+            config_store=state.config,
+            modo_wifi="patrullaje"
+        )
+        print("[servidor] ✓ Sistema automático de comunicación iniciado", flush=True)
+    except Exception as e:
+        auto_comunicacion = None
+        print(f"[servidor] ✗ Error en auto-comunicación: {e}", flush=True)
+    # --- FIN SISTEMA AUTOMÁTICO ---
+
+    # Inicializar sistema de evasión de obstáculos (NUEVO 2026-09-13)
+    global obstacle_controller
+    obstacle_controller = ControladorEvasion(
+        callback_comando=actuator_proto.send_command,
+        callback_parada=actuator_proto.emergency_stop,
+        callback_debug=lambda msg: print(f"[EVASION] {msg}")
+    )
+
+    global conductor
+    conductor = ConductorPulsos(send_command=actuator_proto.send_command,
+                                emergency_stop=actuator_proto.emergency_stop,
+                                get_config=lambda: state.config["control"])
+    modo_guardado = state.config["control"].get("modo_manejo", "exterior")
+    conductor.modo = modo_guardado if modo_guardado in MODOS else "exterior"
+    global paso_robotico
+    paso_robotico = PasoRobotico(
+        ordenar=_pulso_robotico,
+        parar=conductor.parar,
+        conductor_activo=lambda: conductor.activo,
+        distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
+        rumbo_deg=lambda: current_pose().get("theta_deg"),
+        edad_scan_s=lidar_reactive.edad_scan_s,
+        umbral_freno_m=lambda: (state.config["slam"]["margen_parada_cm"]
+                                + state.config["slam"]["deslizamiento_cm"]) / 100.0)
+    global grabador
+    try:
+        grabador = Grabador(
+            leer={
+                "velocidades": actuator_proto.velocidades,
+                "c3": lambda: state.actuator_status,
+                "pose": current_pose,
+                "distancias": lambda: lidar_reactive.distancias(state.config["slam"]),
+                "edad_scan": lidar_reactive.edad_scan_s,
+                "t_scan": lambda: lidar_reactive.last_scan_at,
+                "scan": lambda: lidar_reactive.last_scan,
+                "suelo": _suelo_para_grabar,
+                "imu": lambda: state.env_telemetry,
+                "seguridad": estado_seguridad,
+                "pulso_accion": lambda: conductor._accion_actual,
+                "modo": lambda: conductor.modo,
+            },
+            # La cámara se crea MÁS ABAJO en este mismo arranque: se busca al
+            # pedir cada foto, no ahora (si no, nunca grababa fotos).
+            obtener_frame=lambda: camera.ultimo_frame() if camera is not None else None,
+            cv2=cv2, config=state.config)
+        app["grabador_task"] = asyncio.create_task(_bucle_grabador())
+        print(f"[grabador] sesión en {grabador.dir}", flush=True)
+    except Exception as exc:
+        grabador = None
+        print(f"[grabador] no arrancó: {type(exc).__name__}: {exc}", flush=True)
+    app["rampa_task"] = asyncio.create_task(_bucle_rampa())
+    app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
+    app["zupt_task"] = asyncio.create_task(_bucle_zupt())
+    app["modo_seguro_task"] = asyncio.create_task(_bucle_modo_seguro())
+    app["suelo_libre_task"] = asyncio.create_task(_bucle_suelo_libre())
+    app["barrido_tilt_task"] = asyncio.create_task(_bucle_barrido_tilt())
+
+    # Patrulla autónoma. Se crea acá y no arriba porque sus callbacks
+    # necesitan el `actuator_proto` que se acaba de construir.
+    global patrol
+    patrol = PatrolController(
+        send_nav_goal=ros_bridge.send_nav_goal,
+        cancel_nav_goal=ros_bridge.cancel_nav_goal,
+        estado_meta=ros_bridge.estado_meta,
+        get_pose=ros_bridge.pose_en_mapa,
+        barrido=_barrido_camara,
+        on_event=_patrol_event,
+        ruta_waypoints=WAYPOINTS_PATH,
+        distancia_puntos=lambda: state.config["autonomia"]["distancia_puntos_cm"],
+        conducir=lambda accion, maniobra=True: conductor.ordenar(
+            accion,
+            v_max=state.config["control"]["max_v_mps"] * state.config["autonomia"]["escala_velocidad"],
+            omega_max=state.config["control"]["max_omega_rps"],
+            maniobra=maniobra),
+        parar=lambda: conductor.parar(),
+        distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
+        edad_scan=lidar_reactive.edad_scan_s,
+        get_costmap=lambda: costmap,
+    )
+    print(f"[patrulla] lista — {len(patrol.waypoints)} waypoints grabados")
+
+    # Lo aprendido en el simulador y de las correcciones del operador. Ambos
+    # son opcionales: si no hay ficheros, el robot se comporta como siempre.
+    global aprendizaje, politica
+    aprendizaje = Aprendizaje()
+    politica = Politica()
+    print(f"[aprendizaje] {aprendizaje.resumen()['maniobras']} maniobras · "
+          f"política {'cargada' if politica.disponible else 'no disponible'}")
+
+    cabeceo_imu.signo = 1.0 if state.config["calibration"].get("imu_cabeceo_signo", 1) >= 0 else -1.0
+
+    global seguidor_sendero, explorador
+    seguidor_sendero = SeguidorSendero(
+        get_config=lambda: state.config["autonomia"],
+        obtener_frame=lambda: camera.ultimo_frame() if camera is not None else None,
+        camara_al_frente=_servo_al_frente,
+        get_geometria=_geometria_camara,
+        get_costmap=lambda: costmap)
+    # FSM conmutable detrás de un flag OFF por defecto: `maquina_estados.
+    # MaquinaEstados` tiene la MISMA interfaz que ExploradorReactivo (drop-in),
+    # añade estados explícitos + telemetría de transiciones y ganchos de escaneo
+    # de planta. Validada en el simulador (AGROBOT_FSM, A/B 2026-10-07). Se
+    # activa con `autonomia.maquina_estados: true`.
+    _ClaseExpl = ExploradorReactivo
+    if state.config["autonomia"].get("maquina_estados", False):
+        try:
+            from maquina_estados import MaquinaEstados as _ClaseExpl
+            print("[exploración] usando MaquinaEstados (FSM)", flush=True)
+        except Exception as exc:
+            print(f"[exploración] FSM no disponible ({exc}); uso ExploradorReactivo", flush=True)
+    explorador = _ClaseExpl(
+        distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
+        get_pose=ros_bridge.pose_en_mapa,
+        conducir=_conducir_pulso,
+        parar=lambda: conductor.parar(),
+        escanear=patrol.escanear,
+        on_event=lambda d: _evento("exploracion", d),
+        grabar_recorrido=lambda activa: patrol.grabacion_auto(activa),
+        edad_scan=lidar_reactive.edad_scan_s,
+        get_config=lambda: state.config["autonomia"],
+        seguidor=seguidor_sendero,
+        aprendizaje=aprendizaje,
+        sensores=_percepcion_robot,
+        politica=politica if state.config["autonomia"].get("politica_activa") else None,
+        get_costmap=lambda: costmap,
+    )
+
+    pose_estimator.gyro_weight = state.config["slam"]["pose_gyro_trust"]
+
+    camera = CameraWorker(loop, _on_detection, lambda: state.config, health.beat)
+    camera.set_model(app.get("yolo_model"))
+    camera.start()
+
+    global odom_webcam
+    odom_webcam = OdometriaWebcam(
+        obtener_frame=camera.ultimo_frame,
+        get_config=lambda: state.config["odometria_webcam"],
+        servo_al_frente=_servo_al_frente,
+        publicar=ros_bridge.publish_odom_webcam,
+    )
+    odom_webcam.start()
+    app["camera"] = camera
+
+    app["stats_task"] = asyncio.create_task(stats_loop())
+
+
+def load_yolo_model(app: web.Application):
+    """
+    Carga el modelo YOLO. Medido el 2026-09-06: importar torch cuesta 509 MB,
+    cargarlo 630 MB, y la primera inferencia en GPU lo deja en 1525 MB — porque
+    esta version de PyTorch no trae kernels para sm_87 y compila PTX en
+    caliente. Es 1.5 GB de los 7.4 GB de la placa.
+
+    Por eso NO se carga si la camara esta apagada: sin camara no hay fotograma
+    que inferir y ese giga y medio se estaria reservando para nada. Con SLAM,
+    LIDAR y rf2o al lado, esa reserva inutil es la que hacia que el OOM killer
+    matara el backend (dos veces el 2026-09-06, ver dmesg).
+
+    Al encender la camara desde el dashboard, `models_load_handler` vuelve a
+    llamar aqui y el modelo se carga entonces.
+    """
+    active = state.config["ai"]["active_model"]
+    if not active:
+        app["yolo_model"] = None
+        return
+    if not state.config["hardware"].get("camera_enabled", True):
+        app["yolo_model"] = None
+        print(f"[YOLO] '{active}' NO se carga: la camara esta apagada "
+              f"(ahorra ~1.5 GB). Se cargara al encenderla.")
+        return
+    try:
+        # ⚠️ NO PONER AQUI `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+        # Se probo el 2026-09-06 y ROMPE CUDA en esta placa: cualquier uso de
+        # la GPU falla con
+        #     RuntimeError: Expected NVML_SUCCESS ==
+        #     DriverAPI::get()->nvmlDeviceGetGpuFabricInfoV_(...) to be true
+        # Verificado aislandolo: el mismo script con la variable vacia usa la
+        # GPU sin problema y con la variable puesta falla siempre. Costo una
+        # tarde de diagnostico porque el sintoma aparece lejos, en el hilo de
+        # inferencia de camera.py, y parece un fallo del modelo.
+        #
+        # Un solo hilo de CPU si se conserva: la inferencia va en GPU y cada
+        # hilo extra de torch reserva sus propios buffers de trabajo.
+        import torch
+        torch.set_num_threads(1)
+        from ultralytics import YOLO
+        model_path = MODELS_DIR / active
+        if model_path.exists():
+            app["yolo_model"] = YOLO(str(model_path))
+            # NO se hace `.to("cuda")` aqui. Se probo el 2026-09-06 y ROMPE el
+            # arranque en esta placa:
+            #   RuntimeError: Expected NVML_SUCCESS == DriverAPI::get()->
+            #   nvmlDeviceGetGpuFabricInfoV_(...) to be true, but got false
+            # Es un fallo de esta build de PyTorch consultando NVML en el Orin,
+            # no del modelo. Ultralytics elige el dispositivo en cada predict()
+            # por su cuenta y usa la GPU igual.
+            print(f"[YOLO] modelo activo: {active}")
+            if camera is not None:
+                camera.set_model(app["yolo_model"])
+        else:
+            app["yolo_model"] = None
+            if camera is not None:
+                camera.set_model(None)
+    except ImportError:
+        app["yolo_model"] = None
+        print("[YOLO] ultralytics no instalado, video sin detección")
+
+
+# =============================================
+# ===== CALIBRACIÓN DE NAVEGACIÓN =====
+# =============================================
+
+async def _nav_cal_loop():
+    global _nav_cal_stats
+    prev_pose = None
+    dist_total = 0.0
+    poses_count = 0
+    try:
+        while nav_logger and nav_logger._activo:
+            await asyncio.sleep(0.5)
+            pose = current_pose()
+            if not pose:
+                continue
+            cfg = state.config["slam"]
+            d = lidar_reactive.distancias(cfg)
+            frontal_cm = round(d["adelante"] * 100) if d.get("adelante") is not None else None
+            izq_cm = round(d["izquierda"] * 100) if d.get("izquierda") is not None else None
+            der_cm = round(d["derecha"] * 100) if d.get("derecha") is not None else None
+            # Velocidades: lo PEDIDO sale del actuador (tras la rampa) y lo
+            # REAL del EKF, que es la única medida de verdad (rf2o + giroscopio).
+            vel = actuator_proto.velocidades() if actuator_proto is not None else {}
+            nav_logger.log_pose(
+                pose["x"], pose["y"], pose.get("theta_deg", 0),
+                vx_desired=round(vel.get("v_aplicada", 0.0), 3),
+                omega_desired=round(vel.get("omega_aplicada", 0.0), 3),
+                vx_real=round(pose.get("vx", 0.0), 3),
+                omega_real=round(pose.get("vyaw", 0.0), 3),
+                lidar_frontal=frontal_cm, lidar_izq=izq_cm, lidar_der=der_cm,
+            )
+            poses_count += 1
+            if prev_pose:
+                dist_total += math.hypot(pose["x"] - prev_pose["x"],
+                                         pose["y"] - prev_pose["y"])
+            prev_pose = pose
+            _nav_cal_stats = {
+                "activo": True,
+                "session_id": nav_logger.session_id,
+                "poses": poses_count,
+                "distancia_m": round(dist_total, 3),
+                "frontal_cm": frontal_cm, "izq_cm": izq_cm, "der_cm": der_cm,
+                "pose_x": round(pose["x"], 3),
+                "pose_y": round(pose["y"], 3),
+                "pose_theta": round(pose.get("theta_deg", 0), 1),
+                "waypoints": len(patrol.waypoints) if patrol else 0,
+            }
+    except asyncio.CancelledError:
+        raise
+
+
+async def nav_cal_start_handler(request: web.Request):
+    global nav_logger, _nav_cal_task, _nav_cal_stats
+    if nav_logger and nav_logger._activo:
+        return web.json_response({"error": "calibración ya en curso"}, status=409)
+    nav_logger = NavigationLogger()
+    await nav_logger.iniciar()
+    _nav_cal_stats = {"activo": True, "session_id": nav_logger.session_id,
+                      "poses": 0, "distancia_m": 0}
+    _nav_cal_task = asyncio.create_task(_nav_cal_loop())
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Calibración",
+        "message": f"Sesión {nav_logger.session_id} iniciada — conducí el robot por la habitación.",
+    }})
+    return web.json_response({"ok": True, "session_id": nav_logger.session_id})
+
+
+async def nav_cal_stop_handler(request: web.Request):
+    global nav_logger, _nav_cal_task, _nav_cal_stats
+    if not nav_logger or not nav_logger._activo:
+        return web.json_response({"error": "no hay calibración en curso"}, status=409)
+    session_id = nav_logger.session_id
+    nav_logger.detener()
+    if _nav_cal_task:
+        _nav_cal_task.cancel()
+        _nav_cal_task = None
+    await asyncio.sleep(0.3)
+    stats = analizar_sesion(session_id)
+    try:
+        from analizar_navegacion import AnalizadorNavegacion
+        analizador = AnalizadorNavegacion(session_id)
+        mejoras = analizador.sugerir_mejoras()
+        lidar_a = analizador.analizar_distancias_lidar()
+        vel_a = analizador.analizar_velocidades()
+    except Exception as exc:
+        print(f"[nav_cal] error en análisis: {exc}")
+        mejoras, lidar_a, vel_a = [], {}, {}
+    result = {**stats, "lidar_analysis": lidar_a,
+              "velocity_analysis": vel_a, "mejoras": mejoras}
+    _nav_cal_stats = {"activo": False, **result}
+    nav_logger = None
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Calibración terminada",
+        "message": f"Sesión {session_id}: {stats['poses_count']} poses, "
+                   f"{stats['distancia_recorrida_m']:.2f} m recorridos.",
+    }})
+    return web.json_response(result)
+
+
+async def nav_cal_status_handler(request: web.Request):
+    if not _nav_cal_stats:
+        return web.json_response({"activo": False})
+    return web.json_response(_nav_cal_stats)
+
+
+# =============================================
+# ===== ENTRENAMIENTO / TRAINING DASHBOARD =====
+# =============================================
+TRAINING_DIR = Path.home() / ".agrobot" / "training"
+
+_training_data = {
+    "furrows": [],
+    "scan_points": [],
+    "corrections": [],
+}
+
+
+def _load_training_data():
+    f = TRAINING_DIR / "training_data.json"
+    if f.exists():
+        try:
+            _training_data.update(json.loads(f.read_text()))
+        except Exception:
+            pass
+
+
+def _save_training_data():
+    TRAINING_DIR.mkdir(parents=True, exist_ok=True)
+    (TRAINING_DIR / "training_data.json").write_text(
+        json.dumps(_training_data, indent=2))
+
+
+_load_training_data()
+
+
+async def training_correct_pose_handler(request: web.Request):
+    if not ros_bridge.available:
+        return web.json_response(
+            {"error": "ROS no disponible"}, status=503)
+    body = await request.json()
+    x, y = float(body["x"]), float(body["y"])
+    theta = float(body.get("theta_deg", 0.0))
+    ros_bridge.publish_initial_pose(x, y, theta)
+    _training_data["corrections"].append({
+        "ts": time.time(), "x": x, "y": y, "theta_deg": theta})
+    _save_training_data()
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Pose corregida",
+        "message": f"x={x:.2f} y={y:.2f} θ={theta:.0f}°",
+    }})
+    return web.json_response({"ok": True})
+
+
+async def training_save_furrows_handler(request: web.Request):
+    body = await request.json()
+    _training_data["furrows"] = body.get("furrows", [])
+    _save_training_data()
+    return web.json_response({"ok": True, "count": len(_training_data["furrows"])})
+
+
+async def training_save_scan_points_handler(request: web.Request):
+    body = await request.json()
+    _training_data["scan_points"] = body.get("scan_points", [])
+    _save_training_data()
+    return web.json_response({"ok": True, "count": len(_training_data["scan_points"])})
+
+
+async def training_generate_route_handler(request: web.Request):
+    body = await request.json()
+    furrows = body.get("furrows", _training_data.get("furrows", []))
+    spacing_m = float(body.get("spacing_m", 0.5))
+    waypoints = []
+    for fi, furrow in enumerate(furrows):
+        pts = furrow.get("points", [])
+        if len(pts) < 2:
+            continue
+        total_len = 0
+        segs = []
+        for i in range(1, len(pts)):
+            dx = pts[i]["x"] - pts[i-1]["x"]
+            dy = pts[i]["y"] - pts[i-1]["y"]
+            seg_len = math.sqrt(dx*dx + dy*dy)
+            segs.append(seg_len)
+            total_len += seg_len
+        if total_len < 0.01:
+            continue
+        n_pts = max(2, int(total_len / spacing_m) + 1)
+        for j in range(n_pts):
+            frac = j / (n_pts - 1)
+            target_dist = frac * total_len
+            accum = 0
+            for i, sl in enumerate(segs):
+                if accum + sl >= target_dist:
+                    t = (target_dist - accum) / sl if sl > 0 else 0
+                    wx = pts[i]["x"] + t * (pts[i+1]["x"] - pts[i]["x"])
+                    wy = pts[i]["y"] + t * (pts[i+1]["y"] - pts[i]["y"])
+                    dx = pts[i+1]["x"] - pts[i]["x"]
+                    dy = pts[i+1]["y"] - pts[i]["y"]
+                    theta = math.degrees(math.atan2(dy, dx))
+                    waypoints.append({"x": round(wx, 3), "y": round(wy, 3),
+                                      "theta_deg": round(theta, 1)})
+                    break
+                accum += sl
+        if fi % 2 == 1:
+            waypoints[-n_pts:] = reversed(waypoints[-n_pts:])
+    scan_pts = body.get("scan_points", _training_data.get("scan_points", []))
+    for sp in scan_pts:
+        waypoints.append({"x": sp["x"], "y": sp["y"], "theta_deg": 0,
+                          "scan": True})
+    if patrol is not None and waypoints:
+        patrol.reemplazar_waypoints(
+            [{"x": w["x"], "y": w["y"], "theta_deg": w.get("theta_deg", 0)}
+             for w in waypoints if not w.get("scan")])
+    return web.json_response({"ok": True, "waypoints": waypoints,
+                              "count": len(waypoints)})
+
+
+async def training_data_handler(request: web.Request):
+    return web.json_response(_training_data)
+
+
+async def training_log_correction_handler(request: web.Request):
+    body = await request.json()
+    entry = {
+        "ts": time.time(),
+        "type": body.get("type", "drive"),
+        "vx": body.get("vx", 0),
+        "omega": body.get("omega", 0),
+        "pose": current_pose(),
+    }
+    _training_data["corrections"].append(entry)
+    if len(_training_data["corrections"]) % 20 == 0:
+        _save_training_data()
+    return web.json_response({"ok": True})
+
+
+# =============================================
+# ===== CLAVE DEL DASHBOARD =====
+# =============================================
+# Sin esto cualquiera en la red (o por Tailscale) podía mover el robot. La
+# clave vive FUERA del repo; si el archivo no existe el dashboard queda
+# abierto como antes, para no dejar a nadie fuera por un despliegue a medias.
+# El navegador la pide una vez (Basic) y desde ahí vale una cookie de sesión,
+# que es lo que lleva el WebSocket: no todos los navegadores reenvían el
+# Basic en el handshake de /ws. Lo local (127.0.0.1: tools/sensores.py, tests)
+# no la necesita.
+CLAVE_DASHBOARD_PATH = Path(os.environ.get(
+    "AGROBOT_CLAVE_DASHBOARD", Path.home() / ".config/agrobot/clave_dashboard"))
+USUARIO_DASHBOARD = "agrobot"
+COOKIE_SESION = "agrobot_sesion"
+
+
+def _leer_clave_dashboard() -> str:
+    try:
+        return CLAVE_DASHBOARD_PATH.read_text().strip()
+    except OSError:
+        return ""
+
+
+def _middleware_clave(clave: str):
+    import base64, hashlib, hmac, secrets
+    esperado = "Basic " + base64.b64encode(f"{USUARIO_DASHBOARD}:{clave}".encode()).decode()
+    # Token derivado de la clave + sal de este arranque: cambiar la clave o
+    # reiniciar el backend invalida las sesiones viejas.
+    token = hashlib.sha256((secrets.token_hex(16) + clave).encode()).hexdigest()
+
+    @web.middleware
+    async def exigir_clave(request: web.Request, handler):
+        if request.remote in ("127.0.0.1", "::1"):
+            return await handler(request)
+        if hmac.compare_digest(request.cookies.get(COOKIE_SESION, ""), token):
+            return await handler(request)
+        if hmac.compare_digest(request.headers.get("Authorization", ""), esperado):
+            resp = await handler(request)
+            if not resp.prepared:
+                resp.set_cookie(COOKIE_SESION, token, httponly=True, samesite="Strict")
+            return resp
+        return web.Response(status=401, text="Clave requerida",
+                            headers={"WWW-Authenticate": 'Basic realm="AgroBot"'})
+    return exigir_clave
+
+
+# --- HANDLERS DE COMUNICACIÓN AUTOMÁTICA ---
+async def comunicacion_estado_handler(request: web.Request):
+    """Retorna estado de todos los sistemas de comunicación."""
+    if auto_comunicacion is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    return web.json_response(auto_comunicacion.resumen_completo())
+
+
+async def wifi_modo_handler(request: web.Request):
+    """Cambia entre 'estacion' (Lora_Wan) y 'patrullaje' (AP propio)."""
+    if auto_comunicacion is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+
+    try:
+        data = await request.json()
+        modo = data.get("modo")
+        if modo not in ["estacion", "patrullaje"]:
+            return web.json_response(
+                {"error": "modo inválido (debe ser 'estacion' o 'patrullaje')"},
+                status=400
+            )
+
+        await auto_comunicacion.cambiar_modo_wifi(modo)
+        return web.json_response({"ok": True, "modo": modo})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400)
+
+
+async def diagnostico_wifi_handler(request: web.Request):
+    """Retorna análisis detallado del WiFi (caídas, salud, etc)."""
+    if auto_comunicacion is None or auto_comunicacion.diagnostico is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+
+    import asyncio
+    analisis = await auto_comunicacion.diagnostico.analizar_caidas()
+    return web.json_response(analisis)
+
+
+# --- HANDLERS DE MOTOR (v2.0) ---
+async def motor_comando_handler(request: web.Request):
+    """Control de motores con duty cycle dinámico."""
+    try:
+        data = await request.json()
+        v = data.get("v", 0.0)
+        omega = data.get("omega", 0.0)
+        duty = data.get("duty", 100)
+
+        v = max(-1.0, min(1.0, float(v)))
+        omega = max(-1.0, min(1.0, float(omega)))
+        duty = max(0, min(100, int(duty)))
+
+        cmd = {
+            "v": v,
+            "omega": omega,
+            "duty": duty
+        }
+
+        if state.enlace_c3 and state.enlace_c3.ble and state.enlace_c3.ble.connected:
+            await state.enlace_c3.ble.enviar_comando(json.dumps(cmd))
+            print(f"[motor-cmd] enviado: v={v:.2f}, ω={omega:.2f}, duty={duty}%", flush=True)
+            return web.json_response({"status": "ok", "comando": cmd})
+        else:
+            return web.json_response({"status": "error", "msg": "BLE no conectado"}, status=503)
+    except Exception as e:
+        return web.json_response({"status": "error", "msg": str(e)}, status=400)
+
+
+async def motor_parar_handler(request: web.Request):
+    """Parada de emergencia - motores a 0."""
+    try:
+        cmd = {"v": 0.0, "omega": 0.0, "duty": 0}
+
+        if state.enlace_c3 and state.enlace_c3.ble and state.enlace_c3.ble.connected:
+            await state.enlace_c3.ble.enviar_comando(json.dumps(cmd))
+            print("[motor-parar] 🛑 PARADA DE EMERGENCIA", flush=True)
+            return web.json_response({"status": "parado"})
+        else:
+            return web.json_response({"status": "error", "msg": "BLE no conectado"}, status=503)
+    except Exception as e:
+        return web.json_response({"status": "error", "msg": str(e)}, status=400)
+
+
+# ⭐ NUEVO: toggle safeguard (timeout de seguridad)
+_safeguard_enabled = True  # global state
+
+
+async def motor_toggle_safeguard_handler(request: web.Request):
+    """⭐ POST /api/motor/toggle-safeguard — desactiva/activa el timeout de seguridad.
+
+    En pruebas, a veces el timeout de 500ms (parada automática sin comando) molesta.
+    Este endpoint lo desactiva: el robot sigue adelante indefinidamente sin órdenes.
+
+    Response: {"safeguard_enabled": bool}
+    """
+    global _safeguard_enabled
+    _safeguard_enabled = not _safeguard_enabled
+
+    status_str = "ACTIVADO" if _safeguard_enabled else "DESACTIVADO"
+    print(f"[motor-safeguard] 🔐 Timeout de seguridad {status_str}", flush=True)
+
+    return web.json_response({"safeguard_enabled": _safeguard_enabled})
+
+
+async def estado_completo_handler(request: web.Request):
+    """Retorna estado completo del sistema (C3, WiFi, BLE)."""
+    try:
+        ble_connected = False
+        if state.enlace_c3 and state.enlace_c3.ble:
+            ble_connected = state.enlace_c3.ble.connected
+
+        return web.json_response({
+            "timestamp": time.time(),
+            "c3": {
+                "v": 0.0,
+                "omega": 0.0,
+                "duty": 0,
+                "conectado": ble_connected
+            },
+            "wifi": {
+                "modo": "patrullaje",
+                "conectado": True
+            },
+            "ble": {
+                "conectado": ble_connected
+            },
+            "motor": {
+                "status": "ok" if ble_connected else "desconectado"
+            }
+        })
+    except Exception as e:
+        return web.json_response({"status": "error", "msg": str(e)}, status=500)
+
+# --- FIN HANDLERS ---
+
+
+def create_app() -> web.Application:
+    clave = _leer_clave_dashboard()
+    if clave:
+        app = web.Application(middlewares=[_middleware_clave(clave)])
+    else:
+        print(f"[seguridad] SIN clave de dashboard ({CLAVE_DASHBOARD_PATH} no existe): "
+              f"cualquiera en la red puede mover el robot")
+        app = web.Application()
+    app.router.add_get("/ws", ws_handler)
+    app.router.add_get("/video", video_handler)
+    app.router.add_post("/api/video/record", video_record_handler)
+    app.router.add_post("/api/drive", drive_handler)
+    app.router.add_post("/api/emergencia", emergencia_handler)
+    app.router.add_get("/api/paso", paso_get_handler)
+    app.router.add_post("/api/paso", paso_post_handler)
+    app.router.add_get("/api/drive/mode", drive_mode_handler)
+    app.router.add_post("/api/drive/mode", drive_mode_handler)
+    app.router.add_get("/api/sendero/vista.jpg", sendero_vista_handler)
+    app.router.add_get("/api/suelo/vista.jpg", suelo_vista_handler)
+    app.router.add_get("/api/suelo", suelo_estado_handler)
+    app.router.add_post("/api/evasion/start", evasion_start_handler)
+    app.router.add_post("/api/evasion/stop", evasion_stop_handler)
+    app.router.add_get("/api/evasion", evasion_get_handler)
+    app.router.add_post("/api/nav/reset_map", nav_reset_map_handler)
+    app.router.add_get("/api/mapas", mapas_listar_handler)
+    app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)
+    app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
+    app.router.add_get("/api/patrol", patrol_status_handler)
+    app.router.add_post("/api/patrol/record", patrol_record_handler)
+    app.router.add_post("/api/exploracion/start", exploracion_start_handler)
+    app.router.add_post("/api/exploracion/stop", exploracion_stop_handler)
+    app.router.add_post("/api/patrol/auto", patrol_auto_handler)
+    app.router.add_post("/api/patrol/clear", patrol_clear_handler)
+    app.router.add_post("/api/patrol/scan", patrol_scan_handler)
+    app.router.add_post("/api/session-report", session_report_handler)
+    app.router.add_get("/api/models", models_list_handler)
+    app.router.add_post("/api/models/load", models_load_handler)
+    app.router.add_get("/api/hardware", hardware_get_handler)
+    app.router.add_post("/api/hardware", hardware_update_handler)
+    app.router.add_get("/api/calibration", calibration_get_handler)
+    app.router.add_post("/api/calibration", calibration_update_handler)
+    app.router.add_post("/api/mission/start", mission_start_handler)
+    app.router.add_post("/api/mission/stop", mission_stop_handler)
+    app.router.add_get("/api/params", params_get_handler)
+    app.router.add_post("/api/params/{section}", params_update_handler)
+    app.router.add_post("/api/lidar/scan", lidar_scan_handler)
+    app.router.add_get("/api/obstacle_status", obstacle_status_handler)
+    app.router.add_get("/api/costmap", costmap_status_handler)
+    app.router.add_get("/api/costmap/grid", costmap_grid_handler)
+    app.router.add_post("/api/costmap/reset", costmap_reset_handler)
+    app.router.add_post("/api/costmap/save", local_map_save_handler)
+    app.router.add_post("/api/costmap/load", local_map_load_handler)
+    app.router.add_get("/api/costmap/maps", local_map_list_handler)
+    app.router.add_post("/api/costmap/delete", local_map_delete_handler)
+    app.router.add_get("/api/health", health_handler)
+    app.router.add_get("/api/seguridad", seguridad_get_handler)
+    app.router.add_post("/api/seguridad/rearmar", seguridad_rearmar_handler)
+    app.router.add_post("/api/seguridad/modo-seguro", modo_seguro_toggle_handler)
+    app.router.add_get("/api/captures", captures_list_handler)
+    app.router.add_post("/api/captures/clear", captures_clear_handler)
+    app.router.add_post("/api/nav/set_goal", nav_set_goal_handler)
+    app.router.add_post("/api/nav/cancel", nav_cancel_handler)
+    app.router.add_post("/api/nav/restart", nav_restart_handler)
+    app.router.add_post("/api/nav/save_map", nav_save_map_handler)
+    app.router.add_get("/api/nav/mode", nav_mode_handler)
+    app.router.add_post("/api/nav/mode", nav_mode_handler)
+    app.router.add_post("/api/nav_cal/start", nav_cal_start_handler)
+    app.router.add_post("/api/nav_cal/stop", nav_cal_stop_handler)
+    app.router.add_get("/api/nav_cal/status", nav_cal_status_handler)
+    from recoleccion import install as install_collection
+    install_collection(app, lambda: {
+        "env": state.env_telemetry, "actuator_status": state.actuator_status,
+        "setpoint": {"servo_deg": state.servo_angle, "led": state.led_on},
+        "velocities": actuator_proto.velocidades(), "pose": current_pose(),
+        "pose_age_s": pose_edad_s(), "pose_reliable": pose_confiable(),
+        "lidar_scan": lidar_reactive.last_scan, "lidar_timestamp": lidar_reactive.last_scan_at,
+        "lidar_age_s": lidar_reactive.edad_scan_s(), "security": estado_seguridad(),
+        "system_stats": state.system_stats, "camera": camera.snapshot() if camera else None,
+        "detections": state.detections[-20:], "configuration": state.config,
+        "mission_active": state.mission_active,
+    }, lambda: camera.ultimo_frame() if camera else None)
+    app.router.add_static("/captures", CAPTURES_DIR, show_index=False)
+
+    # --- Training dashboard endpoints ---
+    app.router.add_post("/api/training/correct_pose", training_correct_pose_handler)
+    app.router.add_post("/api/training/save_furrows", training_save_furrows_handler)
+    app.router.add_post("/api/training/save_scan_points", training_save_scan_points_handler)
+    app.router.add_post("/api/training/generate_route", training_generate_route_handler)
+    app.router.add_get("/api/training/data", training_data_handler)
+    app.router.add_post("/api/training/log_correction", training_log_correction_handler)
+
+    # --- RUTAS DE COMUNICACIÓN AUTOMÁTICA ---
+    app.router.add_get("/api/comunicacion/estado", comunicacion_estado_handler)
+    app.router.add_post("/api/wifi/modo", wifi_modo_handler)
+    app.router.add_get("/api/diagnostico/wifi", diagnostico_wifi_handler)
+    # --- RUTAS DE MOTOR v2.0 ---
+    app.router.add_post("/api/motor/comando", motor_comando_handler)
+    app.router.add_post("/api/motor/parar", motor_parar_handler)
+    app.router.add_post("/api/motor/toggle-safeguard", motor_toggle_safeguard_handler)  # ⭐ NUEVO
+    app.router.add_get("/api/estado/completo", estado_completo_handler)
+    # --- FIN RUTAS ---
+
+    # La raíz sirve el dashboard directamente. Antes `add_static("/")` con
+    # show_index=True devolvía un LISTADO DE DIRECTORIO en `/`: el operador
+    # que entraba a http://192.168.12.1:8080 veía un índice de archivos en
+    # vez del panel, y tenía que saber que debía pedir /index.html.
+    DASHBOARD_DIR = Path(__file__).parent.parent / "dashboard"
+
+    async def index_handler(request: web.Request):
+        return web.FileResponse(DASHBOARD_DIR / "index.html")
+
+    app.router.add_get("/", index_handler)
+    app.router.add_static("/", DASHBOARD_DIR, show_index=False)
+
+    async def on_cleanup(app):
+        if grabador is not None:
+            grabador.cerrar()
+        if camera is not None:
+            camera.stop()
+        if ble_link is not None:
+            await (enlace_c3 or ble_link).stop()
+        # --- LIMPIAR COMUNICACIÓN AUTOMÁTICA ---
+        global auto_comunicacion
+        if auto_comunicacion is not None:
+            await auto_comunicacion.detener()
+        # --- FIN LIMPIEZA ---
+        ros_bridge.shutdown()
+        global _sesion_http
+        if _sesion_http is not None and not _sesion_http.closed:
+            await _sesion_http.close()
+            _sesion_http = None
+
+    app.on_startup.append(start_background)
+    app.on_cleanup.append(on_cleanup)
+    load_yolo_model(app)
+    return app
+
+
+if __name__ == "__main__":
+    # El finally importa: si `on_startup` falla (por ejemplo un puerto UDP
+    # ocupado), aiohttp NO ejecuta `on_cleanup`, y el hilo del executor de
+    # rclpy quedaba girando mientras el proceso moría — de ahí el
+    # "terminate called without an active exception" al final del traceback,
+    # que no aportaba nada y tapaba el error real.
+    try:
+        web.run_app(create_app(), host="0.0.0.0", port=HTTP_PORT)
+    finally:
+        ros_bridge.shutdown()

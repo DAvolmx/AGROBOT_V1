@@ -46,18 +46,18 @@ STATUS_SIZE = struct.calcsize(STATUS_FORMAT)
 
 # Recorrido util del servo de camara. Debe coincidir con SERVO_MIN_ANGLE /
 # SERVO_MAX_ANGLE del firmware: fuera de este arco el conjunto montado topa
-# mecanicamente y el servo zumba contra el tope sin llegar a la posicion.
+# Rango solicitado por el operador: validar topes mecanicos al montar el servo.
 # Se recorta en los dos lados a proposito — el firmware es la ultima linea
 # de defensa, pero la Jetson no debe mandar nunca un angulo imposible.
 SERVO_MIN_DEG = 25
-SERVO_MAX_DEG = 110
+SERVO_MAX_DEG = 130
 
 # Reposo: camara mirando al frente.
 SERVO_HOME_DEG = 98
 
 
 def clamp_servo(angle: float) -> int:
-    """Recorta al recorrido util (25°-110°). Cualquier valor fuera de rango
+    """Recorta al recorrido util (25°-130°). Cualquier valor fuera de rango
     —por ejemplo tras sumarle el offset de calibración— se corta acá y no en
     el firmware, que es actuador puro."""
     return int(max(SERVO_MIN_DEG, min(SERVO_MAX_DEG, round(angle))))

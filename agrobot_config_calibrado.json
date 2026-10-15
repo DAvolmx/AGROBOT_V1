@@ -1,0 +1,160 @@
+{
+  "calibration": {
+    "servo_offset_deg": 0,
+    "gyro_bias_x_dps": 0,
+    "gyro_bias_y_dps": 0,
+    "gyro_bias_z_dps": 0,
+    "imu_cabeceo_signo": 1
+  },
+  "hardware": {
+    "camera_enabled": true,
+    "lidar_baud": 460800,
+    "actuator_port": "/dev/ttyTHS1",
+    "actuator_baud": 115200
+  },
+  "ai": {
+    "active_model": "ip102_pest_yolo11s.pt"
+  },
+  "detection": {
+    "confidence_threshold": 0.6,
+    "clip_record_threshold": 0.77,
+    "imgsz": 480,
+    "infer_hz_max": 10,
+    "escanear_al_detectar": "siempre"
+  },
+  "slam": {
+    "robot_largo_cm": 40,
+    "robot_ancho_cm": 35,
+    "cono_frontal_deg": 20,
+    "cono_lateral_deg": 60,
+    "margen_parada_cm": 17,
+    "deslizamiento_cm": 40,
+    "freno_camara": true,
+    "pose_gyro_trust": 0.85
+  },
+  "autonomia": {
+    "escala_velocidad": 0.5,
+    "distancia_puntos_cm": 500,
+    "avance_libre_cm": 100,
+    "lado_libre_cm": 60,
+    "retroceso_libre_cm": 30,
+    "escaneo_periodo_s": 180,
+    "escaneo_duracion_s": 8,
+    "escaneo_angulo_min": 25,
+    "escaneo_angulo_max": 110,
+    "escaneo_enciende_foco": true,
+    "sendero_activo": true,
+    "sendero_tolerancia_cm": 10,
+    "sendero_pared_max_cm": 150,
+    "sendero_vision": true,
+    "sendero_vision_peso": 0.5,
+    "sendero_verde_h_min": 10,
+    "sendero_verde_h_max": 45,
+    "sendero_verde_s_min": 20,
+    "sendero_verde_s_max": 90,
+    "sendero_paja": true,
+    "sendero_adaptativo": true,
+    "sendero_igualar_luz": true,
+    "compensar_cabeceo": true,
+    "politica_activa": true
+  },
+  "odometria_webcam": {
+    "habilitada": true,
+    "publicar_ros": true,
+    "camara_altura_m": 0.4,
+    "camara_inclinacion_deg": 15.5,
+    "camara_hfov_deg": 71,
+    "camara_adelante_m": 0.42
+  },
+  "control": {
+    "max_v_mps": 1.5,
+    "max_omega_rps": 4.0,
+    "suavidad_duty": 1.0,
+    "suavidad_periodo_s": 0.3,
+    "modo_manejo": "exterior"
+  },
+  "safety": {
+    "heartbeat_stale_warn_s": 5,
+    "heartbeat_stale_err_s": 20,
+    "max_linear_accel_mps2": 3,
+    "max_angular_accel_rps2": 8
+  },
+  "navigation": {
+    "mode": "localization",
+    "map_name": "agrobot_map",
+    "last_goal": {
+      "x": 0.22370941127676058,
+      "y": -0.21544388673812254,
+      "theta_deg": 0.0
+    }
+  },
+  "slam_v2": {
+    "feature_detector": "ORB",
+    "max_features": 500,
+    "min_tracked_points": 50,
+    "loop_closure_threshold": 0.65,
+    "pose_graph_iterations": 20,
+    "keyframe_interval": 10,
+    "depth_estimation": "monocular_sfm"
+  },
+  "camera_zoom": {
+    "zoom_levels": [1, 2, 4],
+    "zoom_strategy": "adaptive",
+    "auto_zoom_confidence": 0.6,
+    "focus_mode": "continuous",
+    "exposure_compensation": 0,
+    "zoom_smooth": 0.15
+  },
+  "path_detection": {
+    "sendero_h_min": 10,
+    "sendero_h_max": 45,
+    "sendero_s_min": 20,
+    "sendero_s_max": 90,
+    "sendero_v_min": 30,
+    "sendero_v_max": 150,
+    "confidence_threshold": 0.70,
+    "temporal_smoothing": 0.85,
+    "min_contour_area": 1000,
+    "max_contour_area": 500000
+  },
+  "plant_detection": {
+    "planta_h_min": 35,
+    "planta_h_max": 85,
+    "planta_s_min": 60,
+    "planta_s_max": 255,
+    "planta_v_min": 120,
+    "planta_v_max": 255
+  },
+  "damage_detection": {
+    "damage_h_min": 0,
+    "damage_h_max": 180,
+    "damage_s_min": 0,
+    "damage_s_max": 40,
+    "damage_v_min": 200,
+    "damage_v_max": 255,
+    "alert_confidence": 0.65
+  },
+  "_comments": {
+    "version": "v3 - Calibrado para lechuga/acelga con plagas blancas",
+    "date": "2026-10-07",
+    "calibration_method": "HSV from user images (IMG 1-5)",
+    "changes_vs_v1": [
+      "slam_v2: Feature-based SLAM + loop closure",
+      "camera_zoom: Adaptive zoom 1x/2x/4x for pest detection",
+      "path_detection: Robust sendero detection (H:10-45, dark soil)",
+      "plant_detection: Added healthy plant filter",
+      "damage_detection: Blanquecino/pálido para mosca blanca y mildiu"
+    ],
+    "plagas_detectadas": [
+      "Mosca Blanca (Whitefly) - Imagen 2-3",
+      "Mildiu o polvo blanco - Imagen 2",
+      "Deficiencia nutricional - Imagen 3-4"
+    ],
+    "recomendaciones": [
+      "Zoom 4x activará automático si confianza < 60%",
+      "Alerta de daño cuando saturation < 40 y value > 200",
+      "Path detection > 70% confianza = navegación segura",
+      "Si algún rango falla: ±5 grados en H, ±10 en S, ±20 en V"
+    ]
+  }
+}

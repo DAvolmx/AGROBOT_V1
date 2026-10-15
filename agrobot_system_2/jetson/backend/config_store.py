@@ -71,7 +71,12 @@ DEFAULTS = {
         # 30 cm hasta tocar, no hasta el centro del robot. El `footprint` de
         # nav2_params.yaml es aparte y va en metros: si cambia esto, cambiarlo.
         "robot_largo_cm": 40,
-        "robot_ancho_cm": 35,
+        # 37 cm = ancho exterior del eje TRASERO (medido). Era 35 hasta el
+        # 2026-10-14: subestimaba la envolvente 1 cm por lado en los ocho
+        # sitios que comprueban holgura, incluido el hueco visual de suelo
+        # libre. El delantero mide 19, pero la holgura la manda lo más ancho.
+        # Fuente única: geometria_robot.ANCHO_ENVOLVENTE_M.
+        "robot_ancho_cm": 37,
         # Sectores del LIDAR. El trasero es el espejo del frontal.
         # Frontal estrecho = pasa por pasillos sin frenar por las paredes;
         # ancho = ve antes las esquinas, pero se frena más a menudo.
@@ -142,6 +147,27 @@ DEFAULTS = {
         # Sin esto, en terreno con baches el detector cree mirar a un sitio y
         # mira a otro (2° de cabeceo = 5 cm de error a 1 m).
         "compensar_cabeceo": True,
+        # Parada por incertidumbre (2026-10-14): ciclos consecutivos SIN
+        # ninguna referencia del sendero (ni hileras, ni hueco del costmap, ni
+        # cámara con confianza) tras los que el explorador para en vez de
+        # seguir recto a ciegas. 0 = desactivado. 5 ciclos ~= una racha real,
+        # no un fotograma con un reflejo.
+        "sendero_parada_incierta_ciclos": 5,
+        # Transitabilidad del corredor (2026-10-14). El robot mide 19 cm de
+        # ancho delante y 37 DETRÁS: por el hueco que pasa el morro no pasa el
+        # eje trasero. Con esto activo, un sendero medido más estrecho que la
+        # envolvente + holgura para la autonomía en vez de seguir su centro.
+        # La holgura por lado la define geometria_robot; aquí se puede ajustar.
+        # "aviso" = cuenta cuántas veces el sendero medido no admitiría la
+        # envolvente y sigue; "frenar" = para; cualquier otro valor lo apaga.
+        # Arranca en "aviso" (decisión del operador 2026-10-14): la holgura de
+        # 19 cm sale del simulador y sus senderos miden 60-80 cm, así que
+        # primero se recogen datos y después se decide si frenar.
+        "sendero_si_no_cabe": "aviso",
+        # 14 cm = donde desaparecen los choques en el simulador con el control
+        # ajustado (con el viejo hacían falta 19). Era 6, a ojo: con 6 choca en
+        # el 62-88 % de los episodios. Ver geometria_robot.HOLGURA_PROCEDENCIA.
+        "sendero_holgura_lateral_cm": 14,
         # Política entrenada en el simulador (politica.pt). Apagada por
         # defecto: se enciende cuando se ha comprobado que mejora.
         "politica_activa": False,
@@ -204,6 +230,8 @@ DEFAULTS = {
         "last_goal": None,
     },
 }
+
+DEFAULTS["control"].setdefault("c3_wifi_only", False)
 
 _lock = Lock()
 

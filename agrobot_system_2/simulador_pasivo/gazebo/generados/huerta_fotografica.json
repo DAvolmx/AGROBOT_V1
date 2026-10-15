@@ -1,0 +1,41 @@
+{
+  "source_world": "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_pasivo/gazebo/generados/huerta_visual_base.sdf",
+  "output_world": "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_pasivo/gazebo/generados/huerta_fotografica.sdf",
+  "photo_textured_leaves": 140,
+  "visual_geometry": "built_in_ellipsoid_uv_and_ground_plane_atlas",
+  "camera_resolution": [
+    512,
+    384
+  ],
+  "collision_geometry_identical": true,
+  "world_sha256": "654edf87cbef0d7e6ac02c3394b3dd79042f30551825e9d41830cee90fcdc7f6",
+  "texture_provenance": {
+    "source_split": "train_only",
+    "metric_scale": "estimated_for_visuals_not_measured",
+    "assets": {
+      "leaf": {
+        "source": "images/0020.jpg",
+        "sha256": "6b4711ac66a67014c95dafe96f85acecf9608bac26b39044842241f5f2e3e98b",
+        "crop_xywh": [
+          0,
+          64,
+          96,
+          96
+        ]
+      },
+      "soil": {
+        "source": "images/0014.jpg",
+        "sha256": "4c42e523b56b998d494446775c97fc534202fe77ccde40fcb547f85e775774eb",
+        "crop_xywh": [
+          544,
+          288,
+          96,
+          96
+        ]
+      }
+    },
+    "physics_changed": false
+  },
+  "photo_texture_not_photogrammetry": true,
+  "cast_shadows": false
+}

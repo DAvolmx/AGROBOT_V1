@@ -1,0 +1,86 @@
+Dashboard del simulador en http://localhost:8092  (escenario: huerta_fotos_50cm)
+[camara] render de la cámara simulada en la GPU
+Error handling request from 192.168.0.196
+Traceback (most recent call last):
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_protocol.py", line 575, in _handle_request
+    resp = await request_handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_app.py", line 559, in _handle
+    return await handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_huerta/servidor.py", line 224, in sendero_vista
+    return _jpeg(await asyncio.to_thread(render))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_huerta/servidor.py", line 220, in render
+    res = sim.ep.seguidor.vision.detectar(cv2, frame, sim.ep.cfg["autonomia"],
+          ^^^^^^^^^^^^^^^
+AttributeError: 'Episodio' object has no attribute 'seguidor'. Did you mean: 'segundos'?
+Error handling request from 192.168.0.196
+Traceback (most recent call last):
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_protocol.py", line 575, in _handle_request
+    resp = await request_handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_app.py", line 559, in _handle
+    return await handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_huerta/servidor.py", line 224, in sendero_vista
+    return _jpeg(await asyncio.to_thread(render))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_huerta/servidor.py", line 220, in render
+    res = sim.ep.seguidor.vision.detectar(cv2, frame, sim.ep.cfg["autonomia"],
+          ^^^^^^^^^^^^^^^
+AttributeError: 'Episodio' object has no attribute 'seguidor'. Did you mean: 'segundos'?
+Error handling request from 192.168.0.196
+Traceback (most recent call last):
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_protocol.py", line 575, in _handle_request
+    resp = await request_handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_app.py", line 559, in _handle
+    return await handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_huerta/servidor.py", line 224, in sendero_vista
+    return _jpeg(await asyncio.to_thread(render))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_huerta/servidor.py", line 220, in render
+    res = sim.ep.seguidor.vision.detectar(cv2, frame, sim.ep.cfg["autonomia"],
+          ^^^^^^^^^^^^^^^
+AttributeError: 'Episodio' object has no attribute 'seguidor'. Did you mean: 'segundos'?
+Error handling request from 192.168.0.196
+Traceback (most recent call last):
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_protocol.py", line 575, in _handle_request
+    resp = await request_handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_app.py", line 559, in _handle
+    return await handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_huerta/servidor.py", line 224, in sendero_vista
+    return _jpeg(await asyncio.to_thread(render))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_huerta/servidor.py", line 220, in render
+    res = sim.ep.seguidor.vision.detectar(cv2, frame, sim.ep.cfg["autonomia"],
+          ^^^^^^^^^^^^^^^
+AttributeError: 'Episodio' object has no attribute 'seguidor'. Did you mean: 'segundos'?

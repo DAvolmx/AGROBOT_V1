@@ -1,0 +1,17 @@
+Dashboard del simulador en http://localhost:8093  (escenario: huerta_fotos_giro20)
+[camara] render de la cámara simulada en la GPU
+Error handling request from 192.168.0.196
+Traceback (most recent call last):
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_protocol.py", line 575, in _handle_request
+    resp = await request_handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/.local/lib/python3.12/site-packages/aiohttp/web_app.py", line 559, in _handle
+    return await handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_pasivo/servidor.py", line 337, in modo
+    return web.json_response({"ok": True, "modo": sim.ep.cambiar_modo(cuerpo["modo"])})
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_pasivo/correr.py", line 731, in cambiar_modo
+    self.explorador.detener()
+    ^^^^^^^^^^^^^^^
+AttributeError: 'Episodio' object has no attribute 'explorador'

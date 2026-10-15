@@ -1,0 +1,6 @@
+{
+  "name": "trained",
+  "speed": 0.2,
+  "lookahead": 0.35,
+  "gain": 1.2
+}

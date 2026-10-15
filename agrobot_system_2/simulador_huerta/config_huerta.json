@@ -1,0 +1,90 @@
+{
+  "calibration": {
+    "servo_offset_deg": 0,
+    "gyro_bias_x_dps": 0,
+    "gyro_bias_y_dps": 0,
+    "gyro_bias_z_dps": 0,
+    "imu_cabeceo_signo": 1
+  },
+  "hardware": {
+    "camera_enabled": true,
+    "lidar_baud": 460800,
+    "actuator_port": "/dev/ttyTHS1",
+    "actuator_baud": 115200
+  },
+  "ai": {
+    "active_model": "ip102_pest_yolo11s.pt"
+  },
+  "detection": {
+    "confidence_threshold": 0.6,
+    "clip_record_threshold": 0.77,
+    "imgsz": 480,
+    "infer_hz_max": 10,
+    "escanear_al_detectar": "siempre"
+  },
+  "slam": {
+    "robot_largo_cm": 50,
+    "robot_ancho_cm": 33,
+    "cono_frontal_deg": 10,
+    "cono_lateral_deg": 60,
+    "margen_parada_cm": 12,
+    "deslizamiento_cm": 40,
+    "freno_camara": true,
+    "pose_gyro_trust": 0.85
+  },
+  "autonomia": {
+    "escala_velocidad": 0.5,
+    "distancia_puntos_cm": 290,
+    "avance_libre_cm": 100,
+    "lado_libre_cm": 60,
+    "retroceso_libre_cm": 30,
+    "escaneo_periodo_s": 180,
+    "escaneo_duracion_s": 8,
+    "escaneo_angulo_min": 25,
+    "escaneo_angulo_max": 110,
+    "escaneo_enciende_foco": true,
+    "sendero_activo": true,
+    "sendero_tolerancia_cm": 10,
+    "sendero_pared_max_cm": 150,
+    "sendero_vision": true,
+    "sendero_vision_peso": 0.5,
+    "sendero_verde_h_min": 10,
+    "sendero_verde_h_max": 45,
+    "sendero_verde_s_min": 20,
+    "sendero_paja": true,
+    "sendero_adaptativo": true,
+    "sendero_igualar_luz": true,
+    "compensar_cabeceo": true,
+    "politica_activa": false
+  },
+  "odometria_webcam": {
+    "habilitada": true,
+    "publicar_ros": true,
+    "camara_altura_m": 0.4,
+    "camara_inclinacion_deg": 15.5,
+    "camara_hfov_deg": 71,
+    "camara_adelante_m": 0.42
+  },
+  "control": {
+    "max_v_mps": 1.5,
+    "max_omega_rps": 4.0,
+    "suavidad_duty": 1.0,
+    "suavidad_periodo_s": 0.3,
+    "modo_manejo": "exterior"
+  },
+  "safety": {
+    "heartbeat_stale_warn_s": 5,
+    "heartbeat_stale_err_s": 20,
+    "max_linear_accel_mps2": 3,
+    "max_angular_accel_rps2": 8
+  },
+  "navigation": {
+    "mode": "localization",
+    "map_name": "agrobot_map",
+    "last_goal": {
+      "x": -4.114532628881046,
+      "y": 7.179887202470443,
+      "theta_deg": 0.0
+    }
+  }
+}

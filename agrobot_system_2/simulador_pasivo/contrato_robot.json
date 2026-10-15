@@ -1,0 +1,29 @@
+{
+  "version": "pasivo-v7-1",
+  "wheelbase_m": 0.37,
+  "front_outer_m": 0.19,
+  "rear_outer_m": 0.37,
+  "tire_width_m": 0.047,
+  "v_scale_mps": 0.55,
+  "omega_scale_rps": 1.5,
+  "steer_limit_deg": 17,
+  "mechanical_stop_deg": 20,
+  "command_timeout_ms": 500,
+  "pwm_rise_pct_s": 100,
+  "reverse_deadtime_ms": 20,
+  "pwm_hz": 5000,
+  "calibrated": false,
+  "estimated": [
+    "tire_width_m",
+    "motor_response",
+    "mass",
+    "inertias",
+    "friction"
+  ],
+  "wheel_order": [
+    "rear_left",
+    "rear_right",
+    "front_left",
+    "front_right"
+  ]
+}

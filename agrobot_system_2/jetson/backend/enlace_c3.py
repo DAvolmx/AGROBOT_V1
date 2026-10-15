@@ -46,12 +46,14 @@ INVERTIR_GIRO = False
 
 
 class EnlaceC3:
-    def __init__(self, ble: BleActuatorLink, wifi: UdpActuatorLink | None = None):
+    def __init__(self, ble: BleActuatorLink, wifi: UdpActuatorLink | None = None, *, wifi_only: bool = False):
+        self.wifi_only = wifi_only
+        ble.positive_led = wifi_only
         self.ble = ble
         self.wifi = wifi
         self._on_status = None
         self._t_estado_ble = 0.0
-        self._via = "ble"
+        self._via = "wifi" if self.wifi_only else "ble"
         self._tarea: asyncio.Task | None = None
         self.cambios_de_via = 0
         self._vias_antes: tuple[bool, bool] | None = None
@@ -80,7 +82,8 @@ class EnlaceC3:
         self._enviar_wifi()
 
     def start(self):
-        self.ble.start()
+        if not self.wifi_only:
+            self.ble.start()
         if self.wifi is not None:
             self._tarea = asyncio.create_task(self._bucle_wifi())
 
@@ -95,6 +98,7 @@ class EnlaceC3:
 
     def resumen(self) -> dict:
         r = self.ble.resumen()
+        r["ble_disabled"] = self.wifi_only
         r["ble"] = self.ble.connected
         r["wifi"] = self.wifi.resumen() if self.wifi is not None else None
         r["conectado"] = self.connected
@@ -153,4 +157,4 @@ class EnlaceC3:
         try:
             self.ble._handle_status(trama)
         finally:
-            self._via = "ble"
+            self._via = "wifi" if self.wifi_only else "ble"

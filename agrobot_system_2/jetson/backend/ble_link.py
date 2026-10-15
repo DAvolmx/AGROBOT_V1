@@ -189,7 +189,7 @@ class BleActuatorLink:
         # Bit invertido a propósito: ver el comentario de uart_link.pack().
         # Este foco es de lógica normal y el firmware no puede cambiar su
         # LED_ACTIVO_EN_BAJO (GPIO8 es pin de strapping).
-        if not self._led:
+        if self._led if getattr(self, "positive_led", False) else not self._led:
             flags |= FLAG_LED
         if self._scan_once:
             flags |= FLAG_SCAN
@@ -266,7 +266,7 @@ class BleActuatorLink:
             # Mismo desfase que en pack(): lo que el firmware llama
             # "encendido" es el foco apagado. Sin invertir, el dashboard
             # decía ON con el foco apagado.
-            "led_state": not bool(flags & ST_LED),
+            "led_state": bool(flags & ST_LED) if getattr(self, "positive_led", False) else not bool(flags & ST_LED),
             "seq_echo": seq_echo,
             "reinicio_por_tension": bool(flags & ST_BROWNOUT),
             "recien_arrancada": bool(flags & ST_RECIEN),

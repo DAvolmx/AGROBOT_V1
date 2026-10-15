@@ -1,0 +1,1952 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgroBot · Huerta real · Laboratorio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%2300bd4f'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg:#141821; --panel:#1d2230; --panel2:#262c3c; --ink:#e6e9f1; --soft:#8f99ae;
+  --acento:#00bd4f; --acento-ink:#6ef5a0; --acento-soft:rgba(0,189,79,.15);
+  --warn:#f5a623; --crit:#ef5a4c; --linea:#313a4f; --vidrio:rgba(17,21,31,.84);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+header{display:flex;align-items:center;gap:10px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--linea);flex-wrap:wrap}
+header h1{font-size:14px;color:var(--acento);font-weight:700;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid var(--linea);color:var(--soft);white-space:nowrap}
+.pill .dot{width:6px;height:6px;border-radius:50%;background:var(--crit)}
+.pill.ok .dot{background:var(--acento)}
+#chips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;flex:1;min-width:0}
+.chip{background:var(--panel2);border:1px solid var(--linea);border-radius:9px;padding:2px 9px;display:flex;flex-direction:column;min-width:0}
+@media (max-width:1100px){#chips{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.chip small{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--soft)}
+.chip b{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.ok{border-color:rgba(0,189,79,.45)} .chip.ok b{color:var(--acento-ink)}
+.chip.aviso{border-color:rgba(245,166,35,.55)} .chip.aviso b{color:var(--warn)}
+.chip.mal{border-color:rgba(239,90,76,.6);background:rgba(239,90,76,.10)} .chip.mal b{color:var(--crit)}
+.controles{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+select,input[type=number],input[type=text]{background:var(--bg);border:1px solid var(--linea);color:var(--ink);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit}
+button{background:var(--panel2);border:1px solid var(--linea);color:var(--ink);border-radius:7px;padding:4px 11px;font-size:12.5px;cursor:pointer;font-family:inherit;min-height:30px}
+button:hover{border-color:var(--acento);color:var(--acento-ink)}
+button.activo{background:var(--acento-soft);border-color:var(--acento);color:var(--acento-ink);font-weight:600}
+button.peligro{border-color:var(--crit);color:var(--crit)}
+#tabs{display:flex;gap:4px;padding:5px 12px 0;background:var(--panel);border-bottom:1px solid var(--linea)}
+#tabs button{border-radius:8px 8px 0 0;border-bottom:none;padding:6px 16px}
+main{flex:1;overflow:hidden;display:flex;min-height:0}
+.tab{display:none;flex:1;overflow:auto;padding:12px;gap:12px}
+.tab.activa{display:flex}
+.col{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--linea);border-radius:12px;padding:12px}
+.card h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--soft);margin-bottom:8px}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.kv b{color:var(--acento-ink);font-weight:600}
+canvas{display:block;background:#0f121a;border-radius:8px;width:100%}
+img.vista{width:100%;border-radius:8px;background:#000;display:block}
+.hint{font-size:11.5px;color:var(--soft);line-height:1.5}
+.barra{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.mando-sep{width:1px;align-self:stretch;background:var(--linea);margin:0 2px}
+/* ---- Simulación 3D: el visor ocupa todo y los paneles flotan encima ---- */
+#tab-sim{padding:0;position:relative;overflow:hidden}
+#gl-lienzo{position:absolute;inset:0}
+.flota{position:absolute;background:var(--vidrio);border:1px solid var(--linea);border-radius:12px;backdrop-filter:blur(6px);z-index:5}
+#gl-mando{top:10px;left:10px;padding:5px 7px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;max-width:calc(100% - 380px)}
+#gl-mando button{min-width:36px;min-height:30px;padding:3px 8px}
+#gl-mando label{font-size:11.5px;color:var(--soft);display:flex;gap:4px;align-items:center;white-space:nowrap}
+#panel{top:10px;right:10px;bottom:10px;width:350px;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:10px}
+#panel.plegado{bottom:auto;width:auto}
+#panel.plegado .contenido{display:none!important}
+#panel h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--soft);margin-bottom:5px;display:flex;justify-content:space-between}
+#mando{left:10px;bottom:10px;padding:8px 10px}
+.cruceta{display:grid;grid-template-columns:repeat(3,46px);gap:4px;justify-content:center}
+.cruceta button{font-size:16px;padding:8px 0}
+.stop{border-color:var(--crit);color:var(--crit)}
+#eventos{font-size:11px;max-height:170px;overflow:auto}
+#eventos div{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+#eventos .ev-mal{color:var(--crit)} #eventos .ev-aviso{color:var(--warn)}
+/* ---- Editor ---- */
+#ed-lienzo{position:relative;flex:1;min-height:420px;margin-top:8px}
+#editor{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+.problema{font-size:12px;padding:4px 6px;border-radius:6px;margin-bottom:4px;cursor:pointer;border:1px solid var(--linea)}
+.problema.error{border-color:rgba(239,90,76,.6);color:var(--crit)}
+.problema.aviso{border-color:rgba(245,166,35,.55);color:var(--warn)}
+@media (max-width:900px){#panel{width:260px}#gl-mando{max-width:calc(100% - 290px)}}
+:focus-visible{outline:2px solid var(--acento-ink);outline-offset:2px}
+/* ---- Teléfono (2026-09-30). Antes: las 8 fichas apretadas en una columna
+   con los valores cortados ("aut…", "erro…"), el visor 3D tapado por los
+   paneles flotantes y las columnas de SLAM / Entrenamiento / Editor con su
+   ancho mínimo de escritorio, cortadas por la derecha. ---- */
+@media (max-width:760px){
+  body{height:100dvh}
+  header{padding:8px 10px;row-gap:6px}
+  header h1{font-size:14px}
+  #chips{order:3;flex:0 0 100%;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  #chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;min-width:128px;max-width:230px;padding:3px 10px}
+  .chip b{font-size:12.5px}
+  .controles{order:4;flex:0 0 100%}
+  .controles select{flex:1;min-width:0}
+  .controles button,.controles select,.controles input{min-height:38px}
+  #tabs{overflow-x:auto;scrollbar-width:none;padding:5px 8px 0}
+  #tabs::-webkit-scrollbar{display:none}
+  #tabs button{flex:none;padding:8px 12px;min-height:40px}
+  .tab.activa{flex-direction:column}
+  .tab .col{flex:none!important;min-width:0!important;width:100%}
+  /* Simulación 3D: el visor arriba; el mando y los sensores, debajo y no
+     encima de la imagen. */
+  #tab-sim{overflow-y:auto;overflow-x:hidden}
+  #gl-lienzo{position:relative;inset:auto;height:52dvh;flex:none;order:1}
+  #gl-mando{left:8px;right:8px;max-width:none;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  #gl-mando::-webkit-scrollbar{display:none}
+  #mando{position:static;order:2;margin:10px 10px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .cruceta{grid-template-columns:repeat(3,56px)}
+  .cruceta button{min-height:48px}
+  #panel{position:static;order:3;width:auto;margin:10px;bottom:auto;overflow:visible}
+  #ed-lienzo{min-height:58dvh}
+}
+</style>
+</head>
+<body>
+
+<header><span class="pill" style="color:#d1dfb6">HUERTA · 33 × 50 cm · Camino 50 cm</span>
+  <h1>AgroBot · Simulador</h1>
+  <span id="ws-pill" class="pill"><span class="dot"></span><span id="ws-txt">conectando…</span></span>
+  <div id="chips">
+    <div class="chip" id="c-estado"><small>Estado</small><b id="h-estado">—</b></div>
+    <div class="chip"><small>Pose</small><b class="mono" id="h-pose">—</b></div>
+    <div class="chip"><small>Velocidad</small><b class="mono" id="h-vel">—</b></div>
+    <div class="chip" id="c-lidar"><small>LIDAR · libre</small><b class="mono" id="h-lidar">—</b></div>
+    <div class="chip" id="c-sendero"><small>Sendero (cámara)</small><b id="h-sendero">—</b></div>
+    <div class="chip" id="c-slam"><small>SLAM</small><b class="mono" id="h-slam">—</b></div>
+    <div class="chip"><small>Episodio</small><b class="mono" id="h-episodio">—</b></div>
+    <div class="chip"><small>Rendimiento</small><b class="mono" id="h-fps">—</b></div>
+  </div>
+  <div class="controles">
+    <select id="sel-escenario" title="Escenario"></select>
+    <button id="btn-reset" title="Reiniciar el episodio">↻</button>
+    <button id="btn-auto" class="activo">🤖 Auto</button>
+    <button id="btn-manual">🕹 Manual</button>
+    <input type="number" id="factor" value="1" min="0.1" max="5" step="0.1" style="width:58px" title="Velocidad de la simulación (×)">
+  </div>
+</header><div style="padding:4px 14px;background:#293429;color:#d7dfc8;font-size:11px">SIMULACIÓN EJE PASIVO · Terreno aproximado a partir de tus fotos · Col, lechuga y papa: apariencia sintética, no diagnóstico · Sin conexión a motores</div>
+
+<div id="tabs">
+  <button data-tab="sim" class="activo">🌱 Simulación 3D</button>
+  <button data-tab="slam">🗺 SLAM</button>
+  <button data-tab="entrenar">🧠 Entrenamiento</button>
+  <button data-tab="editor">✏ Editor de mapas</button>
+</div>
+
+<main>
+  <!-- SIMULACIÓN 3D -->
+  <section class="tab activa" id="tab-sim">
+    <div id="gl-lienzo"></div>
+    <div class="flota" id="gl-mando">
+      <span class="pill" id="gl-estado">iniciando…</span>
+      <label><input type="checkbox" id="gl-seguir" checked> seguir</label>
+      <label><input type="checkbox" id="gl-slam" checked> robot del SLAM</label>
+      <label><input type="checkbox" id="gl-sombras" checked> sombras</label>
+      <label title="Las plantas más bajas que el LIDAR no dan eco: el robot las pisa creyendo el camino libre">
+        <input type="checkbox" id="gl-riesgo" checked> plantas que el LIDAR no ve</label>
+      <span class="mando-sep"></span>
+      <button data-gl="izquierda" title="girar la vista">⟲</button>
+      <button data-gl="derecha" title="girar la vista">⟳</button>
+      <button data-gl="arriba" title="subir">▲</button>
+      <button data-gl="abajo" title="bajar">▼</button>
+      <button data-gl="acercar" title="acercar">➕</button>
+      <button data-gl="alejar" title="alejar">➖</button>
+      <span class="mando-sep"></span>
+      <button data-gl="cenital">⬓ Cenital</button>
+      <button data-gl="detras">🤖 Detrás</button>
+      <button data-gl="primera">👁 Cámara</button>
+    </div>
+
+    <div class="flota" id="panel">
+      <h4><span>Sensores del robot</span><button id="btn-plegar" style="min-height:0;padding:0 8px">—</button></h4>
+      <div class="contenido" style="display:flex;flex-direction:column;gap:10px">
+        <div>
+          <h4><span>Cámara (lo que analiza el robot)</span><span class="mono" id="p-cam-fps"></span></h4>
+          <img class="vista" id="img-camara" alt="">
+        </div>
+        <div>
+          <h4><span>Detector de senderos</span></h4>
+          <img class="vista" id="img-sendero" alt="">
+          <p class="hint" id="p-vision" style="margin-top:4px">—</p>
+        </div>
+        <div>
+          <h4><span>LIDAR 360°</span><span class="mono" id="p-lidar-estado"></span></h4>
+          <canvas id="radar" height="230"></canvas>
+        </div>
+        <div>
+          <h4><span>Eventos</span></h4>
+          <div id="eventos" class="mono"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flota" id="mando">
+      <div class="cruceta">
+        <div></div><button data-accion="adelante" title="W / ↑">▲</button><div></div>
+        <button data-accion="izquierda" title="A / ←">◀</button>
+        <button data-accion="parar" class="stop" title="espacio">■</button>
+        <button data-accion="derecha" title="D / →">▶</button>
+        <div></div><button data-accion="atras" title="S / ↓">▼</button><div></div>
+      </div>
+      <label class="hint" style="display:flex;gap:5px;align-items:center;margin-top:6px">
+        <input type="checkbox" id="maniobra" checked> giro con maniobra</label>
+      <p class="hint" style="max-width:150px">Corregí en automático: lo aprende.</p>
+    </div>
+  </section>
+
+  <!-- SLAM -->
+  <section class="tab" id="tab-slam">
+    <div class="col" style="flex:2;min-width:0">
+      <div class="card">
+        <h3>Mapa que está construyendo el SLAM</h3>
+        <img class="vista" id="img-slam" alt="">
+        <p class="hint" style="margin-top:6px">Verde: dónde está de verdad · azul: dónde cree estar ·
+          naranja: la ruta ideal. Paredes dobles o giradas = el casamiento de scans falló o la pose
+          derivó mientras mapeaba, igual que en el robot real.</p>
+      </div>
+      <div class="card">
+        <h3>Verdad del terreno</h3>
+        <canvas id="mapa2d" height="420"></canvas>
+        <p class="hint" style="margin-top:6px">Gris: paredes (las ve el LIDAR) · marrón: sendero · beige: paja ·
+          verde: plantas · magenta: recorrido real · azul punteado: lo que cree el SLAM</p>
+      </div>
+    </div>
+    <div class="col" style="flex:1;min-width:300px">
+      <div class="card">
+        <h3>Eje pasivo y recorrido ajustado</h3>
+        <p>19 cm delante · 37 cm detrás · batalla 37 cm · pivote libre ±20°.</p>
+        <button onclick="post('/controlador_pasivo',{})">Probar controlador entrenado</button>
+        <button onclick="post('/modo',{modo:'manual'});post('/control',{accion:'parar'})">Detener prueba</button>
+        <p class="hint">Solo simulación. Tracción y masas por confirmar. El mapa usa odometría ruidosa y LIDAR simulado; no ejecuta slam_toolbox.</p>
+        <a href="/resultados_pasivo" target="_blank">Ver métricas del entrenamiento</a>
+        <h3>Localización</h3>
+        <div class="kv"><span>Error de posición</span><b class="mono" id="sl-error">—</b></div>
+        <div class="kv"><span>Error de rumbo</span><b class="mono" id="sl-rumbo">—</b></div>
+        <div class="kv"><span>Saltos (cierres de bucle)</span><b class="mono" id="sl-saltos">—</b></div>
+        <div class="kv"><span>Casamientos fallidos al girar</span><b class="mono" id="sl-fallos">—</b></div>
+        <div class="kv"><span>Caídas del LIDAR</span><b class="mono" id="sl-caidas">—</b></div>
+        <div class="kv"><span>Aciertos del mapa</span><b class="mono" id="sl-mapa">—</b></div>
+        <div class="kv"><span>Desvío de la ruta ideal</span><b class="mono" id="sl-desvio">—</b></div>
+        <div class="barra" style="margin-top:10px">
+          <label class="hint" style="display:flex;gap:6px;align-items:center">
+            <input type="checkbox" id="sl-usar" checked> Navegar con la pose del SLAM</label>
+          <button id="sl-corregir">📍 Corregir pose</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Fallos simulados (como el robot real)</h3>
+        <div class="kv"><span>Ruido del SLAM</span>
+          <span class="barra"><input type="number" id="sl-ruido" value="1" min="0" max="3" step="0.1" style="width:64px">
+          <span class="hint">0 perfecto · 1 real</span></span></div>
+        <div class="kv"><span>Conexión del LIDAR</span>
+          <select id="sl-conexion">
+            <option value="uart">UART (casi no se cae)</option>
+            <option value="usb">USB CP2102N (4 caídas / 15 min)</option>
+            <option value="ninguna">Sin caídas</option>
+          </select></div>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:6px">
+          <input type="checkbox" id="sl-casamiento" checked> El casamiento de scans falla girando rápido (&gt; 8° por vuelta del LIDAR)</label>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:4px">
+          <input type="checkbox" id="sl-cierres" checked> Cierres de bucle con salto de pose</label>
+        <p class="hint" style="margin-top:6px">También se simulan la distorsión del scan al girar (el C1 tarda
+          100 ms por vuelta) y la latencia del mando BLE medida (28 ms de mediana, 75 ms p95).</p>
+      </div>
+      <div class="card">
+        <h3>Recorrido ideal</h3>
+        <p class="hint">Recorre la línea central del sendero: la referencia de "así había que hacerlo".</p>
+        <div class="barra" style="margin-top:8px">
+          <button id="btn-ideal" class="activo">▶ Iniciar recorrido ideal</button>
+          <button id="btn-ideal-parar">■ Terminar</button>
+        </div>
+        <div class="barra" style="margin-top:6px">
+          <button id="btn-comparar">↻ Volver al inicio y comparar</button>
+          <button id="btn-cerrar-comp">✔ Cerrar comparación</button>
+        </div>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:8px">
+          <input type="checkbox" id="chk-filtro"> Filtro de conducción ideal (no deja salirse de la ruta)</label>
+        <div class="kv"><span>Correcciones del filtro</span><b class="mono" id="sl-filtro-n">0</b></div>
+      </div>
+      <div class="card">
+        <h3>Comparación</h3>
+        <div id="comparacion"><p class="hint">Todavía no hay comparación.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ENTRENAMIENTO -->
+  <section class="tab" id="tab-entrenar">
+    <div class="col" style="flex:1;min-width:300px">
+      <div class="card">
+        <h3>Lo aprendido de tus correcciones</h3>
+        <div class="kv"><span>Intervenciones tuyas</span><b class="mono" id="a-interv">0</b></div>
+        <div class="kv"><span>Situaciones distintas</span><b class="mono" id="a-situaciones">0</b></div>
+        <div class="kv"><span>Maniobras guardadas</span><b class="mono" id="a-maniobras">0</b></div>
+        <div class="kv"><span>Veces que las usó solo</span><b class="mono" id="a-usadas">0</b></div>
+        <div class="kv"><span>Muestras (CSV)</span><b class="mono" id="a-muestras">0</b></div>
+        <div class="barra" style="margin-top:10px">
+          <label class="hint" style="display:flex;gap:6px;align-items:center">
+            <input type="checkbox" id="usar-aprendido" checked> Aplicar lo aprendido</label>
+          <button id="btn-csv">⬇ muestras.csv</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Maniobras enseñadas</h3>
+        <div id="a-lista" style="font-size:12px;max-height:300px;overflow:auto"></div>
+        <p class="hint" style="margin-top:6px">Firma: F/I/D/A = hueco libre delante, izquierda, derecha y
+          atrás (0 = pegado, L = libre); S = dónde cae el sendero. Se guardan en
+          <span class="mono" id="a-ruta">~/.agrobot/aprendizaje/maniobras.json</span>, que también lee el robot real.</p>
+      </div>
+    </div>
+    <div class="col" style="flex:1.4;min-width:340px">
+      <div class="card">
+        <h3>Entrenamiento de la red <span id="hist-training" style="display:none;color:#4ae04a;font-size:12px;font-weight:400">● corriendo</span></h3>
+        <canvas id="hist-chart" style="width:100%;height:190px;background:#0f121a;border-radius:8px"></canvas>
+        <div style="display:flex;gap:16px;margin-top:4px">
+          <span class="hint" style="color:#4ae09a">■ Acierto %</span>
+          <span class="hint" style="color:#5a9aff">■ Ejemplos (÷100)</span>
+          <span id="hist-ultima" class="hint" style="margin-left:auto"></span>
+        </div>
+        <button onclick="cargarHistorial()" style="margin-top:6px">Actualizar</button>
+      </div>
+      <div class="card">
+        <h3>Ranking de modelos</h3>
+        <p class="hint">De mejor a peor por puntuación combinada (menos es mejor).</p>
+        <div style="overflow-x:auto"><table id="hist-ranking" style="width:100%;font-size:12px;border-collapse:collapse">
+          <thead><tr style="border-bottom:2px solid var(--linea)"><th>Modelo</th><th>Puntos</th><th>Validado</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <button id="hist-deploy" style="margin-top:8px;display:none" class="activo">Desplegar el mejor</button>
+      </div>
+      <div class="card">
+        <h3>Eventos del entrenamiento</h3>
+        <div id="hist-eventos" style="max-height:260px;overflow-y:auto;font-size:12px;font-family:monospace"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EDITOR -->
+  <section class="tab" id="tab-editor">
+    <div class="col" style="flex:3;min-width:0">
+      <div class="card" style="flex:1;display:flex;flex-direction:column">
+        <div class="barra">
+          <button class="herr activo" data-herr="sendero">〰 Sendero</button>
+          <button class="herr" data-herr="pared">▬ Pared</button>
+          <button class="herr" data-herr="cerco">▭ Cerco</button>
+          <button class="herr" data-herr="hilera">⋯ Hilera</button>
+          <button class="herr" data-herr="planta">🌿 Planta</button>
+          <button class="herr" data-herr="objeto">🪨 Objeto</button>
+          <button class="herr" data-herr="escaneo">🌱 Escaneo</button>
+          <button class="herr" data-herr="mover">✥ Mover</button>
+          <button class="herr" data-herr="borrar">✖ Borrar</button>
+          <span class="mando-sep"></span>
+          <button id="ed-deshacer" title="Ctrl+Z">↶</button>
+          <button id="ed-rehacer" title="Ctrl+Y">↷</button>
+          <button id="ed-zoom-mas" title="acercar (o rueda del ratón)">＋</button>
+          <button id="ed-zoom-menos" title="alejar">－</button>
+          <button id="ed-ajustar">⤢ Ajustar</button>
+          <label class="hint" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="ed-iman" checked> imán 10 cm</label>
+        </div>
+        <div class="barra" style="margin-top:6px">
+          <span class="hint">Planta</span>
+          <select id="ed-planta-alto">
+            <option value="0.15">baja, 15 cm (el LIDAR NO la ve)</option>
+            <option value="0.45">alta, 45 cm (el LIDAR la ve)</option>
+          </select>
+          <label class="hint" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="ed-plaga"> con plaga</label>
+          <span class="hint">hilera cada</span>
+          <input type="number" id="ed-paso" value="0.30" step="0.05" min="0.1" max="2" style="width:62px">
+          <span class="hint">m · objeto</span>
+          <select id="ed-objeto"><option>maceta</option><option>piedra</option><option>rama</option><option>arbusto</option></select>
+        </div>
+        <div id="ed-lienzo"><canvas id="editor"></canvas></div>
+        <p class="hint" id="ed-pista" style="margin-top:6px">Clic para ir añadiendo puntos al sendero</p>
+      </div>
+    </div>
+    <div class="col" style="flex:1;min-width:300px">
+      <div class="card">
+        <h3>Validación</h3>
+        <div id="ed-validacion"><p class="hint">Dibujá un sendero para validar el mapa.</p></div>
+        <button id="ed-quitar-plantas" style="margin-top:6px;display:none">🌿 Quitar las plantas del sendero</button>
+      </div>
+      <div class="card">
+        <h3>Terreno</h3>
+        <div class="kv"><span>Ancho del sendero (m)</span><input type="number" id="ed-ancho" value="0.65" step="0.05" min="0.2" max="2" style="width:76px"></div>
+        <div class="kv"><span>Ancho de la paja (m)</span><input type="number" id="ed-paja" value="0.35" step="0.05" min="0" max="2" style="width:76px"></div>
+        <div class="kv"><span>Suelo seco (0–1)</span><input type="number" id="ed-seco" value="0.35" step="0.05" min="0" max="1" style="width:76px"></div>
+        <div class="kv"><span>Borde del sendero</span>
+          <select id="ed-borde">
+            <option value="paja">paja</option><option value="vegetacion">vegetación verde</option>
+            <option value="mixto">mixto</option><option value="tierra">caballón de tierra</option>
+            <option value="paja_en_camino">paja EN el camino</option>
+          </select></div>
+      </div>
+      <div class="card">
+        <h3>Contenido</h3>
+        <div class="kv"><span>Puntos del sendero</span><b class="mono" id="ed-n-sendero">0</b></div>
+        <div class="kv"><span>Paredes</span><b class="mono" id="ed-n-paredes">0</b></div>
+        <div class="kv"><span>Plantas (altas / bajas)</span><b class="mono" id="ed-n-plantas">0</b></div>
+        <div class="kv"><span>Objetos</span><b class="mono" id="ed-n-objetos">0</b></div>
+        <div class="kv"><span>Puntos de escaneo</span><b class="mono" id="ed-n-escaneos">0</b></div>
+      </div>
+      <div class="card">
+        <h3>Partir de un mapa</h3>
+        <div class="barra"><select id="ed-mapa-real" style="flex:1"></select><button id="ed-cargar-real">Mapa real del robot</button></div>
+        <div class="barra" style="margin-top:6px"><select id="ed-guardado" style="flex:1"></select><button id="ed-cargar">Cargar dibujado</button></div>
+        <div class="barra" style="margin-top:6px">
+          <button id="ed-vacio">Empezar en blanco</button>
+          <button id="ed-actual">Copiar el escenario actual</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Usar y guardar</h3>
+        <div class="barra">
+          <input type="text" id="ed-nombre" placeholder="nombre del mapa" style="flex:1">
+          <button id="ed-guardar">💾 Guardar</button>
+        </div>
+        <button id="ed-simular" style="width:100%;margin-top:8px" class="activo">▶ Simular en este mapa</button>
+        <p class="hint" style="margin-top:6px">Los mapas guardados se pueden usar para entrenar:
+          <span class="mono">entrenar.py --mundos nombre1,nombre2</span></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/static/three.min.js"></script>
+<script src="/static/OrbitControls.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let mundo = null, estado = null, ws = null;
+
+// ---------------------------------------------------------------- pestañas
+function activarTab(nombre) {
+  document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("activo", x.dataset.tab === nombre));
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("activa", t.id === "tab-" + nombre));
+  if (nombre === "sim") { glIniciar(); glAjustar(); }
+  if (nombre === "slam") dibujarMapa();
+  if (nombre === "editor") { listarMundos(); dibujarEditor(); }
+  if (nombre === "entrenar") { cargarHistorial(); iniciarAutoRefreshHist(); }
+}
+document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => activarTab(b.dataset.tab)));
+const tabActiva = () => document.querySelector(".tab.activa").id.replace("tab-", "");
+$("btn-plegar").addEventListener("click", () => {
+  const p = $("panel"); p.classList.toggle("plegado");
+  $("btn-plegar").textContent = p.classList.contains("plegado") ? "+" : "—";
+});
+
+// ---------------------------------------------------------------- WebSocket
+function conectar() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { $("ws-pill").classList.add("ok"); $("ws-txt").textContent = "conectado"; };
+  ws.onclose = () => { $("ws-pill").classList.remove("ok"); $("ws-txt").textContent = "desconectado"; setTimeout(conectar, 1200); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = (e) => { estado = JSON.parse(e.data); pintar(); };
+}
+
+function chip(id, texto, nivel) {
+  const b = $("h-" + id);
+  b.textContent = texto; b.title = texto;
+  const c = b.parentElement;
+  c.classList.remove("ok", "aviso", "mal");
+  if (nivel) c.classList.add(nivel);
+}
+
+const EVENTOS_MAL = /choque|caido|casamiento|atasc|callejon|sin_scan|error/;
+const EVENTOS_AVISO = /freno|bucle|salto|servo_probado|filtro|correccion/;
+
+function pintar() {
+  if (!estado || !estado.listo) return;
+  const p = estado.pose, v = estado.velocidad, m = estado.metricas, se = estado.sensores;
+  const cm = (x) => x == null ? "libre" : `${(x * 100).toFixed(0)}`;
+  chip("estado", `${estado.modo === "auto" ? "auto" : "manual"} · ${estado.explorador.estado}`,
+       /atasc|callej|bucle|sin scan|parado/.test(estado.explorador.estado) ? "aviso" : "ok");
+  chip("pose", `x ${p.x.toFixed(2)}  y ${p.y.toFixed(2)}  θ ${p.theta_deg.toFixed(0)}° · eje ${(p.delta_deg||0).toFixed(1)}°`);
+  chip("vel", `${v.v.toFixed(2)} m/s · ${v.omega.toFixed(2)} rad/s`);
+  const lid = estado.lidar_estado || {};
+  const dists = [se.lidar_adelante_m, se.lidar_izquierda_m, se.lidar_derecha_m, se.lidar_atras_m].filter((x) => x != null);
+  const minimo = dists.length ? Math.min(...dists) : 9;
+  if (lid.caido) chip("lidar", `CAÍDO (${lid.conexion}) · sin scan ${lid.edad_scan_s}s`, "mal");
+  else chip("lidar", `A ${cm(se.lidar_adelante_m)} · I ${cm(se.lidar_izquierda_m)} · D ${cm(se.lidar_derecha_m)} · T ${cm(se.lidar_atras_m)} cm`,
+            minimo < 0.35 ? "mal" : minimo < 0.6 ? "aviso" : "ok");
+  if (se.sendero_lateral_m != null)
+    chip("sendero", `centro ${(se.sendero_lateral_m * 100).toFixed(0)} cm · rumbo ${se.sendero_rumbo_deg ?? "—"}° · conf ${(se.sendero_confianza || 0).toFixed(2)}`,
+         Math.abs(se.sendero_lateral_m) > 0.2 ? "aviso" : "ok");
+  else chip("sendero", estado.sendero.vision || "no visible", "aviso");
+  const s = estado.slam || {};
+  const err = s.error_m == null ? null : s.error_m * 100;
+  chip("slam", `error ${err == null ? "—" : err.toFixed(0) + " cm"} · ${s.error_rumbo_deg ?? "—"}° · ${s.saltos} saltos · ${s.casamientos_fallidos ?? 0} fallos`,
+       err == null ? null : err > 50 ? "mal" : err > 20 ? "aviso" : "ok");
+  chip("episodio", `t ${estado.t}s · ${m.recorrido_m} m · ${m.en_sendero_pct}% en sendero · ${m.colisiones} choques · ${estado.plantas_pisadas ?? 0} pisadas`,
+       m.colisiones > 0 || (estado.plantas_pisadas ?? 0) > 0 ? "aviso" : "ok");
+  chip("fps", `${gl.fps ?? "—"} fps · cámara ${estado.camara_fps ?? "—"}/s · ×${estado.factor}`);
+  $("p-cam-fps").textContent = `${estado.camara_fps ?? "—"} img/s · servo ${estado.servo}°`;
+  $("p-vision").textContent = estado.sendero.vision || "—";
+  $("p-lidar-estado").textContent = lid.caido ? "CAÍDO" : `${lid.caidas ?? 0} caídas`;
+  $("a-muestras").textContent = m.muestras;
+  $("a-interv").textContent = m.intervenciones ?? 0;
+  $("a-usadas").textContent = m.aprendidas_usadas ?? 0;
+  if (estado.aprendizaje) pintarAprendizaje(estado.aprendizaje);
+  pintarSlam(estado);
+  if (estado.eventos.length) {
+    const cont = $("eventos");
+    estado.eventos.forEach((ev) => {
+      const d = document.createElement("div");
+      const nombre = ev.evento || "";
+      d.className = EVENTOS_MAL.test(nombre) ? "ev-mal" : EVENTOS_AVISO.test(nombre) ? "ev-aviso" : "";
+      const resto = Object.entries(ev).filter(([k]) => k !== "t" && k !== "evento")
+        .map(([k, val]) => `${k}=${typeof val === "object" ? JSON.stringify(val) : val}`).join(" ");
+      d.textContent = `${ev.t}s ${nombre} ${resto}`.slice(0, 140);
+      cont.prepend(d);
+    });
+    while (cont.childElementCount > 80) cont.lastChild.remove();
+  }
+  $("btn-auto").classList.toggle("activo", estado.modo === "auto");
+  $("btn-manual").classList.toggle("activo", estado.modo === "manual");
+  if (tabActiva() === "slam") dibujarMapa();
+  if (tabActiva() === "sim" && !$("panel").classList.contains("plegado")) dibujarRadar();
+}
+
+// ---------------------------------------------------------------- mapa 2D (verdad)
+function ajustarCanvas(c) {
+  const ancho = c.parentElement.clientWidth - 24;
+  if (c.width !== ancho) c.width = ancho;
+  return c.getContext("2d");
+}
+
+function dibujarMapa() {
+  const c = $("mapa2d");
+  if (!mundo || !c.parentElement.offsetParent) return;
+  const ctx = ajustarCanvas(c);
+  const [x0, y0, x1, y1] = mundo.limites;
+  const k = Math.min(c.width / (x1 - x0), c.height / (y1 - y0));
+  const px = (x) => (x - x0) * k, py = (y) => (y1 - y) * k;
+  ctx.fillStyle = "#4c4034"; ctx.fillRect(0, 0, c.width, c.height);
+  if (mundo.sendero.length > 1) {
+    for (const [ancho, color] of [[mundo.ancho_sendero + 2 * mundo.ancho_paja, "#b39b6a"],
+                                  [mundo.ancho_sendero, "#6b5a44"]]) {
+      ctx.strokeStyle = color; ctx.lineWidth = ancho * k; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.beginPath();
+      mundo.sendero.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y)));
+      ctx.stroke();
+    }
+  }
+  mundo.plantas.forEach(([x, y, r, plaga]) => {
+    ctx.beginPath(); ctx.arc(px(x), py(y), Math.max(2, r * k), 0, 7);
+    ctx.fillStyle = plaga ? "#d8e04a" : "#3fa85a"; ctx.fill();
+  });
+  (mundo.escaneos || []).forEach(([x, y]) => {
+    ctx.font = "16px serif"; ctx.textAlign = "center"; ctx.fillText("🌱", px(x), py(y) + 5);
+  });
+  ctx.textAlign = "left";
+  ctx.strokeStyle = "#9aa3b2"; ctx.lineWidth = 4; ctx.lineCap = "butt";
+  mundo.paredes.forEach(([ax, ay, bx, by]) => {
+    ctx.beginPath(); ctx.moveTo(px(ax), py(ay)); ctx.lineTo(px(bx), py(by)); ctx.stroke();
+  });
+  if (!estado || !estado.listo) return;
+  if (estado.ruta && estado.ruta.length > 1) {
+    ctx.strokeStyle = "rgba(255,170,40,.95)"; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    estado.ruta.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y)));
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (estado.traza.length > 1) {
+    ctx.strokeStyle = "rgba(230,90,230,.9)"; ctx.lineWidth = 2; ctx.beginPath();
+    estado.traza.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y)));
+    ctx.stroke();
+  }
+  if (estado.traza_slam && estado.traza_slam.length > 1) {
+    ctx.strokeStyle = "rgba(90,140,255,.85)"; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    estado.traza_slam.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y)));
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  const p = estado.pose, th = -p.theta_deg * Math.PI / 180;
+  ctx.save(); ctx.translate(px(p.x), py(p.y)); ctx.rotate(th);
+  ctx.fillStyle = "#e0453a"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+  ctx.fillRect(-0.2 * k, -0.175 * k, 0.4 * k, 0.35 * k);
+  ctx.strokeRect(-0.2 * k, -0.175 * k, 0.4 * k, 0.35 * k);
+  ctx.beginPath(); ctx.moveTo(0.2 * k, 0); ctx.lineTo(0.42 * k, 0); ctx.stroke();
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- radar
+function dibujarRadar() {
+  const c = $("radar");
+  if (!estado || !estado.listo || !c.parentElement.offsetParent) return;
+  const ancho = c.parentElement.clientWidth;
+  if (c.width !== ancho) c.width = ancho;
+  const ctx = c.getContext("2d");
+  const w = c.width, h = c.height, cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 10, escala = R / 4;
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = "#313a4f"; ctx.fillStyle = "#8f99ae"; ctx.font = "10px monospace";
+  for (let m = 1; m <= 4; m++) {
+    ctx.beginPath(); ctx.arc(cx, cy, m * escala, 0, 7); ctx.stroke();
+    ctx.fillText(`${m} m`, cx + 3, cy - m * escala - 2);
+  }
+  ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+  const caido = estado.lidar_estado && estado.lidar_estado.caido;
+  estado.lidar.forEach(({ a, d }) => {
+    const rad = a * Math.PI / 180;
+    const x = cx + Math.sin(rad) * d * escala * -1, y = cy - Math.cos(rad) * d * escala;
+    ctx.beginPath(); ctx.arc(x, y, 1.8, 0, 7); ctx.fillStyle = caido ? "#5a6072" : "#00bd4f"; ctx.fill();
+  });
+  ctx.beginPath(); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx - 6, cy + 7); ctx.lineTo(cx + 6, cy + 7); ctx.closePath();
+  ctx.fillStyle = "#e0453a"; ctx.fill();
+  if (caido) { ctx.fillStyle = "#ef5a4c"; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "center";
+               ctx.fillText("LIDAR CAÍDO: sin scans", cx, 16); ctx.textAlign = "left"; }
+}
+
+// ---------------------------------------------------------------- imágenes
+function refrescarImagen(id, url, siguiente) {
+  const img = $(id);
+  if (!img.offsetParent) return setTimeout(() => refrescarImagen(id, url, siguiente), 600);
+  img.onload = img.onerror = () => setTimeout(() => refrescarImagen(id, url, siguiente), siguiente);
+  img.src = `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
+
+// ---------------------------------------------------------------- controles
+async function post(url, cuerpo) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) alert(d.error || `HTTP ${r.status}`);
+  return d;
+}
+$("btn-auto").addEventListener("click", () => post("/modo", { modo: "auto" }));
+$("btn-manual").addEventListener("click", () => post("/modo", { modo: "manual" }));
+$("factor").addEventListener("change", (e) => post("/velocidad", { factor: parseFloat(e.target.value) }));
+$("btn-reset").addEventListener("click", async () => {
+  await post("/reset", { escenario: $("sel-escenario").value });
+  await cargarMundo();
+});
+$("sel-escenario").addEventListener("change", () => $("btn-reset").click());
+$("btn-csv").addEventListener("click", () => location.href = "/muestras.csv");
+document.querySelectorAll("[data-accion]").forEach((b) =>
+  b.addEventListener("click", () => conducir(b.dataset.accion)));
+
+function conducir(accion) {
+  post("/control", { accion, maniobra: $("maniobra").checked });
+}
+const teclas = { w: "adelante", ArrowUp: "adelante", s: "atras", ArrowDown: "atras",
+                 a: "izquierda", ArrowLeft: "izquierda", d: "derecha", ArrowRight: "derecha", " ": "parar" };
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (tabActiva() === "editor") return;
+  const accion = teclas[e.key];
+  if (accion) { e.preventDefault(); conducir(accion); }
+});
+
+async function cargarMundo() {
+  mundo = await (await fetch("/mundo")).json();
+  gl.mundoPintado = null;            // el escenario cambió: repintar el 3D
+  const sel = $("sel-escenario");
+  if (!sel.options.length) {
+    mundo.escenarios.forEach((e) => sel.add(new Option(e, e)));
+  }
+  if (![...sel.options].some((o) => o.value === mundo.nombre)) sel.add(new Option(mundo.nombre, mundo.nombre));
+  sel.value = mundo.nombre;
+  dibujarMapa();
+}
+
+// ---------------------------------------------------------------- 3D interactivo
+// Visor WebGL con Three.js. El terreno se texturiza con la MISMA imagen que
+// ve la cámara del robot (/textura.jpg) más un mapa de relieve sacado de
+// ella (/relieve.jpg), así la luz marca los surcos y la paja. Todo lo demás
+// (paredes, macetas, ramas, plantas, puntos de escaneo) sale de /mundo.
+const gl = { listo: false, escena: null, camara: null, render: null, control: null,
+             robot: null, fantasma: null, traza: null, trazaSlam: null, ruta: null,
+             grupoMundo: null, luz: null, mundoPintado: null };
+
+function glIniciar() {
+  const cont = $("gl-lienzo");
+  if (gl.listo || !cont.offsetParent || typeof THREE === "undefined") return;
+  const ancho = cont.clientWidth || 800, alto = cont.clientHeight || 500;
+
+  gl.escena = new THREE.Scene();
+  // Mismo color que el horizonte del cielo: si no coinciden, a lo lejos se
+  // ve una franja donde termina la niebla y empieza el cielo.
+  gl.escena.background = new THREE.Color(0xc9d4e2);
+  gl.escena.fog = new THREE.FogExp2(0xc9d4e2, 0.016);
+  // La niebla pasa por la codificación sRGB de salida y el fondo no: en
+  // lineal, las dos terminan en el mismo color en pantalla.
+  gl.escena.fog.color.convertSRGBToLinear();
+
+  gl.camara = new THREE.PerspectiveCamera(55, ancho / alto, 0.05, 200);
+  gl.camara.position.set(4, 4, 4);
+
+  gl.render = new THREE.WebGLRenderer({ antialias: true });
+  gl.render.setPixelRatio(Math.min(devicePixelRatio, 2));
+  gl.render.setSize(ancho, alto);
+  gl.render.shadowMap.enabled = true;
+  gl.render.shadowMap.type = THREE.PCFSoftShadowMap;
+  gl.render.toneMapping = THREE.ACESFilmicToneMapping;
+  gl.render.toneMappingExposure = 0.95;
+  if (gl.render.outputColorSpace !== undefined) gl.render.outputColorSpace = THREE.SRGBColorSpace;
+  else if (gl.render.outputEncoding !== undefined) gl.render.outputEncoding = THREE.sRGBEncoding;
+  cont.appendChild(gl.render.domElement);
+
+  gl.control = new THREE.OrbitControls(gl.camara, gl.render.domElement);
+  gl.control.enableDamping = true;
+  gl.control.maxPolarAngle = Math.PI / 2 - 0.05;   // no meterse bajo el suelo
+  gl.control.enableZoom = false;                   // el zoom va por botones
+
+  // Relleno bajo y sol fuerte: con tanto relleno las caras en sombra salían
+  // casi tan claras como las iluminadas y las paredes parecían recortes.
+  gl.escena.add(new THREE.HemisphereLight(0xbcd4ec, 0x3a3524, 0.5));
+  gl.escena.add(new THREE.AmbientLight(0x404860, 0.12));
+  gl.luz = new THREE.DirectionalLight(0xffe9c4, 1.9);
+  gl.luz.position.set(6, 9, 4);
+  gl.luz.castShadow = true;
+  gl.luz.shadow.mapSize.set(2048, 2048);
+  gl.luz.shadow.bias = -0.0004;
+  gl.luz.shadow.normalBias = 0.02;
+  const s = gl.luz.shadow.camera;
+  s.left = s.bottom = -12; s.right = s.top = 12; s.far = 40;
+  gl.escena.add(gl.luz);
+  gl.escena.children.forEach((o) => {
+    if (!o.isLight) return;
+    o.color.convertSRGBToLinear();
+    if (o.groundColor) o.groundColor.convertSRGBToLinear();
+  });
+
+  gl.grupoMundo = new THREE.Group();
+  gl.escena.add(gl.grupoMundo);
+
+  // Cielo: esfera invertida con degradado shader
+  const skyGeo = new THREE.SphereGeometry(90, 32, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    uniforms: {
+      topColor: { value: new THREE.Color(0x2c63b3) },
+      bottomColor: { value: new THREE.Color(0xc9d4e2) },
+      sunColor: { value: new THREE.Color(0xffe8b8) },
+      sunDir: { value: new THREE.Vector3(0.5, 0.6, 0.3).normalize() },
+      offset: { value: 8 },
+      exponent: { value: 0.55 }
+    },
+    vertexShader: `
+      varying vec3 vWorldPos;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 topColor, bottomColor, sunColor, sunDir;
+      uniform float offset, exponent;
+      varying vec3 vWorldPos;
+      void main() {
+        vec3 dir = normalize(vWorldPos + vec3(0.0, offset, 0.0));
+        float h = max(pow(max(dir.y, 0.0), exponent), 0.0);
+        vec3 sky = mix(bottomColor, topColor, h);
+        float sunDot = max(dot(normalize(vWorldPos), sunDir), 0.0);
+        sky += sunColor * pow(sunDot, 128.0) * 1.5;
+        sky += sunColor * pow(sunDot, 8.0) * 0.15;
+        gl_FragColor = vec4(sky, 1.0);
+      }`,
+    side: THREE.BackSide
+  });
+  gl.sky = new THREE.Mesh(skyGeo, skyMat);
+  gl.escena.add(gl.sky);
+
+  // Robot real (verde) y el "fantasma" de donde cree estar el SLAM (rojo).
+  gl.robot = glRobot(0x3fbf5a, false);
+  gl.fantasma = glRobot(0xe0453a, true);
+  gl.escena.add(gl.robot, gl.fantasma);
+
+  gl.traza = glLinea(0xe65ae6, 2);
+  gl.trazaSlam = glLinea(0x5a8cff, 1);
+  gl.ruta = glLinea(0xffaa28, 2);
+  gl.escena.add(gl.traza, gl.trazaSlam, gl.ruta);
+  glLinealizar(gl.escena);
+
+  gl.listo = true;
+  $("gl-estado").textContent = "WebGL listo";
+  new ResizeObserver(() => glAjustar()).observe(cont);
+  glBucle();
+}
+
+function glRobot(color, fantasma) {
+  const g = new THREE.Group();
+  const MatBody = typeof THREE.MeshPhysicalMaterial === "function" ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
+  const bodyOpts = { color, roughness: fantasma ? 0.6 : 0.3, metalness: 0.4,
+                     transparent: fantasma, opacity: fantasma ? 0.35 : 1 };
+  if (MatBody === THREE.MeshPhysicalMaterial && !fantasma) {
+    bodyOpts.clearcoat = 0.7; bodyOpts.clearcoatRoughness = 0.15;
+  }
+  const cuerpo = new THREE.Mesh(
+    new THREE.BoxGeometry(0.40, 0.22, 0.35),
+    new MatBody(bodyOpts));
+  cuerpo.position.y = 0.11; cuerpo.castShadow = !fantasma;
+  const morro = new THREE.Mesh(
+    new THREE.ConeGeometry(0.07, 0.18, 12),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: fantasma,
+                                     opacity: fantasma ? 0.4 : 1 }));
+  morro.rotation.z = -Math.PI / 2; morro.position.set(0.26, 0.16, 0);
+  g.add(cuerpo, morro);
+  if (!fantasma) {
+    // Placa superior oscura
+    const placa = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.02, 0.31),
+      new THREE.MeshStandardMaterial({ color: 0x1a1d26, roughness: 0.5, metalness: 0.3 }));
+    placa.position.y = 0.23; placa.castShadow = true;
+    g.add(placa);
+    // Lente de camara (esfera brillante frontal)
+    const lente = new THREE.Mesh(
+      new THREE.SphereGeometry(0.025, 12, 10),
+      new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.05, metalness: 0.9 }));
+    lente.position.set(0.21, 0.16, 0);
+    g.add(lente);
+    // LED indicador verde (emisivo)
+    const led = new THREE.Mesh(
+      new THREE.CircleGeometry(0.015, 12),
+      new THREE.MeshBasicMaterial({ color: 0x00ff44 }));
+    led.position.set(0.201, 0.08, 0.06);
+    led.rotation.y = Math.PI / 2;
+    g.add(led);
+    // Ruedas con tapacubos
+    for (const dx of [-0.13, 0.13]) for (const dz of [-0.19, 0.19]) {
+      const r = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 16),
+                               new THREE.MeshStandardMaterial({ color: 0x23262e, roughness: 0.7, metalness: 0.2 }));
+      r.rotation.x = Math.PI / 2; r.position.set(dx, 0.075, dz); r.castShadow = true;
+      g.add(r);
+      // Tapacubos
+      const hub = new THREE.Mesh(new THREE.CircleGeometry(0.04, 12),
+                                 new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.3, metalness: 0.5 }));
+      hub.rotation.x = Math.PI / 2;
+      hub.position.set(dx, 0.075, dz + (dz > 0 ? 0.026 : -0.026));
+      if (dz < 0) hub.rotation.x = -Math.PI / 2;
+      g.add(hub);
+    }
+  }
+  return g;
+}
+
+function glLinea(color, ancho) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3 * 2000), 3));
+  geo.setDrawRange(0, 0);
+  return new THREE.Line(geo, new THREE.LineBasicMaterial({ color, linewidth: ancho }));
+}
+
+function glPuntos(linea, pts, altura) {
+  // El estado llega a 10 Hz y esto corre a 60: sin esta guarda se volvían a
+  // subir 2000 puntos por línea a la GPU en cada fotograma.
+  if (linea.userData.fuente === pts) return;
+  linea.userData.fuente = pts;
+  const arr = linea.geometry.attributes.position.array;
+  const n = Math.min(pts.length, arr.length / 3);
+  for (let i = 0; i < n; i++) {
+    arr[i * 3] = pts[i][0]; arr[i * 3 + 1] = altura; arr[i * 3 + 2] = -pts[i][1];
+  }
+  linea.geometry.setDrawRange(0, n);
+  linea.geometry.attributes.position.needsUpdate = true;
+  linea.geometry.computeBoundingSphere();
+}
+
+// Texturas de hoja dibujadas a mano en un canvas: no hay archivos de imagen
+// que subir y cada clase de planta tiene su silueta. El alfa es lo que hace
+// que parezca follaje y no cartón: por los huecos se ve el suelo.
+function glTexturaHoja(clase) {
+  gl.texHoja = gl.texHoja || {};
+  if (gl.texHoja[clase]) return gl.texHoja[clase];
+  const n = 128, c = document.createElement("canvas");
+  c.width = c.height = n;
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, n, n);
+  // Silueta: lanceolada las altas (hoja larga de maíz/acelga), redondeada y
+  // dentada las bajas (plántula, lechuga).
+  const largo = clase === "alta" ? 0.94 : 0.80, panza = clase === "alta" ? 0.20 : 0.40;
+  g.beginPath();
+  g.moveTo(n / 2, n * (1 - largo));
+  g.bezierCurveTo(n * (0.5 + panza), n * 0.35, n * (0.5 + panza * 0.8), n * 0.85, n / 2, n);
+  g.bezierCurveTo(n * (0.5 - panza * 0.8), n * 0.85, n * (0.5 - panza), n * 0.35, n / 2, n * (1 - largo));
+  const grad = g.createLinearGradient(0, 0, 0, n);
+  grad.addColorStop(0, "#ffffff");            // la punta, más clara por el sol
+  grad.addColorStop(0.55, "#c8d8c0");
+  grad.addColorStop(1, "#7f9678");            // la base, a la sombra
+  g.fillStyle = grad; g.fill();
+  // Nervadura central y secundarias: dan volumen sin geometría extra.
+  g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 2.2;
+  g.beginPath(); g.moveTo(n / 2, n); g.lineTo(n / 2, n * (1 - largo) + 6); g.stroke();
+  g.lineWidth = 1.1; g.strokeStyle = "rgba(255,255,255,.28)";
+  for (let i = 1; i <= 6; i++) {
+    const ty = n - (n * largo) * (i / 7), d = n * panza * 0.75 * (1 - i / 8);
+    g.beginPath(); g.moveTo(n / 2, ty); g.lineTo(n / 2 + d, ty - n * 0.06); g.stroke();
+    g.beginPath(); g.moveTo(n / 2, ty); g.lineTo(n / 2 - d, ty - n * 0.06); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  gl.texHoja[clase] = t;
+  return t;
+}
+
+function glMaterialHoja(clase, plaga) {
+  gl.matHoja = gl.matHoja || {};
+  const clave = clase + (plaga ? "_plaga" : "");
+  if (gl.matHoja[clave]) return gl.matHoja[clave];
+  // El color va en `color` y la textura en escala de grises lo modula: así
+  // una sola textura sirve para planta sana, con plaga y plántula tierna.
+  const color = plaga ? 0xcfc23e : (clase === "alta" ? 0x3f8f4e : 0x6fbf5a);
+  gl.matHoja[clave] = new THREE.MeshStandardMaterial({
+    map: glTexturaHoja(clase), color, side: THREE.DoubleSide,
+    // Recorte por alfa, NO mezcla: con `transparent` las hojas se ordenan mal
+    // entre sí y se ven unas a través de otras. Con alphaTest se descarta el
+    // píxel y la profundidad queda bien.
+    alphaTest: 0.35, roughness: 0.75, metalness: 0.0 });
+  return gl.matHoja[clave];
+}
+
+// Una planta = un manojo de hojas. La altura decide de qué clase es, y la
+// clase es EL dato del problema: por encima de los 30 cm del LIDAR la planta
+// aparece como obstáculo; por debajo, el robot la pisa creyendo el camino
+// libre. Por eso las bajas se pintan tumbadas y con un disco de aviso.
+function glPlanta(grupo, [x, y, r, plaga, altura], hLidar, detalle = 1) {
+  // Los mapas viejos no guardaban la altura: se estima por el radio.
+  const alto = altura || Math.max(0.12, r * 2.4);
+  const alta = alto >= hLidar;
+  const mat = glMaterialHoja(alta ? "alta" : "baja", plaga);
+  const hojas = Math.max(3, Math.round((alta ? 9 : 6) * detalle));
+  const semilla = Math.abs(Math.sin(x * 127.1 + y * 311.7)) * 43758.5453;
+  const azar = (i) => ((semilla * (i + 1)) % 1);
+
+  if (alta) {                       // tallo visible: es lo que devuelve el eco
+    const tallo = new THREE.Mesh(
+      new THREE.CylinderGeometry(r * 0.07, r * 0.11, alto * 0.85, 6),
+      glMaterialTallo());
+    tallo.position.set(x, alto * 0.42, -y);
+    tallo.castShadow = true;
+    grupo.add(tallo);
+  } else {                          // aviso: esta el LIDAR no la ve
+    const disco = new THREE.Mesh(
+      new THREE.CircleGeometry(r * 1.5, 18),
+      glMaterialRiesgo());
+    disco.rotation.x = -Math.PI / 2;
+    disco.position.set(x, 0.012, -y);
+    disco.visible = gl.marcarRiesgo !== false;
+    disco.userData.riesgo = true;
+    grupo.add(disco);
+  }
+
+  for (let i = 0; i < hojas; i++) {
+    const a = azar(i);
+    const largo = alto * (alta ? 0.55 + a * 0.5 : 0.85 + a * 0.4);
+    const ancho = r * (alta ? 0.85 : 1.35) * (0.7 + a * 0.6);
+    const hoja = new THREE.Mesh(new THREE.PlaneGeometry(ancho, largo), mat);
+    // La hoja se dibuja con la base abajo, así que se desplaza medio largo
+    // por su eje antes de inclinarla: si no, gira sobre su centro.
+    hoja.geometry.translate(0, largo / 2, 0);
+    const giro = (i / hojas) * Math.PI * 2 + a;
+    // Las altas se abren poco (erguidas); las bajas casi se tumban, que es
+    // justo lo que las deja por debajo del plano del LIDAR.
+    const caida = alta ? (0.25 + a * 0.45) : (1.05 + a * 0.35);
+    hoja.rotation.set(0, giro, 0);
+    hoja.rotateX(caida);
+    hoja.position.set(x, alta ? alto * 0.30 + a * alto * 0.35 : alto * 0.18, -y);
+    hoja.castShadow = true;
+    grupo.add(hoja);
+  }
+}
+
+function glMaterialTallo() {
+  gl.matTallo = gl.matTallo || new THREE.MeshStandardMaterial({ color: 0x5d7a3a, roughness: 0.9 });
+  return gl.matTallo;
+}
+function glMaterialRiesgo() {
+  gl.matRiesgo = gl.matRiesgo || new THREE.MeshBasicMaterial({
+    color: 0xff5a4a, transparent: true, opacity: 0.22, side: THREE.DoubleSide });
+  return gl.matRiesgo;
+}
+
+// El mundo en 3D. Ejes: x del mundo -> x, y del mundo -> -z (three usa y arriba).
+function glConstruirMundo(m) {
+  if (!gl.listo || !m) return;
+  const firma = JSON.stringify([m.nombre, m.limites, m.paredes.length, m.plantas.length,
+                                (m.objetos || []).length, m.seco, m.borde]);
+  if (gl.mundoPintado === firma) return;
+  gl.mundoPintado = firma;
+  while (gl.grupoMundo.children.length) {
+    const h = gl.grupoMundo.children.pop();
+    h.geometry && h.geometry.dispose();
+    h.material && (h.material.map && h.material.map.dispose(), h.material.dispose());
+  }
+  // Las hojas comparten material y textura, y el bucle de arriba los acaba
+  // de liberar: hay que olvidar la caché o se pintarían con recursos muertos.
+  gl.hm = gl.hojasHuerta = null; gl.texHoja = gl.matHoja = null; gl.matTallo = gl.matRiesgo = null; gl.texBloque = null;
+  const [x0, y0, x1, y1] = m.limites, anchoM = x1 - x0, altoM = y1 - y0;
+
+  // Suelo: textura y relieve generados por el simulador (el mismo terreno
+  // que ve la cámara del robot).
+  const cargador = new THREE.TextureLoader();
+  const sello = Date.now();
+  const MatSuelo = typeof THREE.MeshPhysicalMaterial === "function" ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
+  const sueloOpts = {
+    map: cargador.load(`/textura.jpg?t=${sello}`),
+    normalMap: cargador.load(`/relieve.jpg?t=${sello}`),
+    normalScale: new THREE.Vector2(1.4, 1.4), roughness: 0.88, metalness: 0.0 };
+  if (MatSuelo === THREE.MeshPhysicalMaterial) {
+    sueloOpts.clearcoat = m.seco < 0.5 ? 0.2 : 0.0;
+    sueloOpts.clearcoatRoughness = 0.4;
+  }
+  const mat = new MatSuelo(sueloOpts);
+  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(anchoM, altoM), mat);
+  suelo.rotation.x = -Math.PI / 2;
+  suelo.position.set((x0 + x1) / 2, 0, -(y0 + y1) / 2);
+  suelo.receiveShadow = true;
+  gl.grupoMundo.add(suelo);
+
+  // Campo alrededor del mapa: sin él el terreno flotaba en la niebla.
+  const campo = new THREE.Mesh(new THREE.PlaneGeometry(160, 160),
+    new THREE.MeshStandardMaterial({ map: glTexturaRuido(0x76634f, 0x584b3c, 0.15, 48),
+                                     roughness: 1, metalness: 0 }));
+  campo.rotation.x = -Math.PI / 2;
+  campo.position.set((x0 + x1) / 2, -0.004, -(y0 + y1) / 2);
+  campo.receiveShadow = true;
+  gl.grupoMundo.add(campo);
+
+  // Paredes: cajas a lo largo de cada segmento, con textura de bloque para
+  // que la luz marque volumen en vez de un gris plano.
+  const matPared = new THREE.MeshStandardMaterial({
+    map: glTexturaBloque(), color: 0xb8b2a6, roughness: 0.9, metalness: 0.0 });
+  const matCap = new THREE.MeshStandardMaterial({ color: 0x55504a, roughness: 0.8, metalness: 0.1 });
+  const h = m.altura_pared || 0.6;
+  m.paredes.forEach(([ax, ay, bx, by]) => {
+    const largo = Math.hypot(bx - ax, by - ay);
+    if (largo < 0.02) return;
+    const geoPared = new THREE.BoxGeometry(largo, h, 0.07);
+    // UV en metros: un bloque de 40x20 cm sin estirarse con el largo.
+    const uv = geoPared.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * largo / 0.8, uv.getY(i) * h / 0.4);
+    const pared = new THREE.Mesh(geoPared, matPared);
+    pared.position.set((ax + bx) / 2, h / 2, -(ay + by) / 2);
+    pared.rotation.y = Math.atan2(by - ay, bx - ax);
+    pared.castShadow = pared.receiveShadow = true;
+    gl.grupoMundo.add(pared);
+    // Tapa superior de la pared (borde oscuro)
+    const tapa = new THREE.Mesh(new THREE.BoxGeometry(largo, 0.02, 0.08), matCap);
+    tapa.position.set((ax + bx) / 2, h + 0.01, -(ay + by) / 2);
+    tapa.rotation.y = Math.atan2(by - ay, bx - ax);
+    tapa.receiveShadow = true;
+    gl.grupoMundo.add(tapa);
+  });
+
+  // Plantas del cultivo. La altura NO es decorativa: decide si el LIDAR la
+  // ve. Por eso se pintan distinto las dos clases (ver glPlanta).
+  const hLidar = m.altura_lidar || 0.30;
+  // Un mapa de cultivo trae ~90 plantas. A nueve hojas cada una son 800
+  // mallas y el visor se arrastra, así que en los mapas poblados se recorta
+  // el follaje: se sigue distinguiendo alta de baja, que es lo que importa.
+  const detalle = m.plantas.length > 60 ? 0.55 : (m.plantas.length > 30 ? 0.8 : 1);
+  m.plantas.forEach((p) => glPlanta(gl.grupoMundo, p, hLidar, detalle));
+
+  // Objetos: macetas y piedras como cilindros, ramas y arbustos como esferas.
+  (m.objetos || []).forEach((o) => {
+    if (m.nombre === "huerta_fotos_50cm" && ["tanque","banco"].includes(o.tipo)) return;
+    const solido = o.solido;
+    const malla = solido
+      ? new THREE.Mesh(new THREE.CylinderGeometry(o.radio * 0.8, o.radio, o.altura, 14),
+                       new THREE.MeshStandardMaterial({ color: 0x8c5a46, roughness: 0.9 }))
+      : new THREE.Mesh(new THREE.SphereGeometry(o.radio, 12, 10),
+                       new THREE.MeshStandardMaterial({ color: 0x55a05f, roughness: 1,
+                                                        transparent: true, opacity: 0.85 }));
+    malla.position.set(o.x, solido ? o.altura / 2 : o.altura - o.radio * 0.6, -o.y);
+    malla.castShadow = true;
+    gl.grupoMundo.add(malla);
+  });
+
+  // Puntos de escaneo: poste con esfera, para verlos desde lejos.
+  (m.escaneos || []).forEach(([x, y]) => {
+    const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.5, 8),
+                                 new THREE.MeshStandardMaterial({ color: 0xe65ae6 }));
+    poste.position.set(x, 0.25, -y);
+    const bola = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10),
+                                new THREE.MeshStandardMaterial({ color: 0xe65ae6,
+                                                                 emissive: 0x551155 }));
+    bola.position.set(x, 0.53, -y);
+    gl.grupoMundo.add(poste, bola);
+  });
+
+  // Altura a la que barre el LIDAR: el plano que explica qué ve y qué no.
+  const plano = new THREE.Mesh(
+    new THREE.PlaneGeometry(anchoM, altoM),
+    new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.05,
+                                  side: THREE.DoubleSide }));
+  plano.rotation.x = -Math.PI / 2;
+  plano.position.set((x0 + x1) / 2, m.altura_lidar || 0.30, -(y0 + y1) / 2);
+  gl.grupoMundo.add(plano);
+  glLinealizar(gl.grupoMundo);
+}
+
+// three.js r128 no gestiona el color: con salida sRGB, un color o una
+// textura sin convertir se aclaran dos veces y todo sale lavado. Esto pasa
+// cada material a lineal una sola vez (los compartidos quedan marcados).
+function glSrgb(t) {
+  if (t.colorSpace !== undefined) t.colorSpace = THREE.SRGBColorSpace;
+  else t.encoding = THREE.sRGBEncoding;
+  if (t.image) t.needsUpdate = true;
+  return t;
+}
+
+function glLinealizar(raiz) {
+  raiz.traverse((o) => {
+    const mats = !o.material ? [] : (Array.isArray(o.material) ? o.material : [o.material]);
+    mats.forEach((m) => {
+      if (!m || m.isShaderMaterial || m.userData.lineal) return;
+      m.userData.lineal = true;
+      if (m.color) m.color.convertSRGBToLinear();
+      if (m.emissive) m.emissive.convertSRGBToLinear();
+      if (m.map) glSrgb(m.map);
+      if (m.emissiveMap) glSrgb(m.emissiveMap);
+      m.needsUpdate = true;
+    });
+  });
+}
+
+// Textura de ruido en dos tonos, repetida: da grano al campo exterior sin
+// descargar ninguna imagen.
+function glTexturaRuido(c1, c2, mezcla, repetir) {
+  const n = 128, cv = document.createElement("canvas");
+  cv.width = cv.height = n;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(n, n);
+  const a = new THREE.Color(c1), b = new THREE.Color(c2);
+  for (let i = 0; i < n * n; i++) {
+    const t = Math.random() < mezcla ? 1 : 0, v = 0.85 + Math.random() * 0.3;
+    const c = t ? b : a;
+    img.data[i * 4] = Math.min(255, c.r * 255 * v);
+    img.data[i * 4 + 1] = Math.min(255, c.g * 255 * v);
+    img.data[i * 4 + 2] = Math.min(255, c.b * 255 * v);
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repetir, repetir);
+  tex.anisotropy = gl.render.capabilities.getMaxAnisotropy();
+  if (tex.colorSpace !== undefined) tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Bloque de hormigón: juntas oscuras y manchas suaves.
+function glTexturaBloque() {
+  if (gl.texBloque) return gl.texBloque;
+  const cv = document.createElement("canvas");
+  cv.width = 128; cv.height = 64;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#a9a39a"; ctx.fillRect(0, 0, 128, 64);
+  for (let i = 0; i < 400; i++) {
+    const g = 140 + Math.random() * 50 | 0;
+    ctx.fillStyle = `rgba(${g},${g - 6},${g - 14},0.35)`;
+    ctx.fillRect(Math.random() * 128, Math.random() * 64, 2 + Math.random() * 5, 2 + Math.random() * 4);
+  }
+  ctx.strokeStyle = "#5e5952"; ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, 126, 31); ctx.strokeRect(-63, 33, 126, 30); ctx.strokeRect(65, 33, 126, 30);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  if (tex.colorSpace !== undefined) tex.colorSpace = THREE.SRGBColorSpace;
+  gl.texBloque = tex;
+  return tex;
+}
+
+function glMarcarRiesgo(ver) {
+  gl.marcarRiesgo = ver;
+  gl.grupoMundo && gl.grupoMundo.children.forEach((h) => {
+    if (h.userData && h.userData.riesgo) h.visible = ver;
+  });
+}
+
+// La pose llega a 10 Hz; pintarla tal cual hace avanzar el robot a saltos.
+// Se sigue al objetivo con un filtro exponencial por fotograma: ~80 ms de
+// retraso a cambio de movimiento continuo a la tasa de refresco.
+function glSuavizar(obj, x, z, rumbo, dt) {
+  const k = 1 - Math.exp(-dt * 14);
+  if (!obj.userData.iniciado || Math.hypot(obj.position.x - x, obj.position.z - z) > 1.5) {
+    obj.position.set(x, 0, z); obj.rotation.y = rumbo; obj.userData.iniciado = true;
+    return;
+  }
+  obj.position.x += (x - obj.position.x) * k;
+  obj.position.z += (z - obj.position.z) * k;
+  let d = rumbo - obj.rotation.y;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  obj.rotation.y += d * k;
+}
+
+function glActualizar() {
+  if (!gl.listo || !estado || !estado.listo) return;
+  const ahora = performance.now();
+  const dt = Math.min(0.1, (ahora - (gl.tPrevio || ahora)) / 1000);
+  gl.tPrevio = ahora;
+  const p = estado.pose;
+  glSuavizar(gl.robot, p.x, -p.y, p.theta_deg * Math.PI / 180, dt);
+  if(gl.robot.userData.front)gl.robot.userData.front.rotation.y=(p.delta_deg||0)*Math.PI/180;
+  const sl = estado.slam && estado.slam.pose;
+  gl.fantasma.visible = $("gl-slam").checked && !!sl;
+  if (sl) glSuavizar(gl.fantasma, sl.x, -sl.y, sl.theta_deg * Math.PI / 180, dt);
+  glPuntos(gl.traza, estado.traza || [], 0.02);
+  glPuntos(gl.trazaSlam, estado.traza_slam || [], 0.03);
+  glPuntos(gl.ruta, estado.ruta || [], 0.015);
+  if ($("gl-seguir").checked) {
+    gl.control.target.lerp(new THREE.Vector3(p.x, 0.2, -p.y), 0.15);
+    gl.luz.position.set(p.x + 6, 9, -p.y + 4);
+    gl.luz.target.position.set(p.x, 0, -p.y);
+    gl.luz.target.updateMatrixWorld();
+  }
+  if (gl.sky) gl.sky.position.copy(gl.camara.position);
+  gl.render.shadowMap.enabled = $("gl-sombras").checked;
+  const riesgo = $("gl-riesgo").checked;
+  if (riesgo !== gl.marcarRiesgo) glMarcarRiesgo(riesgo);
+}
+
+// Mando por botones: mantener pulsado sigue moviendo. La rueda queda
+// desactivada a propósito (con ella, desplazar la página movía la cámara).
+function glMover(accion) {
+  if (!gl.listo) return;
+  const cam = gl.camara, obj = gl.control.target;
+  const rel = cam.position.clone().sub(obj);
+  const radio = rel.length();
+  const giro = Math.atan2(rel.x, rel.z);
+  const alto = Math.asin(Math.max(-1, Math.min(1, rel.y / radio)));
+  const paso = 0.09, zoom = 1.12;
+  let g = giro, a = alto, r = radio;
+  if (accion === "izquierda") g += paso;
+  else if (accion === "derecha") g -= paso;
+  else if (accion === "arriba") a = Math.min(1.45, a + paso);
+  else if (accion === "abajo") a = Math.max(0.05, a - paso);
+  else if (accion === "acercar") r = Math.max(0.8, radio / zoom);
+  else if (accion === "alejar") r = Math.min(60, radio * zoom);
+  else if (accion === "cenital") { g = 0; a = 1.4; r = Math.max(8, radio); }
+  else if (accion === "detras") {
+    const p = estado && estado.pose;
+    if (p) { g = Math.PI + (-p.theta_deg * Math.PI / 180); a = 0.35; r = 2.6; }
+  } else if (accion === "primera") {
+    const p = estado && estado.pose;
+    if (!p) return;
+    const th = -p.theta_deg * Math.PI / 180;
+    // A la altura y en el sitio de la cámara real del robot.
+    cam.position.set(p.x + 0.42 * Math.cos(th), 0.30, -(p.y + 0.42 * Math.sin(th)));
+    gl.control.target.set(p.x + 2.2 * Math.cos(th), 0.05, -(p.y + 2.2 * Math.sin(th)));
+    $("gl-seguir").checked = false;
+    return;
+  }
+  cam.position.set(obj.x + r * Math.cos(a) * Math.sin(g),
+                   obj.y + r * Math.sin(a),
+                   obj.z + r * Math.cos(a) * Math.cos(g));
+  cam.lookAt(obj);
+}
+
+function mandoPulsable(selector, atributo, accionar) {
+  document.querySelectorAll(selector).forEach((b) => {
+    let repetir = null;
+    const arranca = (e) => {
+      e.preventDefault();
+      accionar(b.dataset[atributo]);
+      clearInterval(repetir);
+      repetir = setInterval(() => accionar(b.dataset[atributo]), 110);
+    };
+    const para = () => clearInterval(repetir);
+    b.addEventListener("pointerdown", arranca);
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, para));
+  });
+}
+mandoPulsable("#gl-mando button", "gl", glMover);
+
+function glAjustar() {
+  const cont = $("gl-lienzo");
+  if (!gl.listo || !cont.clientWidth) return;
+  gl.camara.aspect = cont.clientWidth / cont.clientHeight;
+  gl.camara.updateProjectionMatrix();
+  gl.render.setSize(cont.clientWidth, cont.clientHeight);
+}
+
+function glBucle() {
+  requestAnimationFrame(glBucle);
+  if (!gl.listo || !$("tab-sim").classList.contains("activa")) return;
+  glConstruirMundo(mundo);
+  glActualizar();
+  gl.control.update();
+  gl.render.render(gl.escena, gl.camara);
+  gl.cuadros = (gl.cuadros || 0) + 1;
+  const ahora = performance.now();
+  if (!gl.tFps) gl.tFps = ahora;
+  if (ahora - gl.tFps >= 1000) { gl.fps = Math.round(gl.cuadros * 1000 / (ahora - gl.tFps)); gl.cuadros = 0; gl.tFps = ahora; }
+}
+
+// ---------------------------------------------------------------- SLAM y ruta
+function pintarSlam(e) {
+  const s = e.slam;
+  if (!s) return;
+  const cm = (v) => v == null ? "—" : `${(v * 100).toFixed(0)} cm`;
+  $("sl-error").textContent = cm(s.error_m);
+  $("sl-rumbo").textContent = s.error_rumbo_deg == null ? "—" : `${s.error_rumbo_deg}°`;
+  $("sl-saltos").textContent = `${s.saltos} (${s.salto_total_m} m)`;
+  $("sl-mapa").textContent = s.mapa && s.mapa.aciertos_pct != null
+    ? `${s.mapa.aciertos_pct}% · error ${s.mapa.error_medio_cm} cm` : "—";
+  $("sl-desvio").textContent = e.desvio_ruta_cm == null ? "—" : `${e.desvio_ruta_cm} cm`;
+  $("sl-filtro-n").textContent = e.correcciones_filtro ?? 0;
+  if ($("sl-usar") !== document.activeElement) $("sl-usar").checked = !!s.usar;
+  if ($("sl-ruido") !== document.activeElement) $("sl-ruido").value = s.ruido;
+  if ($("chk-filtro") !== document.activeElement) $("chk-filtro").checked = !!e.filtro_ideal;
+  $("btn-ideal").classList.toggle("activo", !e.recorrido_ideal);
+  $("sl-fallos").textContent = s.casamientos_fallidos ?? 0;
+  const li = e.lidar_estado || {};
+  $("sl-caidas").textContent = `${li.caidas ?? 0} (${li.segundos_sin ?? 0} s sin scan)${li.caido ? " · CAÍDO" : ""}`;
+  if ($("sl-conexion") !== document.activeElement && li.conexion) $("sl-conexion").value = li.conexion;
+  if ($("sl-casamiento") !== document.activeElement) $("sl-casamiento").checked = s.fallos_casamiento !== false;
+  if ($("sl-cierres") !== document.activeElement) $("sl-cierres").checked = s.cierres !== false;
+  if (e.comparacion && e.comparacion.autonomo) pintarComparacion(e.comparacion);
+}
+
+function pintarComparacion(c) {
+  const filas = ["recorrido_m", "desvio_medio_cm", "plantas_pisadas", "choques",
+                 "error_slam_final_cm", "saltos_slam", "segundos"];
+  const nombre = { recorrido_m: "Recorrido (m)", desvio_medio_cm: "Desvío medio (cm)",
+                   plantas_pisadas: "Plantas pisadas", choques: "Choques",
+                   error_slam_final_cm: "Error del SLAM (cm)", saltos_slam: "Saltos del SLAM",
+                   segundos: "Duración (s)" };
+  $("comparacion").innerHTML =
+    `<div class="kv"><span></span><b>ideal / autónomo</b></div>` +
+    filas.filter((k) => c.ideal && c.ideal[k] != null).map((k) => {
+      const i = c.ideal[k], a = c.autonomo[k];
+      const peor = (k === "recorrido_m" || k === "segundos") ? false : a > i;
+      return `<div class="kv"><span>${nombre[k]}</span>
+        <b class="mono" style="color:${peor ? "var(--crit)" : "var(--acento-ink)"}">${i} / ${a}</b></div>`;
+    }).join("");
+}
+
+$("btn-ideal").addEventListener("click", async () => {
+  const d = await post("/recorrido", { accion: "ideal" });
+  if (d.ok) activarTab("sim");
+});
+$("btn-ideal-parar").addEventListener("click", () => post("/recorrido", { accion: "parar" }));
+$("btn-comparar").addEventListener("click", () => post("/recorrido", { accion: "comparar" }));
+$("btn-cerrar-comp").addEventListener("click", async () => {
+  const c = await post("/recorrido", { accion: "cerrar_comparacion" });
+  if (c && c.autonomo) pintarComparacion(c);
+});
+$("chk-filtro").addEventListener("change", (e) => post("/filtro", { activo: e.target.checked }));
+$("sl-usar").addEventListener("change", (e) => post("/slam", { usar_slam: e.target.checked }));
+$("sl-ruido").addEventListener("change", (e) => post("/slam", { ruido: parseFloat(e.target.value) }));
+$("sl-corregir").addEventListener("click", () => post("/slam", { corregir: true }));
+$("sl-conexion").addEventListener("change", (e) => post("/slam", { conexion: e.target.value }));
+$("sl-casamiento").addEventListener("change", (e) => post("/slam", { fallos_casamiento: e.target.checked }));
+$("sl-cierres").addEventListener("change", (e) => post("/slam", { cierres: e.target.checked }));
+
+// ---------------------------------------------------------------- aprendizaje
+function pintarAprendizaje(ap) {
+  $("a-situaciones").textContent = ap.situaciones;
+  $("a-maniobras").textContent = ap.maniobras;
+  $("a-ruta").textContent = ap.ruta;
+  $("a-lista").innerHTML = (ap.aprendidas || []).map((m) => `
+    <div class="kv">
+      <span><span class="mono" style="color:var(--soft)">${m.firma}</span><br>${m.pasos.join(" → ")}</span>
+      <span style="text-align:right">
+        <b class="mono">${m.exitos}✓ ${m.fracasos}✗</b><br>
+        <button data-olvidar="${m.firma}" style="padding:2px 8px;min-height:0;font-size:11px">olvidar</button>
+      </span>
+    </div>`).join("") || '<p class="hint">Todavía no te enseñó nada. Corregí al robot mientras va en automático.</p>';
+  $("a-lista").querySelectorAll("[data-olvidar]").forEach((b) =>
+    b.addEventListener("click", () => post("/aprendizaje", { olvidar: b.dataset.olvidar })));
+}
+$("usar-aprendido").addEventListener("change", (e) => post("/aprendizaje", { usar: e.target.checked }));
+
+// ---------------------------------------------------------------- historial
+async function cargarHistorial() {
+  try {
+    const r = await (await fetch("/historial")).json();
+    const tb = document.querySelector("#hist-ranking tbody");
+    const escenarios = new Set();
+    (r.ranking || []).forEach(m => Object.keys(m.escenarios || {}).forEach(e => escenarios.add(e)));
+    const escs = [...escenarios].sort();
+    const thead = document.querySelector("#hist-ranking thead tr");
+    thead.innerHTML = "<th style='text-align:left;padding:4px'>Modelo</th><th style='padding:4px'>Puntos</th>" +
+      escs.map(e => `<th style='padding:4px'>${e.slice(0,10)}</th>`).join("") +
+      "<th style='padding:4px'>Validado</th>";
+    tb.innerHTML = "";
+    (r.ranking || []).forEach((m, i) => {
+      const tr = document.createElement("tr");
+      tr.style.borderBottom = "1px solid var(--linea)";
+      if (i === 0 && m.puntos != null) tr.style.background = "rgba(80,200,120,.12)";
+      const pe = escs.map(e => {
+        const v = (m.escenarios || {})[e];
+        return `<td style='text-align:center;padding:4px;font-family:monospace'>${v ? v.puntos.toFixed(1) : "—"}</td>`;
+      }).join("");
+      tr.innerHTML = `<td style='padding:4px;font-family:monospace'>${m.archivo}</td>` +
+        `<td style='text-align:center;padding:4px;font-weight:700;font-family:monospace'>${m.puntos != null ? m.puntos.toFixed(1) : "sin val"}</td>` +
+        pe + `<td style='text-align:center;padding:4px;color:var(--soft)'>${m.validado || "—"}</td>`;
+      tb.appendChild(tr);
+    });
+    const btn = $("hist-deploy");
+    if (r.ranking.length && r.ranking[0].puntos != null) {
+      btn.style.display = "";
+      btn.textContent = `Desplegar ${r.ranking[0].archivo}`;
+      btn.onclick = () => { if (confirm(`¿Copiar ${r.ranking[0].archivo} como politica.pt?`)) deployBest(r.ranking[0].ruta); };
+    }
+    const ev = $("hist-eventos");
+    ev.innerHTML = (r.eventos || []).map(e =>
+      `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)">` +
+      `<span style="color:var(--soft)">${e.cuando}</span> ` +
+      `<b>${e.tipo}</b> ${e.modelo || ""} ${e.puntos != null ? e.puntos.toFixed(1) + " pts" : ""}</div>`
+    ).join("");
+    $("hist-training").style.display = r.entrenando ? "" : "none";
+    // Gráfico de entrenamiento
+    const tandas = (r.tandas || []).filter(t => t.acierto != null);
+    if (tandas.length) {
+      const c = $("hist-chart"), ctx = c.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr;
+      ctx.scale(dpr, dpr);
+      const W = c.clientWidth, H = c.clientHeight;
+      const pad = {l:40, r:12, t:16, b:24};
+      const gW = W - pad.l - pad.r, gH = H - pad.t - pad.b;
+      ctx.clearRect(0, 0, W, H);
+      // Ejes
+      ctx.strokeStyle = "rgba(255,255,255,.15)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t+gH); ctx.lineTo(pad.l+gW, pad.t+gH); ctx.stroke();
+      // Escala
+      const maxAc = Math.max(100, ...tandas.map(t => t.acierto));
+      const maxEj = Math.max(100, ...tandas.map(t => t.ejemplos / 100));
+      const n = tandas.length;
+      const xp = i => pad.l + (i / Math.max(1, n - 1)) * gW;
+      const ya = v => pad.t + gH - (v / maxAc) * gH;
+      const ye = v => pad.t + gH - (v / maxEj) * gH;
+      // Gridlines
+      ctx.font = "10px monospace"; ctx.fillStyle = "rgba(255,255,255,.3)"; ctx.textAlign = "right";
+      for (let v = 0; v <= 100; v += 25) {
+        const y = ya(v);
+        ctx.fillText(v + "%", pad.l - 4, y + 3);
+        ctx.strokeStyle = "rgba(255,255,255,.06)"; ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+gW, y); ctx.stroke();
+      }
+      // Línea de acierto
+      ctx.strokeStyle = "#4ae09a"; ctx.lineWidth = 2; ctx.beginPath();
+      tandas.forEach((t, i) => i ? ctx.lineTo(xp(i), ya(t.acierto)) : ctx.moveTo(xp(i), ya(t.acierto)));
+      ctx.stroke();
+      // Puntos
+      tandas.forEach((t, i) => { ctx.beginPath(); ctx.arc(xp(i), ya(t.acierto), 3, 0, 7); ctx.fillStyle = "#4ae09a"; ctx.fill(); });
+      // Línea de ejemplos
+      ctx.strokeStyle = "#5a9aff"; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]); ctx.beginPath();
+      tandas.forEach((t, i) => { const v = t.ejemplos/100; i ? ctx.lineTo(xp(i), ye(v)) : ctx.moveTo(xp(i), ye(v)); });
+      ctx.stroke(); ctx.setLineDash([]);
+      // Labels de tanda
+      ctx.fillStyle = "rgba(255,255,255,.3)"; ctx.textAlign = "center"; ctx.font = "9px monospace";
+      tandas.forEach((t, i) => { if (i % Math.max(1, Math.floor(n/8)) === 0) ctx.fillText("T"+t.tanda, xp(i), pad.t+gH+14); });
+      // Última tanda info
+      const ult = tandas[tandas.length - 1];
+      $("hist-ultima").textContent = `Tanda ${ult.tanda}: ${ult.acierto.toFixed(1)}% · ${ult.ejemplos} ej · ${ult.cuando}`;
+    }
+  } catch(e) { console.warn("historial:", e); }
+}
+async function deployBest(ruta) {
+  try {
+    await post("/desplegar", { ruta });
+    alert("Modelo desplegado como politica.pt");
+    cargarHistorial();
+  } catch(e) { alert("Error: " + e); }
+}
+
+let _histInterval = null;
+function iniciarAutoRefreshHist() {
+  if (_histInterval) clearInterval(_histInterval);
+  _histInterval = setInterval(() => {
+    if (document.querySelector("#tab-entrenar.activa")) cargarHistorial();
+    else { clearInterval(_histInterval); _histInterval = null; }
+  }, 15000);
+}
+
+// ---------------------------------------------------------------- editor
+// Plantas: [x, y, radio, plaga(0/1), altura]. Objetos: {tipo, x, y}.
+const ed = { paredes: [], sendero: [], plantas: [], escaneos: [], objetos: [],
+             limites: [-6, -6, 6, 6], herr: "sendero", pendiente: null, cursor: null,
+             historia: [], rehacer: [], vista: null, arrastre: null, problemas: [] };
+const COLOR_OBJETO = { maceta: "#b0643c", piedra: "#8a8f96", rama: "#6f8f3a", arbusto: "#3f8f4a" };
+const PISTAS = {
+  sendero: "Clic para ir añadiendo puntos al sendero (el robot lo recorre en ese orden)",
+  pared: "Clic en los dos extremos de cada pared (lo ALTO: lo ve el LIDAR)",
+  cerco: "Clic en dos esquinas opuestas: cuatro paredes",
+  hilera: "Clic en el principio y el final de la hilera: una planta cada tantos cm",
+  planta: "Clic donde va cada planta (elegí arriba si es alta o baja)",
+  objeto: "Clic para poner el objeto elegido arriba",
+  escaneo: "Clic donde el robot debe pararse a escanear 🌱",
+  mover: "Arrastrá un punto del sendero, un extremo de pared, una planta u objeto",
+  borrar: "Clic sobre lo que quieras quitar",
+};
+
+function edVista(c) {
+  if (!ed.vista) edAjustar(c);
+  const { cx, cy, k } = ed.vista, w2 = c.width / 2, h2 = c.height / 2;
+  return { k, px: (x) => w2 + (x - cx) * k, py: (y) => h2 - (y - cy) * k,
+           mx: (p) => (p - w2) / k + cx, my: (p) => cy - (p - h2) / k };
+}
+function edAjustar(c) {
+  const pts = [...ed.sendero, ...ed.paredes.flatMap((p) => [[p[0], p[1]], [p[2], p[3]]]),
+               ...ed.plantas.map((p) => [p[0], p[1]])];
+  let [x0, y0, x1, y1] = ed.limites;
+  if (pts.length) {
+    x0 = Math.min(...pts.map((p) => p[0])) - 1; x1 = Math.max(...pts.map((p) => p[0])) + 1;
+    y0 = Math.min(...pts.map((p) => p[1])) - 1; y1 = Math.max(...pts.map((p) => p[1])) + 1;
+  }
+  const k = Math.min(c.width / Math.max(x1 - x0, 1), c.height / Math.max(y1 - y0, 1)) * 0.95;
+  ed.vista = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, k: Math.max(8, k) };
+}
+function edTamano(c) {
+  const w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+}
+function edImantar(v) { return $("ed-iman").checked ? Math.round(v * 10) / 10 : +v.toFixed(2); }
+
+function dibujarEditor() {
+  const c = $("editor");
+  if (!c.offsetParent) return;
+  edTamano(c);
+  const ctx = c.getContext("2d"), e = edVista(c);
+  ctx.fillStyle = "#0f121a"; ctx.fillRect(0, 0, c.width, c.height);
+  // Rejilla: 1 m siempre, 10 cm cuando hay zoom para verla.
+  const xa = e.mx(0), xb = e.mx(c.width), ya = e.my(c.height), yb = e.my(0);
+  const lineas = (paso, color) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath();
+    for (let x = Math.ceil(xa / paso) * paso; x <= xb; x += paso) { ctx.moveTo(e.px(x), 0); ctx.lineTo(e.px(x), c.height); }
+    for (let y = Math.ceil(ya / paso) * paso; y <= yb; y += paso) { ctx.moveTo(0, e.py(y)); ctx.lineTo(c.width, e.py(y)); }
+    ctx.stroke();
+  };
+  if (e.k > 90) lineas(0.1, "rgba(255,255,255,.035)");
+  lineas(1, "rgba(255,255,255,.09)");
+  ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.font = "10px monospace";
+  ctx.fillText("0,0", e.px(0) + 3, e.py(0) - 3);
+
+  const trazo = (pts, ancho, color) => {
+    if (pts.length < 2) return;
+    ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, ancho * e.k); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => i ? ctx.lineTo(e.px(x), e.py(y)) : ctx.moveTo(e.px(x), e.py(y)));
+    ctx.stroke();
+  };
+  const anchoS = parseFloat($("ed-ancho").value) || 0.65, anchoP = parseFloat($("ed-paja").value) || 0;
+  trazo(ed.sendero, anchoS + 2 * anchoP, "rgba(179,155,106,.55)");
+  trazo(ed.sendero, anchoS, "#6b5a44");
+  ed.sendero.forEach(([x, y], i) => {
+    ctx.beginPath(); ctx.arc(e.px(x), e.py(y), i === 0 ? 6 : 4, 0, 7);
+    ctx.fillStyle = i === 0 ? "#6ef5a0" : "#00bd4f"; ctx.fill();
+  });
+  if (ed.sendero.length) {
+    ctx.fillStyle = "#6ef5a0"; ctx.font = "11px sans-serif";
+    ctx.fillText("inicio", e.px(ed.sendero[0][0]) + 8, e.py(ed.sendero[0][1]) - 8);
+  }
+  ctx.strokeStyle = "#aab2c0"; ctx.lineWidth = 4; ctx.lineCap = "butt";
+  ed.paredes.forEach(([ax, ay, bx, by]) => {
+    ctx.beginPath(); ctx.moveTo(e.px(ax), e.py(ay)); ctx.lineTo(e.px(bx), e.py(by)); ctx.stroke();
+  });
+  ed.plantas.forEach(([x, y, r, plaga, alto]) => {
+    ctx.beginPath(); ctx.arc(e.px(x), e.py(y), Math.max(3, r * e.k), 0, 7);
+    ctx.fillStyle = plaga ? "#d8e04a" : (alto >= 0.3 ? "#2e7d45" : "#5cc27a"); ctx.fill();
+    if (alto >= 0.3) { ctx.strokeStyle = "#cfe8d6"; ctx.lineWidth = 1.5; ctx.stroke(); }
+  });
+  ed.objetos.forEach((o) => {
+    ctx.beginPath(); ctx.arc(e.px(o.x), e.py(o.y), Math.max(4, 0.12 * e.k), 0, 7);
+    ctx.fillStyle = COLOR_OBJETO[o.tipo] || "#999"; ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "10px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(o.tipo[0].toUpperCase(), e.px(o.x), e.py(o.y) + 3.5); ctx.textAlign = "left";
+  });
+  ed.escaneos.forEach(([x, y]) => {
+    ctx.font = `${Math.max(14, 0.3 * e.k)}px serif`; ctx.textAlign = "center";
+    ctx.fillText("🌱", e.px(x), e.py(y) + 5); ctx.textAlign = "left";
+  });
+  // Lo que se está dibujando: vista previa hasta el cursor.
+  if (ed.pendiente && ed.cursor) {
+    const [ax, ay] = ed.pendiente, [bx, by] = ed.cursor;
+    ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    if (ed.herr === "cerco") ctx.rect(e.px(ax), e.py(ay), e.px(bx) - e.px(ax), e.py(by) - e.py(ay));
+    else { ctx.moveTo(e.px(ax), e.py(ay)); ctx.lineTo(e.px(bx), e.py(by)); }
+    ctx.stroke(); ctx.setLineDash([]);
+    const largo = Math.hypot(bx - ax, by - ay);
+    ctx.fillStyle = "#fff"; ctx.font = "11px monospace";
+    ctx.fillText(ed.herr === "cerco" ? `${Math.abs(bx - ax).toFixed(2)} × ${Math.abs(by - ay).toFixed(2)} m`
+                 : `${largo.toFixed(2)} m`, e.px(bx) + 10, e.py(by) - 10);
+  }
+  // Problemas de la validación, marcados en el mapa.
+  ed.problemas.filter((p) => p.x != null).forEach((p) => {
+    ctx.beginPath(); ctx.arc(e.px(p.x), e.py(p.y), 11, 0, 7);
+    ctx.strokeStyle = p.nivel === "error" ? "#ef5a4c" : "#f5a623"; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.fillStyle = ctx.strokeStyle; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("!", e.px(p.x), e.py(p.y) + 4.5); ctx.textAlign = "left";
+  });
+  if (ed.cursor) {
+    ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.font = "11px monospace";
+    ctx.fillText(`x ${ed.cursor[0].toFixed(2)}  y ${ed.cursor[1].toFixed(2)} m`, 8, c.height - 8);
+  }
+  const altas = ed.plantas.filter((p) => (p[4] ?? 0.15) >= 0.3).length;
+  $("ed-n-sendero").textContent = ed.sendero.length;
+  $("ed-n-paredes").textContent = ed.paredes.length;
+  $("ed-n-plantas").textContent = `${ed.plantas.length} (${altas} / ${ed.plantas.length - altas})`;
+  $("ed-n-objetos").textContent = ed.objetos.length;
+  $("ed-n-escaneos").textContent = ed.escaneos.length;
+}
+
+function edFoto() {
+  return JSON.stringify({ p: ed.paredes, s: ed.sendero, v: ed.plantas, e: ed.escaneos, o: ed.objetos });
+}
+function edRestaurar(foto) {
+  const d = JSON.parse(foto);
+  ed.paredes = d.p; ed.sendero = d.s; ed.plantas = d.v; ed.escaneos = d.e || []; ed.objetos = d.o || [];
+  ed.pendiente = null;
+}
+function edGuardarHistoria() {
+  ed.historia.push(edFoto()); ed.rehacer = [];
+  if (ed.historia.length > 80) ed.historia.shift();
+}
+function edCambio() { dibujarEditor(); edValidarPronto(); }
+
+function edPunto(ev) {
+  const c = $("editor"), r = c.getBoundingClientRect(), e = edVista(c);
+  return [e.mx(ev.clientX - r.left), e.my(ev.clientY - r.top)];
+}
+
+function edMasCercano(x, y, radio) {
+  let mejor = null;
+  const probar = (d, ref) => { if (d < radio && (!mejor || d < mejor.d)) mejor = { d, ...ref }; };
+  ed.sendero.forEach(([a, b], i) => probar(Math.hypot(a - x, b - y), { tipo: "sendero", i }));
+  ed.paredes.forEach((p, i) => {
+    probar(Math.hypot(p[0] - x, p[1] - y), { tipo: "pared", i, extremo: 0 });
+    probar(Math.hypot(p[2] - x, p[3] - y), { tipo: "pared", i, extremo: 2 });
+  });
+  ed.plantas.forEach(([a, b], i) => probar(Math.hypot(a - x, b - y), { tipo: "planta", i }));
+  ed.objetos.forEach((o, i) => probar(Math.hypot(o.x - x, o.y - y), { tipo: "objeto", i }));
+  ed.escaneos.forEach(([a, b], i) => probar(Math.hypot(a - x, b - y), { tipo: "escaneo", i }));
+  return mejor;
+}
+function edDistSeg(x, y, [ax, ay, bx, by]) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0;
+  return Math.hypot(x - ax - t * dx, y - ay - t * dy);
+}
+
+function edClic(x, y) {
+  const alto = parseFloat($("ed-planta-alto").value), plaga = $("ed-plaga").checked ? 1 : 0;
+  const dos = ["pared", "cerco", "hilera"].includes(ed.herr);
+  if (dos && !ed.pendiente) { ed.pendiente = [x, y]; dibujarEditor(); return; }
+  edGuardarHistoria();
+  if (ed.herr === "sendero") ed.sendero.push([x, y]);
+  else if (ed.herr === "planta") ed.plantas.push([x, y, 0.08, plaga, alto]);
+  else if (ed.herr === "escaneo") ed.escaneos.push([x, y]);
+  else if (ed.herr === "objeto") ed.objetos.push({ tipo: $("ed-objeto").value, x, y });
+  else if (ed.herr === "pared") { ed.paredes.push([...ed.pendiente, x, y]); ed.pendiente = null; }
+  else if (ed.herr === "cerco") {
+    const [ax, ay] = ed.pendiente;
+    ed.paredes.push([ax, ay, x, ay], [x, ay, x, y], [x, y, ax, y], [ax, y, ax, ay]);
+    ed.pendiente = null;
+  } else if (ed.herr === "hilera") {
+    const [ax, ay] = ed.pendiente, largo = Math.hypot(x - ax, y - ay);
+    const paso = Math.max(0.1, parseFloat($("ed-paso").value) || 0.3);
+    const n = Math.max(1, Math.round(largo / paso));
+    for (let i = 0; i <= n; i++) {
+      ed.plantas.push([+(ax + (x - ax) * i / n).toFixed(3), +(ay + (y - ay) * i / n).toFixed(3),
+                       0.06 + Math.random() * 0.04, plaga, alto]);
+    }
+    ed.pendiente = null;
+  } else if (ed.herr === "borrar") {
+    const cerca = edMasCercano(x, y, 0.35);
+    if (cerca && cerca.tipo !== "pared") {
+      ({ sendero: ed.sendero, planta: ed.plantas, objeto: ed.objetos, escaneo: ed.escaneos })[cerca.tipo].splice(cerca.i, 1);
+    } else {
+      const i = ed.paredes.findIndex((p) => edDistSeg(x, y, p) < 0.2);
+      if (i >= 0) ed.paredes.splice(i, 1); else ed.historia.pop();
+    }
+  }
+  edCambio();
+}
+
+(function edRaton() {
+  const c = $("editor");
+  c.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  c.addEventListener("pointerdown", (ev) => {
+    c.setPointerCapture(ev.pointerId);
+    const [x, y] = edPunto(ev);
+    if (ev.button === 1 || ev.button === 2) {           // desplazar la vista
+      ed.arrastre = { modo: "pan", sx: ev.clientX, sy: ev.clientY, cx: ed.vista.cx, cy: ed.vista.cy };
+      return;
+    }
+    if (ed.herr === "mover") {
+      const cerca = edMasCercano(x, y, 0.4);
+      if (cerca) { edGuardarHistoria(); ed.arrastre = { modo: "mover", ...cerca }; }
+      return;
+    }
+    ed.arrastre = { modo: "clic", sx: ev.clientX, sy: ev.clientY };
+  });
+  c.addEventListener("pointermove", (ev) => {
+    const [x, y] = edPunto(ev);
+    ed.cursor = [edImantar(x), edImantar(y)];
+    const a = ed.arrastre;
+    if (a && a.modo === "pan") {
+      ed.vista.cx = a.cx - (ev.clientX - a.sx) / ed.vista.k;
+      ed.vista.cy = a.cy + (ev.clientY - a.sy) / ed.vista.k;
+    } else if (a && a.modo === "mover") {
+      const [mx, my] = ed.cursor;
+      if (a.tipo === "sendero") ed.sendero[a.i] = [mx, my];
+      else if (a.tipo === "pared") { ed.paredes[a.i][a.extremo] = mx; ed.paredes[a.i][a.extremo + 1] = my; }
+      else if (a.tipo === "planta") { ed.plantas[a.i][0] = mx; ed.plantas[a.i][1] = my; }
+      else if (a.tipo === "objeto") { ed.objetos[a.i].x = mx; ed.objetos[a.i].y = my; }
+      else if (a.tipo === "escaneo") ed.escaneos[a.i] = [mx, my];
+    }
+    dibujarEditor();
+  });
+  c.addEventListener("pointerup", (ev) => {
+    const a = ed.arrastre; ed.arrastre = null;
+    if (!a) return;
+    if (a.modo === "mover") return edCambio();
+    if (a.modo === "clic" && Math.hypot(ev.clientX - a.sx, ev.clientY - a.sy) < 6) {
+      const [x, y] = edPunto(ev);
+      edClic(edImantar(x), edImantar(y));
+    }
+  });
+  c.addEventListener("pointerleave", () => { ed.cursor = null; dibujarEditor(); });
+  c.addEventListener("wheel", (ev) => {
+    ev.preventDefault();
+    const antes = edPunto(ev);
+    ed.vista.k = Math.max(8, Math.min(600, ed.vista.k * (ev.deltaY < 0 ? 1.15 : 1 / 1.15)));
+    const despues = edPunto(ev);
+    ed.vista.cx += antes[0] - despues[0]; ed.vista.cy += antes[1] - despues[1];
+    dibujarEditor();
+  }, { passive: false });
+})();
+
+document.querySelectorAll(".herr").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".herr").forEach((x) => x.classList.remove("activo"));
+  b.classList.add("activo"); ed.herr = b.dataset.herr; ed.pendiente = null;
+  $("ed-pista").textContent = PISTAS[ed.herr];
+  $("editor").style.cursor = ed.herr === "mover" ? "grab" : "crosshair";
+  dibujarEditor();
+}));
+function edDeshacer() {
+  const prev = ed.historia.pop();
+  if (!prev) return;
+  ed.rehacer.push(edFoto()); edRestaurar(prev); edCambio();
+}
+function edRehacer() {
+  const sig = ed.rehacer.pop();
+  if (!sig) return;
+  ed.historia.push(edFoto()); edRestaurar(sig); edCambio();
+}
+$("ed-deshacer").addEventListener("click", edDeshacer);
+$("ed-rehacer").addEventListener("click", edRehacer);
+$("ed-zoom-mas").addEventListener("click", () => { edVista($("editor")); ed.vista.k *= 1.3; dibujarEditor(); });
+$("ed-zoom-menos").addEventListener("click", () => { edVista($("editor")); ed.vista.k = Math.max(8, ed.vista.k / 1.3); dibujarEditor(); });
+$("ed-ajustar").addEventListener("click", () => { edAjustar($("editor")); dibujarEditor(); });
+window.addEventListener("keydown", (ev) => {
+  if (tabActiva() !== "editor" || ev.target.tagName === "INPUT") return;
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z") { ev.preventDefault(); edDeshacer(); }
+  else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y") { ev.preventDefault(); edRehacer(); }
+  else if (ev.key === "Escape") { ed.pendiente = null; dibujarEditor(); }
+});
+
+function edCargarDesde(m) {
+  ed.paredes = (m.paredes || []).map((p) => [...p]);
+  ed.sendero = (m.sendero || []).map((p) => [...p]);
+  ed.plantas = (m.plantas || []).map((p) => [p[0], p[1], p[2] ?? 0.08, p[3] ?? 0, p[4] ?? 0.15]);
+  ed.escaneos = (m.escaneos || []).map((p) => [...p]);
+  ed.objetos = (m.objetos || []).map((o) => ({ tipo: o.tipo, x: o.x, y: o.y }));
+  ed.limites = [...(m.limites || [-6, -6, 6, 6])];
+  $("ed-ancho").value = m.ancho_sendero ?? 0.65; $("ed-paja").value = m.ancho_paja ?? 0.35;
+  $("ed-seco").value = m.seco ?? 0.35; $("ed-borde").value = m.borde || "paja";
+  ed.vista = null; ed.pendiente = null;
+  edCambio();
+}
+$("ed-vacio").addEventListener("click", () => {
+  edGuardarHistoria();
+  edCargarDesde({ limites: [-6, -6, 6, 6] });
+});
+$("ed-actual").addEventListener("click", () => {
+  if (!mundo) return;
+  edGuardarHistoria(); edCargarDesde(mundo);
+  $("ed-nombre").value = mundo.nombre;
+});
+$("ed-cargar-real").addEventListener("click", async () => {
+  const nombre = $("ed-mapa-real").value;
+  if (!nombre) return;
+  const d = await (await fetch(`/mapa_real/${nombre}`)).json();
+  if (d.error) return alert(d.error);
+  edGuardarHistoria();
+  edCargarDesde({ ...d, sendero: [], plantas: [], escaneos: [], objetos: [] });
+  $("ed-nombre").value = nombre + "_sim";
+  $("ed-pista").textContent = "Mapa real cargado: dibujá encima el sendero a recorrer";
+});
+$("ed-cargar").addEventListener("click", async () => {
+  const nombre = $("ed-guardado").value;
+  if (!nombre) return;
+  await post("/reset", { guardado: nombre });
+  await cargarMundo();
+  edGuardarHistoria(); edCargarDesde(mundo);
+  $("ed-nombre").value = nombre;
+});
+$("ed-guardar").addEventListener("click", async () => {
+  const nombre = $("ed-nombre").value.trim();
+  if (!nombre) return alert("Ponle un nombre al mapa");
+  if (ed.problemas.some((p) => p.nivel === "error") &&
+      !confirm("El mapa tiene errores (mirá la validación). ¿Guardar igual?")) return;
+  const d = await post("/mundos", { nombre, mundo: mundoEditado() });
+  if (d.ok) { await listarMundos(); alert(`Guardado como «${d.nombre}»`); }
+});
+$("ed-simular").addEventListener("click", async () => {
+  if (ed.sendero.length < 2) return alert("Dibujá al menos dos puntos de sendero: ahí arranca el robot");
+  await post("/reset", { mundo: mundoEditado() });
+  await cargarMundo();
+  activarTab("sim");
+});
+$("ed-quitar-plantas").addEventListener("click", async () => {
+  const d = await post("/validar", { mundo: mundoEditado(), quitar_plantas_del_sendero: true });
+  if (!d.plantas) return;
+  edGuardarHistoria(); ed.plantas = d.plantas; edCambio();
+});
+
+function mundoEditado() {
+  const xs = ed.paredes.flatMap((p) => [p[0], p[2]]).concat(ed.sendero.map((p) => p[0]), ed.plantas.map((p) => p[0]), [0]);
+  const ys = ed.paredes.flatMap((p) => [p[1], p[3]]).concat(ed.sendero.map((p) => p[1]), ed.plantas.map((p) => p[1]), [0]);
+  const m = 1.0;
+  return { nombre: $("ed-nombre").value.trim() || "dibujado", paredes: ed.paredes,
+           sendero: ed.sendero, plantas: ed.plantas, escaneos: ed.escaneos, objetos: ed.objetos,
+           seco: parseFloat($("ed-seco").value) || 0.35, borde: $("ed-borde").value,
+           ancho_sendero: parseFloat($("ed-ancho").value) || 0.65,
+           ancho_paja: parseFloat($("ed-paja").value) || 0.35,
+           limites: [Math.min(...xs) - m, Math.min(...ys) - m, Math.max(...xs) + m, Math.max(...ys) + m] };
+}
+
+let _edValidar = null;
+function edValidarPronto() {
+  clearTimeout(_edValidar);
+  _edValidar = setTimeout(async () => {
+    if (ed.sendero.length < 2) {
+      ed.problemas = [];
+      $("ed-validacion").innerHTML = '<p class="hint">Dibujá un sendero para validar el mapa.</p>';
+      $("ed-quitar-plantas").style.display = "none";
+      return dibujarEditor();
+    }
+    const r = await fetch("/validar", { method: "POST", headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ mundo: mundoEditado() }) });
+    const d = await r.json().catch(() => ({ problemas: [] }));
+    ed.problemas = d.problemas || [];
+    $("ed-validacion").innerHTML = ed.problemas.length
+      ? ed.problemas.map((p, i) => `<div class="problema ${p.nivel}" data-i="${i}">${p.nivel === "error" ? "⛔" : "⚠"} ${p.texto}</div>`).join("")
+      : '<p class="hint" style="color:var(--acento-ink)">✔ Sin problemas: sirve para entrenar.</p>';
+    $("ed-validacion").querySelectorAll("[data-i]").forEach((div) => div.addEventListener("click", () => {
+      const p = ed.problemas[+div.dataset.i];
+      if (p.x == null) return;
+      ed.vista.cx = p.x; ed.vista.cy = p.y; ed.vista.k = Math.max(ed.vista.k, 90); dibujarEditor();
+    }));
+    $("ed-quitar-plantas").style.display = ed.problemas.some((p) => p.plantas_sobre_sendero) ? "" : "none";
+    dibujarEditor();
+  }, 400);
+}
+
+async function listarMundos() {
+  const d = await (await fetch("/mundos")).json();
+  const llenar = (sel, lista) => {
+    const v = sel.value; sel.innerHTML = "";
+    lista.forEach((n) => sel.add(new Option(n, n)));
+    if (lista.includes(v)) sel.value = v;
+  };
+  llenar($("ed-mapa-real"), d.mapas_reales);
+  llenar($("ed-guardado"), d.guardados);
+}
+["ed-ancho", "ed-paja", "ed-seco", "ed-borde"].forEach((id) => $(id).addEventListener("input", edCambio));
+
+window.addEventListener("resize", () => { dibujarMapa(); dibujarRadar(); dibujarEditor(); glAjustar(); });
+// Photo-inspired assets. Dimensions of the footprint are measured; heights are approximate.
+function glRobot(color, fantasma) {
+  const g=new THREE.Group();
+  const mat=(c,metal=0)=>new THREE.MeshStandardMaterial({color:c,roughness:.65,metalness:metal,transparent:!!fantasma,opacity:fantasma?.28:1});
+  const red=mat(0x9e251c,.35), black=mat(0x202326,.3), rubber=mat(0x17191a), steel=mat(0x878b85,.7);
+  function mesh(geo,m,x,y,z){const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.castShadow=!fantasma;o.receiveShadow=true;g.add(o);return o;}
+  function box(a,b,c,m,x,y,z){return mesh(new THREE.BoxGeometry(a,b,c),m,x,y,z);}
+  box(.35,.035,.23,red,0,.195,0);
+  box(.33,.10,.235,black,-.015,.27,0);
+  box(.35,.013,.25,steel,-.015,.327,0);
+  mesh(new THREE.CylinderGeometry(.038,.038,.032,24),black,-.04,.35,0);
+  box(.07,.013,.018,black,.11,.34,0);
+  const front=new THREE.Group();front.position.x=.185;g.add(front);g.userData.front=front;
+  for(const x of [-.185,.185])for(const z of (x>0?[-.0715,.0715]:[-.1615,.1615])){
+    const begin=g.children.length;
+    const w=mesh(new THREE.CylinderGeometry(.086,.086,.047,24),rubber,x,.092,z);w.rotation.x=Math.PI/2;
+    const hub=mesh(new THREE.CylinderGeometry(.038,.038,.051,16),steel,x,.092,z);hub.rotation.x=Math.PI/2;
+    for(let k=0;k<16;k++){
+      const a=k*Math.PI/8;
+      const lug=box(.025,.014,.055,rubber,x+Math.sin(a)*.091,.092+Math.cos(a)*.091,z);lug.rotation.z=-a;
+    }
+    box(.021,.11,.023,red,x,.185,z*.70);
+    for(let k=0;k<8;k++){
+      const spring=mesh(new THREE.TorusGeometry(.017,.003,5,14),red,x,.16+k*.008,z*.70);spring.rotation.x=Math.PI/2;
+    }
+    if(x>0){for(const obj of g.children.slice(begin)){obj.position.x-=.185;front.add(obj);}}
+  }
+  box(.045,.075,.11,black,.188,.256,0);
+  const lens=mesh(new THREE.CylinderGeometry(.019,.019,.014,20),mat(0x09171b,.8),.217,.245,0);lens.rotation.z=Math.PI/2;
+  box(.008,.009,.082,new THREE.MeshStandardMaterial({color:0xfff3c5,emissive:0xaaa176}),.214,.279,0);
+  for(const [z,c] of [[-.034,0xe32c24],[.034,0x32e974]])mesh(new THREE.SphereGeometry(.004,8,6),new THREE.MeshBasicMaterial({color:c}),.221,.242,z);
+  const pts=[[-.13,.29,-.14],[-.18,.23,-.15],[.12,.21,-.15],[.16,.29,-.13]].map(p=>new THREE.Vector3(...p));
+  mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),28,.009,6,false),rubber,0,0,0);
+  return g;
+}
+
+function huertaLeafTexture(kind,damaged){
+  gl.hojasHuerta=gl.hojasHuerta||{};const key=kind+damaged;if(gl.hojasHuerta[key])return gl.hojasHuerta[key];
+  const cv=document.createElement('canvas');cv.width=cv.height=256;const c=cv.getContext('2d');
+  const hues={col:['#8aa993','#4f7764'],lechuga:['#a5bd5e','#587539'],papa:['#709153','#3e6035']};
+  const grad=c.createLinearGradient(0,0,256,256);grad.addColorStop(0,hues[kind][0]);grad.addColorStop(1,hues[kind][1]);
+  c.beginPath();
+  for(let k=0;k<=100;k++){let a=k/100*Math.PI*2,r=1+(kind==='lechuga'?.08:.03)*Math.sin(a*13);let x=128+Math.cos(a)*(kind==='papa'?72:105)*r,y=128+Math.sin(a)*119*r;if(k===0)c.moveTo(x,y);else c.lineTo(x,y);}
+  c.closePath();c.fillStyle=grad;c.fill();
+  c.save();c.clip();c.strokeStyle=kind==='col'?'#bdd0a6':'#94ac62';c.lineWidth=3;c.beginPath();c.moveTo(128,250);c.quadraticCurveTo(119,130,128,12);c.stroke();
+  for(let i=0;i<8;i++)for(const sign of [-1,1]){let y=38+i*25;c.lineWidth=1.1;c.beginPath();c.moveTo(124,y+27);c.quadraticCurveTo(128+sign*44,y+15,128+sign*95,y-15);c.stroke();}
+  if(damaged){c.fillStyle='#92703e';for(let i=0;i<8;i++){c.beginPath();c.ellipse(50+(i*71)%155,38+(i*47)%170,9,13,i,0,Math.PI*2);c.fill();}c.globalCompositeOperation='destination-out';for(let i=0;i<5;i++){c.beginPath();c.ellipse(60+(i*43)%130,45+(i*59)%155,6,10,i,0,Math.PI*2);c.fill();}}
+  c.restore();const tex=new THREE.CanvasTexture(cv);tex.anisotropy=4;gl.hojasHuerta[key]=tex;return tex;
+}
+
+function glPlanta(group,p,hLidar,detalle=1){
+  const [x,y,r,damage,hh]=p,h=hh||.3;
+  const kind=y < -.3 ? 'col' : y < .3 ? 'lechuga' : 'papa';
+  gl.hm=gl.hm||{};const key=kind+damage;
+  if(!gl.hm[key])gl.hm[key]=new THREE.MeshStandardMaterial({map:huertaLeafTexture(kind,damage),side:THREE.DoubleSide,alphaTest:.45,roughness:.94});
+  const leaves=kind==='papa'?12:10;
+  for(let k=0;k<leaves;k++){
+    const a=k*2.39996,inner=k>6;
+    const len=kind==='papa'?h*.48:h*(inner?.65:1.05),width=kind==='papa'?r*.8:r*1.45;
+    const geo=new THREE.PlaneGeometry(width,len,6,8);geo.translate(0,len/2,0);
+    const pos=geo.attributes.position;
+    for(let j=0;j<pos.count;j++){const u=pos.getX(j)/width,v=pos.getY(j)/len;pos.setZ(j,.05*Math.sin(v*Math.PI)*Math.cos(u*Math.PI)+.012*Math.sin(u*24+v*15)*v);}
+    geo.computeVertexNormals();const leaf=new THREE.Mesh(geo,gl.hm[key]);
+    leaf.position.set(x,kind==='papa'?k/leaves*h*.7:.025,-y);leaf.rotation.y=a;leaf.rotateX(inner?.3:(kind==='lechuga'?1.04:.8));leaf.castShadow=true;leaf.receiveShadow=true;group.add(leaf);
+  }
+  if(kind==='papa'){const stem=new THREE.Mesh(new THREE.CylinderGeometry(.007,.01,h,5),new THREE.MeshStandardMaterial({color:0x627746}));stem.position.set(x,h/2,-y);group.add(stem);}
+}
+
+const huertaOriginalWorld=glConstruirMundo;
+glConstruirMundo=function(m){
+  const prev=gl.mundoPintado;huertaOriginalWorld(m);if(prev===gl.mundoPintado||!gl.listo)return;
+  // All added landmarks are visual approximations. Solid tank/stool footprints exist in world JSON.
+  if(m.nombre!=='huerta_fotos_50cm')return;
+  const earth=new THREE.MeshStandardMaterial({color:0x70614b,roughness:1});
+  // Low soil mounds between rows, kept away from the actual 50 cm track.
+  for(let i=0;i<3;i++){
+    const bed=new THREE.Mesh(new THREE.SphereGeometry(1,24,10),earth);bed.scale.set(1.65,.09,.19);bed.position.set(0,-.025,(i-1)*.57);bed.receiveShadow=true;gl.grupoMundo.add(bed);
+  }
+  // Dry straw in deterministic clusters, one draw call.
+  const points=[];for(let i=0;i<1700;i++){
+    const x=Math.sin(i*13.71)*1.8,y=Math.sin(i*2.17)*.88,a=i*1.77;
+    points.push(x,.045,-y,x+.055*Math.cos(a),.049,-y+.055*Math.sin(a));
+  }
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(points,3));
+  gl.grupoMundo.add(new THREE.LineSegments(geo,new THREE.LineBasicMaterial({color:0xb1a078})));
+  const tank=new THREE.Mesh(new THREE.CylinderGeometry(.24,.23,.85,32),new THREE.MeshStandardMaterial({color:0x183b50,roughness:.55}));tank.position.set(-2.5,.425,-1.9);tank.castShadow=true;gl.grupoMundo.add(tank);
+  const seat=new THREE.Mesh(new THREE.BoxGeometry(.26,.035,.26),new THREE.MeshStandardMaterial({color:0x276896}));seat.position.set(-2.5,.25,-1.35);seat.castShadow=true;gl.grupoMundo.add(seat);
+  for(const dx of [-.10,.10])for(const dz of [-.10,.10]){const leg=new THREE.Mesh(new THREE.BoxGeometry(.035,.23,.035),seat.material);leg.position.set(-2.5+dx,.115,-1.35+dz);gl.grupoMundo.add(leg);}
+  glLinealizar(gl.grupoMundo);
+};
+
+cargarMundo();
+conectar();
+activarTab("sim");
+refrescarImagen("img-camara", "/camara.jpg", 120);
+refrescarImagen("img-sendero", "/sendero.jpg", 450);
+refrescarImagen("img-slam", "/mapa_slam.jpg", 700);
+</script>
+</body>
+</html>

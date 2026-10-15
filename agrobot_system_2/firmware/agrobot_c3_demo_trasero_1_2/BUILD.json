@@ -1,0 +1,20 @@
+{
+  "firmware": "demo-trasero-1.2",
+  "base": "demo-trasero-1.1 (Codex, hashes verificados)",
+  "compiled": true,
+  "fqbn": "esp32:esp32:esp32c3 (opciones por defecto)",
+  "core": "3.3.11",
+  "sketch_bytes": 1049895,
+  "flash_pct": 80,
+  "ram_pct": 11,
+  "hardware_flashed": false,
+  "physical_calibration_verified": false,
+  "host_tests": "tests_firmware_1_2/test_mix.cpp: 7001 comprobaciones, 0 fallos",
+  "crc_cruzado": "3000 tramas Jetson(Python) vs firmware(C++): 0 discrepancias",
+  "source_sha256": {
+    "agrobot_c3_demo_trasero_1_2.ino": "a395d86c033371c8a35c1f8177d105ca119ba209e50b95037b737f1d18049f3a",
+    "control_model.h": "076c20210e40b91a4b95ba3378f6a8b61d57ea649a3f8c31c0b422e8922c59a5",
+    "web_panel.h": "b80de1844ce3bb0a4b27bb715deb7ab0212a55d9b1fc57fa26cdf9e9bc40e4e5"
+  },
+  "merged_bin_sha256": "8c6e4ff4b8d7713f26839eb386e678a1f209936bc80e62740183ab1a1a434232"
+}

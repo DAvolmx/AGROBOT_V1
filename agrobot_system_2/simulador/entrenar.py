@@ -57,7 +57,11 @@ DATASET = CARPETA / "dataset.csv"
 MODELO = CARPETA / "politica_candidata.pt"
 COLUMNAS = list(pol.ENTRADAS) + ["accion", "escenario", "origen"]
 RECORRIDO_MINIMO_M = 1.0
-ORIGENES = ("ideal_dr", "ideal_dr2")   # ver cargar_dataset; --todos-los-datos = None
+# Orígenes que entran al entrenamiento. Desde 2026-10-07 se suman las
+# demostraciones REALES del operador (`real_manual`/`real_auto`, vía
+# fusion_real.py): el piloto ideal del sim casi no gira ni retrocede, y los
+# recorridos reales aportan esa diversidad (giros y marcha atrás). --todos-los-datos = None
+ORIGENES = ("ideal_dr", "ideal_dr2", "real_manual", "real_auto")
 
 
 # --------------------------------------------------------------- variaciones
@@ -357,7 +361,7 @@ def espejar(x, accion_idx):
     return x, pol.ACCIONES.index(accion)
 
 
-def cargar_dataset(espejo=True, origenes=("ideal_dr", "ideal_dr2")):
+def cargar_dataset(espejo=True, origenes=("ideal_dr", "ideal_dr2", "real_manual", "real_auto")):
     """`origenes`: de qué recolecciones se entrena. Por defecto solo las del
     simulador realista (2026-09-30 en adelante): las anteriores se hicieron
     con el explorador peleando el mando al piloto ideal, y tienen casi tantos

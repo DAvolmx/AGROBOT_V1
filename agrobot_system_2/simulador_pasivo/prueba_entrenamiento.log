@@ -1,0 +1,4 @@
+[camara] sin GPU (ModuleNotFoundError: No module named 'torch'): render en CPU
+  [1/2] huerta_fotos_50cm        48 ejemplos (  7.9 m, 15.5 s) {'giro': 0.597, 'retro': 0.025, 'desliz': 0.4, 'latencia': 1.8, 'slam': 0.53, 'lidar': 'ninguna', 'suelo': 'hojarasca', 'sol': 67, 'cam': 0.88, 'lidar_x': 2.2}
+  [2/2] huerta_fotos_50cm        48 ejemplos (  9.5 m, 12.5 s) {'giro': 0.357, 'retro': 0.001, 'desliz': 0.99, 'latencia': 1.06, 'slam': 1.29, 'lidar': 'usb', 'suelo': 'tierra', 'sol': 26, 'cam': 0.82, 'lidar_x': 2.9}
+-> 96 ejemplos nuevos en /home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_huerta/laboratorio/.agrobot/aprendizaje/dataset.csv

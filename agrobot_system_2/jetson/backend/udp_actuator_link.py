@@ -24,6 +24,7 @@ from ble_link import STATUS_MAGIC, STATUS_SIZE, crc8
 
 PUERTO = 5002
 RED_AP = ipaddress.ip_network("192.168.12.0/24")
+IP_C3_FIJA = ipaddress.ip_address("192.168.0.50")
 # La C3 manda estado a 10 Hz. En modo de ahorro del WiFi (obligatorio con
 # BLE activo) llega en ráfagas cada ~200 ms: 1,5 s sin nada = vía caída.
 VIVA_S = 1.5
@@ -49,7 +50,7 @@ class UdpActuatorLink(asyncio.DatagramProtocol):
             ip = ipaddress.ip_address(addr[0])
         except ValueError:
             return
-        if ip not in RED_AP:
+        if ip not in RED_AP and ip != IP_C3_FIJA:
             self.ajenas += 1
             return
         if (len(data) != STATUS_SIZE or data[0] != STATUS_MAGIC

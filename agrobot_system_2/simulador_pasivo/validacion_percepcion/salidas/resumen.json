@@ -1,0 +1,10 @@
+{
+  "cobertura_pct": {
+    "fondo": 59.7,
+    "sendero_visible": 7.9,
+    "zona_cultivo_no_pisar": 26.7,
+    "bancal_borde_elevado": 5.8,
+    "obstaculo_visible": 0.0
+  },
+  "nota": "CUALITATIVO: preprocesado reconstruido, sin GT, brecha de dominio"
+}

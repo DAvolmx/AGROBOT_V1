@@ -153,7 +153,10 @@ def test_ignora_tramas_de_fuera_del_ap():
     udp_actuator_link.RED_AP = ipaddress.ip_network("192.168.12.0/24")
     link = udp_actuator_link.UdpActuatorLink(lambda t: None)
     c3 = C3Simulada()
-    link.datagram_received(c3.estado(), ("192.168.0.50", 5002))
+    # 192.168.0.50 es la IP FIJA reservada a la C3 en el router (IP_C3_FIJA) y
+    # SI se acepta; cualquier otra IP de fuera del AP se ignora. (Antes este test
+    # usaba 192.168.0.50 como "ajena", pero udp_actuator_link la admite a proposito.)
+    link.datagram_received(c3.estado(), ("192.168.0.77", 5002))
     assert link.ip_c3 is None and link.ajenas == 1
     link.datagram_received(c3.estado(), ("192.168.12.37", 5002))
     assert link.ip_c3 == "192.168.12.37"

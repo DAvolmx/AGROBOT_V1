@@ -1,0 +1,978 @@
+{
+ "maniobras": [
+  {
+   "firma": "F2I1D1A1S-|libre",
+   "pasos": [
+    {
+     "accion": "derecha",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791429737.0,
+   "nota": ""
+  },
+  {
+   "firma": "F2I1D1A0SI|encerra",
+   "pasos": [
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791431960.4,
+   "nota": ""
+  },
+  {
+   "firma": "F2I1D0ALSI|libre",
+   "pasos": [
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791431977.6,
+   "nota": ""
+  },
+  {
+   "firma": "F2I2D2A3SI|libre",
+   "pasos": [
+    {
+     "accion": "atras",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791431981.1,
+   "nota": ""
+  },
+  {
+   "firma": "F3I2D0A0SI|libre",
+   "pasos": [
+    {
+     "accion": "derecha",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791431988.4,
+   "nota": ""
+  },
+  {
+   "firma": "F0I2D0A2SI|libre",
+   "pasos": [
+    {
+     "accion": "adelante",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791431995.9,
+   "nota": ""
+  },
+  {
+   "firma": "F0I2D0A2SI|libre",
+   "pasos": [
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791431996.7,
+   "nota": ""
+  },
+  {
+   "firma": "F2I0D3A0SI|libre",
+   "pasos": [
+    {
+     "accion": "adelante",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791431999.4,
+   "nota": ""
+  },
+  {
+   "firma": "F0I3D0A1SI|libre",
+   "pasos": [
+    {
+     "accion": "derecha",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791432000.2,
+   "nota": ""
+  },
+  {
+   "firma": "F1I0D0A2SI|libre",
+   "pasos": [
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791432001.8,
+   "nota": ""
+  },
+  {
+   "firma": "F0I0D1A3SI|libre",
+   "pasos": [
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433113.7,
+   "nota": ""
+  },
+  {
+   "firma": "F2I3D0A3SI|libre",
+   "pasos": [
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433140.6,
+   "nota": ""
+  },
+  {
+   "firma": "F3I0D2A3SI|libre",
+   "pasos": [
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433144.2,
+   "nota": ""
+  },
+  {
+   "firma": "F3I1D2A3SI|libre",
+   "pasos": [
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433146.5,
+   "nota": ""
+  },
+  {
+   "firma": "F2I2D2A2SI|libre",
+   "pasos": [
+    {
+     "accion": "adelante",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433149.5,
+   "nota": ""
+  },
+  {
+   "firma": "F3I2D2A2SI|libre",
+   "pasos": [
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433282.6,
+   "nota": ""
+  },
+  {
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": [
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433472.5,
+   "nota": ""
+  },
+  {
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": [
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433488.4,
+   "nota": ""
+  },
+  {
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": [
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433510.1,
+   "nota": ""
+  },
+  {
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": [
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "adelante",
+     "maniobra": true
+    },
+    {
+     "accion": "derecha",
+     "maniobra": true
+    },
+    {
+     "accion": "atras",
+     "maniobra": true
+    },
+    {
+     "accion": "izquierda",
+     "maniobra": true
+    }
+   ],
+   "origen": "operador",
+   "exitos": 0,
+   "fracasos": 0,
+   "usos": 0,
+   "creada": 1791433522.0,
+   "nota": ""
+  }
+ ],
+ "descartadas": [],
+ "historial": [
+  {
+   "t": 1791429542,
+   "firma": "F2I0D2A3S-|libre",
+   "pasos": 509,
+   "estado": "detenido",
+   "descartada": "más de 40 pasos"
+  },
+  {
+   "t": 1791429737,
+   "firma": "F2I1D1A1S-|libre",
+   "pasos": [
+    "derecha"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791429765,
+   "firma": "F3I1D1A3S-|libre",
+   "pasos": 55,
+   "estado": "detenido",
+   "descartada": "más de 40 pasos"
+  },
+  {
+   "t": 1791431960,
+   "firma": "F2I1D1A0SI|encerra",
+   "pasos": [
+    "derecha",
+    "adelante",
+    "adelante"
+   ],
+   "estado": "encerrado: girando en el sitio"
+  },
+  {
+   "t": 1791431978,
+   "firma": "F2I1D0ALSI|libre",
+   "pasos": [
+    "izquierda"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791431981,
+   "firma": "F2I2D2A3SI|libre",
+   "pasos": [
+    "atras"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791431988,
+   "firma": "F3I2D0A0SI|libre",
+   "pasos": [
+    "derecha"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791431996,
+   "firma": "F0I2D0A2SI|libre",
+   "pasos": [
+    "adelante"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791431997,
+   "firma": "F0I2D0A2SI|libre",
+   "pasos": [
+    "izquierda"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791431999,
+   "firma": "F2I0D3A0SI|libre",
+   "pasos": [
+    "adelante"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791432000,
+   "firma": "F0I3D0A1SI|libre",
+   "pasos": [
+    "derecha"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791432002,
+   "firma": "F1I0D0A2SI|libre",
+   "pasos": [
+    "izquierda",
+    "derecha",
+    "izquierda",
+    "adelante"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433114,
+   "firma": "F0I0D1A3SI|libre",
+   "pasos": [
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433141,
+   "firma": "F2I3D0A3SI|libre",
+   "pasos": [
+    "adelante",
+    "derecha",
+    "adelante",
+    "izquierda",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda",
+    "izquierda"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433144,
+   "firma": "F3I0D2A3SI|libre",
+   "pasos": [
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha",
+    "derecha"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433147,
+   "firma": "F3I1D2A3SI|libre",
+   "pasos": [
+    "izquierda"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433149,
+   "firma": "F2I2D2A2SI|libre",
+   "pasos": [
+    "adelante"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433283,
+   "firma": "F3I2D2A2SI|libre",
+   "pasos": [
+    "izquierda"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433310,
+   "firma": "F2I1D1A2SI|libre",
+   "pasos": 41,
+   "estado": "detenido",
+   "descartada": "más de 40 pasos"
+  },
+  {
+   "t": 1791433331,
+   "firma": "F2I3D1A3SI|libre",
+   "pasos": 99,
+   "estado": "detenido",
+   "descartada": "más de 40 pasos"
+  },
+  {
+   "t": 1791433353,
+   "firma": "F1I2D0A2SI|libre",
+   "pasos": 110,
+   "estado": "detenido",
+   "descartada": "más de 40 pasos"
+  },
+  {
+   "t": 1791433472,
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": [
+    "adelante",
+    "derecha"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433488,
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": [
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433507,
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": 115,
+   "estado": "detenido",
+   "descartada": "más de 40 pasos"
+  },
+  {
+   "t": 1791433510,
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": [
+    "izquierda"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433522,
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": [
+    "adelante",
+    "adelante",
+    "adelante",
+    "adelante",
+    "derecha",
+    "atras",
+    "izquierda"
+   ],
+   "estado": "detenido"
+  },
+  {
+   "t": 1791433561,
+   "firma": "F3I0D3A0SI|libre",
+   "pasos": 227,
+   "estado": "detenido",
+   "descartada": "más de 40 pasos"
+  },
+  {
+   "t": 1791433645,
+   "firma": "F3I3D1A3SI|libre",
+   "pasos": 47,
+   "estado": "sendero: corrigiendo a la izquierda (error +3.35)",
+   "descartada": "más de 40 pasos"
+  }
+ ]
+}

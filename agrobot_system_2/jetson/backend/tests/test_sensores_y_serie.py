@@ -179,10 +179,11 @@ check("servo dentro del recorrido pasa tal cual", servo, 105)
 check("cada trama lleva una secuencia nueva",
       struct.unpack(fmt, enlace.pack())[5], (seq + 1) & 0xFFFF)
 
-# El recorte al recorrido util (25-110): un angulo fuera de la ventana no
+# El recorte al recorrido util (25-130, ampliado el 2026-10-15 a peticion del
+# operador; la fuente es protocol.SERVO_MAX_DEG): un angulo fuera de la ventana no
 # debe salir nunca, porque el servo montado topa mecanicamente.
 enlace.set_actuators(servo_angle=180)
-check("servo por encima del maximo se recorta a 110", struct.unpack(fmt, enlace.pack())[3], 110)
+check("servo por encima del maximo se recorta al maximo (130)", struct.unpack(fmt, enlace.pack())[3], __import__("protocol").SERVO_MAX_DEG)
 enlace.set_actuators(servo_angle=0)
 check("servo por debajo del minimo se recorta a 25", struct.unpack(fmt, enlace.pack())[3], 25)
 # El bit del foco va INVERTIDO a propósito (etapa de lógica normal con el

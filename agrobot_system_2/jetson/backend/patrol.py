@@ -195,11 +195,14 @@ class PatrolController:
         self.escaneos = 0
         self.ultimo_escaneo = 0.0
 
-        # Reinicia el SLAM con la pose actual para fijar la orientación del mapa.
-        # Esto evita que AMCL se desincroniace durante navegación autónoma.
-        pose_inicial = self._get_pose()
-        if pose_inicial:
-            asyncio.create_task(self._reinit_pose_slam(pose_inicial))
+        # (2026-10-07) Antes aquí se llamaba a _reinit_pose_slam, que decía
+        # "reiniciar la pose en AMCL" pero en realidad mandaba una META de
+        # navegación a la pose actual. Era doblemente incorrecto: (1) el stack
+        # usa slam_toolbox en localización continua, no AMCL, así que no hay
+        # nada que "resincronizar"; (2) esa meta competía con las metas del
+        # propio _bucle (carrera de goals). Se eliminó: iniciar la patrulla no
+        # debe lanzar una meta espuria. Si en el futuro hiciera falta FIJAR una
+        # pose inicial, es un /initialpose explícito, no un goal de navegación.
 
         self._tarea = asyncio.create_task(self._bucle())
         return True, f"patrulla iniciada sobre {len(self.waypoints)} waypoints"
@@ -466,13 +469,13 @@ class PatrolController:
 
     # ---------------------------------------------------------------
     async def _reinit_pose_slam(self, pose: dict):
-        """Reinicia la pose en AMCL (navegación pública en el mapa).
-        Previene desincroniación del SLAM durante navegación autónoma."""
-        try:
-            await asyncio.sleep(0.2)  # pequeña pausa para que SLAM se estabilice
-            self._send_nav_goal(pose["x"], pose["y"], pose.get("theta_deg", 0.0))
-        except Exception as exc:
-            self._emitir({"evento": "error_reinit_slam", "detalle": str(exc)})
+        """DEPRECADO (2026-10-07) y sin uso. Antes mandaba una meta de
+        navegación a la pose actual creyendo que "reiniciaba AMCL"; era una
+        meta espuria que competía con las del _bucle, y el stack usa
+        slam_toolbox (sin AMCL). No hace nada. Reiniciar una pose de verdad es
+        publicar en /initialpose, no enviar un goal."""
+        self._emitir({"evento": "reinit_pose_slam_noop",
+                      "detalle": "deprecado: no se envía meta al iniciar patrulla"})
 
     def _emitir(self, data: dict):
         try:

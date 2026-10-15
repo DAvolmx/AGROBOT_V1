@@ -1,0 +1,879 @@
+{
+ "modelo": "seg_interior_v1.mejor_parcial",
+ "d_peligro_m": 0.85,
+ "resultados": {
+  "test": {
+   "n": 120,
+   "con_peligro": 85,
+   "peligro_no_visto_pct": 35.3,
+   "peligro_no_visto": 30,
+   "peligro_visible": {
+    "n": 9,
+    "no_visto": 3,
+    "pct": 33.3
+   },
+   "peligro_en_zona_ciega": {
+    "n": 76,
+    "no_visto": 27,
+    "pct": 35.5
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 37,
+     "no_vistos": 11
+    },
+    "obstaculo": {
+     "peligros": 14,
+     "no_vistos": 2
+    },
+    "borde_bajo": {
+     "peligros": 6,
+     "no_vistos": 3
+    },
+    "pared": {
+     "peligros": 28,
+     "no_vistos": 14
+    }
+   },
+   "paradas_inutiles_pct": 8.6,
+   "err_dist_cm": {
+    "mediana": 22.3,
+    "p10": -2.1,
+    "p90": 66.7,
+    "n": 70,
+    "sobreestima_pct": 74.3
+   },
+   "err_centro_cm": {
+    "mae": 1.0,
+    "n": 68
+   },
+   "err_ancho_cm": {
+    "mae": 2.1,
+    "n": 68
+   },
+   "latencia_ms": 109.9,
+   "por_tipo": {
+    "sala": {
+     "n": 0,
+     "con_peligro": 0,
+     "peligro_no_visto_pct": 0.0,
+     "peligro_no_visto": 0,
+     "peligro_visible": {
+      "n": 0,
+      "no_visto": 0,
+      "pct": 0.0
+     },
+     "peligro_en_zona_ciega": {
+      "n": 0,
+      "no_visto": 0,
+      "pct": 0.0
+     },
+     "por_clase": {
+      "maceta": {
+       "peligros": 0,
+       "no_vistos": 0
+      },
+      "obstaculo": {
+       "peligros": 0,
+       "no_vistos": 0
+      },
+      "borde_bajo": {
+       "peligros": 0,
+       "no_vistos": 0
+      },
+      "pared": {
+       "peligros": 0,
+       "no_vistos": 0
+      }
+     },
+     "paradas_inutiles_pct": 0.0,
+     "err_dist_cm": {
+      "mediana": null,
+      "p10": null,
+      "p90": null,
+      "n": 0,
+      "sobreestima_pct": null
+     },
+     "err_centro_cm": {
+      "mae": null,
+      "n": 0
+     },
+     "err_ancho_cm": {
+      "mae": null,
+      "n": 0
+     },
+     "latencia_ms": 109.9
+    },
+    "pasillo": {
+     "n": 72,
+     "con_peligro": 46,
+     "peligro_no_visto_pct": 32.6,
+     "peligro_no_visto": 15,
+     "peligro_visible": {
+      "n": 6,
+      "no_visto": 3,
+      "pct": 50.0
+     },
+     "peligro_en_zona_ciega": {
+      "n": 40,
+      "no_visto": 12,
+      "pct": 30.0
+     },
+     "por_clase": {
+      "maceta": {
+       "peligros": 6,
+       "no_vistos": 1
+      },
+      "obstaculo": {
+       "peligros": 14,
+       "no_vistos": 2
+      },
+      "borde_bajo": {
+       "peligros": 6,
+       "no_vistos": 3
+      },
+      "pared": {
+       "peligros": 20,
+       "no_vistos": 9
+      }
+     },
+     "paradas_inutiles_pct": 3.8,
+     "err_dist_cm": {
+      "mediana": 18.3,
+      "p10": -3.9,
+      "p90": 65.8,
+      "n": 38,
+      "sobreestima_pct": 71.1
+     },
+     "err_centro_cm": {
+      "mae": 1.0,
+      "n": 30
+     },
+     "err_ancho_cm": {
+      "mae": 1.8,
+      "n": 30
+     },
+     "latencia_ms": 109.9
+    },
+    "vivero": {
+     "n": 48,
+     "con_peligro": 39,
+     "peligro_no_visto_pct": 38.5,
+     "peligro_no_visto": 15,
+     "peligro_visible": {
+      "n": 3,
+      "no_visto": 0,
+      "pct": 0.0
+     },
+     "peligro_en_zona_ciega": {
+      "n": 36,
+      "no_visto": 15,
+      "pct": 41.7
+     },
+     "por_clase": {
+      "maceta": {
+       "peligros": 31,
+       "no_vistos": 10
+      },
+      "obstaculo": {
+       "peligros": 0,
+       "no_vistos": 0
+      },
+      "borde_bajo": {
+       "peligros": 0,
+       "no_vistos": 0
+      },
+      "pared": {
+       "peligros": 8,
+       "no_vistos": 5
+      }
+     },
+     "paradas_inutiles_pct": 22.2,
+     "err_dist_cm": {
+      "mediana": 26.1,
+      "p10": 2.9,
+      "p90": 69.7,
+      "n": 32,
+      "sobreestima_pct": 78.1
+     },
+     "err_centro_cm": {
+      "mae": 1.1,
+      "n": 38
+     },
+     "err_ancho_cm": {
+      "mae": 2.3,
+      "n": 38
+     },
+     "latencia_ms": 109.9
+    }
+   }
+  },
+  "test_nuevo": {
+   "n": 120,
+   "con_peligro": 76,
+   "peligro_no_visto_pct": 31.6,
+   "peligro_no_visto": 24,
+   "peligro_visible": {
+    "n": 5,
+    "no_visto": 1,
+    "pct": 20.0
+   },
+   "peligro_en_zona_ciega": {
+    "n": 71,
+    "no_visto": 23,
+    "pct": 32.4
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 48,
+     "no_vistos": 14
+    },
+    "obstaculo": {
+     "peligros": 4,
+     "no_vistos": 0
+    },
+    "borde_bajo": {
+     "peligros": 3,
+     "no_vistos": 1
+    },
+    "pared": {
+     "peligros": 21,
+     "no_vistos": 9
+    }
+   },
+   "paradas_inutiles_pct": 11.4,
+   "err_dist_cm": {
+    "mediana": 25.5,
+    "p10": -1.9,
+    "p90": 78.2,
+    "n": 78,
+    "sobreestima_pct": 78.2
+   },
+   "err_centro_cm": {
+    "mae": 2.0,
+    "n": 61
+   },
+   "err_ancho_cm": {
+    "mae": 2.1,
+    "n": 61
+   },
+   "latencia_ms": 38.0,
+   "por_tipo": {
+    "sala": {
+     "n": 24,
+     "con_peligro": 5,
+     "peligro_no_visto_pct": 60.0,
+     "peligro_no_visto": 3,
+     "peligro_visible": {
+      "n": 0,
+      "no_visto": 0,
+      "pct": 0.0
+     },
+     "peligro_en_zona_ciega": {
+      "n": 5,
+      "no_visto": 3,
+      "pct": 60.0
+     },
+     "por_clase": {
+      "maceta": {
+       "peligros": 5,
+       "no_vistos": 3
+      },
+      "obstaculo": {
+       "peligros": 0,
+       "no_vistos": 0
+      },
+      "borde_bajo": {
+       "peligros": 0,
+       "no_vistos": 0
+      },
+      "pared": {
+       "peligros": 0,
+       "no_vistos": 0
+      }
+     },
+     "paradas_inutiles_pct": 5.3,
+     "err_dist_cm": {
+      "mediana": 8.4,
+      "p10": -2.1,
+      "p90": 59.3,
+      "n": 7,
+      "sobreestima_pct": 57.1
+     },
+     "err_centro_cm": {
+      "mae": 0.2,
+      "n": 7
+     },
+     "err_ancho_cm": {
+      "mae": 0.7,
+      "n": 7
+     },
+     "latencia_ms": 38.0
+    },
+    "pasillo": {
+     "n": 48,
+     "con_peligro": 33,
+     "peligro_no_visto_pct": 18.2,
+     "peligro_no_visto": 6,
+     "peligro_visible": {
+      "n": 3,
+      "no_visto": 0,
+      "pct": 0.0
+     },
+     "peligro_en_zona_ciega": {
+      "n": 30,
+      "no_visto": 6,
+      "pct": 20.0
+     },
+     "por_clase": {
+      "maceta": {
+       "peligros": 17,
+       "no_vistos": 3
+      },
+      "obstaculo": {
+       "peligros": 4,
+       "no_vistos": 0
+      },
+      "borde_bajo": {
+       "peligros": 3,
+       "no_vistos": 1
+      },
+      "pared": {
+       "peligros": 9,
+       "no_vistos": 2
+      }
+     },
+     "paradas_inutiles_pct": 26.7,
+     "err_dist_cm": {
+      "mediana": 26.7,
+      "p10": -14.3,
+      "p90": 69.7,
+      "n": 39,
+      "sobreestima_pct": 69.2
+     },
+     "err_centro_cm": {
+      "mae": 1.9,
+      "n": 30
+     },
+     "err_ancho_cm": {
+      "mae": 2.1,
+      "n": 30
+     },
+     "latencia_ms": 38.0
+    },
+    "vivero": {
+     "n": 48,
+     "con_peligro": 38,
+     "peligro_no_visto_pct": 39.5,
+     "peligro_no_visto": 15,
+     "peligro_visible": {
+      "n": 2,
+      "no_visto": 1,
+      "pct": 50.0
+     },
+     "peligro_en_zona_ciega": {
+      "n": 36,
+      "no_visto": 14,
+      "pct": 38.9
+     },
+     "por_clase": {
+      "maceta": {
+       "peligros": 26,
+       "no_vistos": 8
+      },
+      "obstaculo": {
+       "peligros": 0,
+       "no_vistos": 0
+      },
+      "borde_bajo": {
+       "peligros": 0,
+       "no_vistos": 0
+      },
+      "pared": {
+       "peligros": 12,
+       "no_vistos": 7
+      }
+     },
+     "paradas_inutiles_pct": 0.0,
+     "err_dist_cm": {
+      "mediana": 25.1,
+      "p10": 8.3,
+      "p90": 97.1,
+      "n": 32,
+      "sobreestima_pct": 93.8
+     },
+     "err_centro_cm": {
+      "mae": 2.6,
+      "n": 24
+     },
+     "err_ancho_cm": {
+      "mae": 2.5,
+      "n": 24
+     },
+     "latencia_ms": 38.0
+    }
+   }
+  }
+ },
+ "robustez": {
+  "oscuro": {
+   "n": 192,
+   "con_peligro": 122,
+   "peligro_no_visto_pct": 32.8,
+   "peligro_no_visto": 40,
+   "peligro_visible": {
+    "n": 12,
+    "no_visto": 5,
+    "pct": 41.7
+   },
+   "peligro_en_zona_ciega": {
+    "n": 110,
+    "no_visto": 35,
+    "pct": 31.8
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 59,
+     "no_vistos": 16
+    },
+    "obstaculo": {
+     "peligros": 19,
+     "no_vistos": 2
+    },
+    "borde_bajo": {
+     "peligros": 10,
+     "no_vistos": 6
+    },
+    "pared": {
+     "peligros": 34,
+     "no_vistos": 16
+    }
+   },
+   "paradas_inutiles_pct": 4.3,
+   "err_dist_cm": {
+    "mediana": 23.1,
+    "p10": -1.2,
+    "p90": 70.2,
+    "n": 121,
+    "sobreestima_pct": 72.7
+   },
+   "err_centro_cm": {
+    "mae": 2.0,
+    "n": 98
+   },
+   "err_ancho_cm": {
+    "mae": 2.7,
+    "n": 98
+   },
+   "latencia_ms": 38.3
+  },
+  "brillante": {
+   "n": 192,
+   "con_peligro": 122,
+   "peligro_no_visto_pct": 34.4,
+   "peligro_no_visto": 42,
+   "peligro_visible": {
+    "n": 12,
+    "no_visto": 5,
+    "pct": 41.7
+   },
+   "peligro_en_zona_ciega": {
+    "n": 110,
+    "no_visto": 37,
+    "pct": 33.6
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 59,
+     "no_vistos": 17
+    },
+    "obstaculo": {
+     "peligros": 19,
+     "no_vistos": 2
+    },
+    "borde_bajo": {
+     "peligros": 10,
+     "no_vistos": 7
+    },
+    "pared": {
+     "peligros": 34,
+     "no_vistos": 16
+    }
+   },
+   "paradas_inutiles_pct": 4.3,
+   "err_dist_cm": {
+    "mediana": 23.1,
+    "p10": -2.1,
+    "p90": 68.4,
+    "n": 118,
+    "sobreestima_pct": 72.9
+   },
+   "err_centro_cm": {
+    "mae": 2.1,
+    "n": 98
+   },
+   "err_ancho_cm": {
+    "mae": 3.2,
+    "n": 98
+   },
+   "latencia_ms": 40.1
+  },
+  "ruido": {
+   "n": 192,
+   "con_peligro": 122,
+   "peligro_no_visto_pct": 35.2,
+   "peligro_no_visto": 43,
+   "peligro_visible": {
+    "n": 12,
+    "no_visto": 5,
+    "pct": 41.7
+   },
+   "peligro_en_zona_ciega": {
+    "n": 110,
+    "no_visto": 38,
+    "pct": 34.5
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 59,
+     "no_vistos": 18
+    },
+    "obstaculo": {
+     "peligros": 19,
+     "no_vistos": 3
+    },
+    "borde_bajo": {
+     "peligros": 10,
+     "no_vistos": 6
+    },
+    "pared": {
+     "peligros": 34,
+     "no_vistos": 16
+    }
+   },
+   "paradas_inutiles_pct": 7.1,
+   "err_dist_cm": {
+    "mediana": 23.4,
+    "p10": -1.7,
+    "p90": 72.0,
+    "n": 120,
+    "sobreestima_pct": 73.3
+   },
+   "err_centro_cm": {
+    "mae": 2.2,
+    "n": 99
+   },
+   "err_ancho_cm": {
+    "mae": 3.2,
+    "n": 99
+   },
+   "latencia_ms": 37.7
+  },
+  "desenfoque": {
+   "n": 192,
+   "con_peligro": 122,
+   "peligro_no_visto_pct": 33.6,
+   "peligro_no_visto": 41,
+   "peligro_visible": {
+    "n": 12,
+    "no_visto": 5,
+    "pct": 41.7
+   },
+   "peligro_en_zona_ciega": {
+    "n": 110,
+    "no_visto": 36,
+    "pct": 32.7
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 59,
+     "no_vistos": 16
+    },
+    "obstaculo": {
+     "peligros": 19,
+     "no_vistos": 2
+    },
+    "borde_bajo": {
+     "peligros": 10,
+     "no_vistos": 6
+    },
+    "pared": {
+     "peligros": 34,
+     "no_vistos": 17
+    }
+   },
+   "paradas_inutiles_pct": 4.3,
+   "err_dist_cm": {
+    "mediana": 20.3,
+    "p10": -2.3,
+    "p90": 66.7,
+    "n": 118,
+    "sobreestima_pct": 71.2
+   },
+   "err_centro_cm": {
+    "mae": 2.3,
+    "n": 98
+   },
+   "err_ancho_cm": {
+    "mae": 4.6,
+    "n": 98
+   },
+   "latencia_ms": 37.9
+  },
+  "oclusion": {
+   "n": 192,
+   "con_peligro": 122,
+   "peligro_no_visto_pct": 25.4,
+   "peligro_no_visto": 31,
+   "peligro_visible": {
+    "n": 12,
+    "no_visto": 2,
+    "pct": 16.7
+   },
+   "peligro_en_zona_ciega": {
+    "n": 110,
+    "no_visto": 29,
+    "pct": 26.4
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 59,
+     "no_vistos": 12
+    },
+    "obstaculo": {
+     "peligros": 19,
+     "no_vistos": 1
+    },
+    "borde_bajo": {
+     "peligros": 10,
+     "no_vistos": 7
+    },
+    "pared": {
+     "peligros": 34,
+     "no_vistos": 11
+    }
+   },
+   "paradas_inutiles_pct": 15.7,
+   "err_dist_cm": {
+    "mediana": 26.3,
+    "p10": -12.0,
+    "p90": 74.4,
+    "n": 164,
+    "sobreestima_pct": 73.8
+   },
+   "err_centro_cm": {
+    "mae": 10.9,
+    "n": 90
+   },
+   "err_ancho_cm": {
+    "mae": 21.7,
+    "n": 90
+   },
+   "latencia_ms": 40.3
+  },
+  "negro": {
+   "n": 192,
+   "con_peligro": 122,
+   "peligro_no_visto_pct": 0.0,
+   "peligro_no_visto": 0,
+   "peligro_visible": {
+    "n": 12,
+    "no_visto": 0,
+    "pct": 0.0
+   },
+   "peligro_en_zona_ciega": {
+    "n": 110,
+    "no_visto": 0,
+    "pct": 0.0
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 59,
+     "no_vistos": 0
+    },
+    "obstaculo": {
+     "peligros": 19,
+     "no_vistos": 0
+    },
+    "borde_bajo": {
+     "peligros": 10,
+     "no_vistos": 0
+    },
+    "pared": {
+     "peligros": 34,
+     "no_vistos": 0
+    }
+   },
+   "paradas_inutiles_pct": 100.0,
+   "err_dist_cm": {
+    "mediana": 15.0,
+    "p10": -47.8,
+    "p90": 61.7,
+    "n": 172,
+    "sobreestima_pct": 56.4
+   },
+   "err_centro_cm": {
+    "mae": null,
+    "n": 0
+   },
+   "err_ancho_cm": {
+    "mae": null,
+    "n": 0
+   },
+   "latencia_ms": 37.5
+  },
+  "saturado": {
+   "n": 192,
+   "con_peligro": 122,
+   "peligro_no_visto_pct": 0.0,
+   "peligro_no_visto": 0,
+   "peligro_visible": {
+    "n": 12,
+    "no_visto": 0,
+    "pct": 0.0
+   },
+   "peligro_en_zona_ciega": {
+    "n": 110,
+    "no_visto": 0,
+    "pct": 0.0
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 59,
+     "no_vistos": 0
+    },
+    "obstaculo": {
+     "peligros": 19,
+     "no_vistos": 0
+    },
+    "borde_bajo": {
+     "peligros": 10,
+     "no_vistos": 0
+    },
+    "pared": {
+     "peligros": 34,
+     "no_vistos": 0
+    }
+   },
+   "paradas_inutiles_pct": 100.0,
+   "err_dist_cm": {
+    "mediana": 15.0,
+    "p10": -47.8,
+    "p90": 61.7,
+    "n": 172,
+    "sobreestima_pct": 56.4
+   },
+   "err_centro_cm": {
+    "mae": null,
+    "n": 0
+   },
+   "err_ancho_cm": {
+    "mae": null,
+    "n": 0
+   },
+   "latencia_ms": 35.1
+  },
+  "inclinacion +3 grados mal": {
+   "n": 192,
+   "con_peligro": 122,
+   "peligro_no_visto_pct": 22.1,
+   "peligro_no_visto": 27,
+   "peligro_visible": {
+    "n": 12,
+    "no_visto": 1,
+    "pct": 8.3
+   },
+   "peligro_en_zona_ciega": {
+    "n": 110,
+    "no_visto": 26,
+    "pct": 23.6
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 59,
+     "no_vistos": 11
+    },
+    "obstaculo": {
+     "peligros": 19,
+     "no_vistos": 2
+    },
+    "borde_bajo": {
+     "peligros": 10,
+     "no_vistos": 4
+    },
+    "pared": {
+     "peligros": 34,
+     "no_vistos": 10
+    }
+   },
+   "paradas_inutiles_pct": 8.6,
+   "err_dist_cm": {
+    "mediana": 14.7,
+    "p10": -10.3,
+    "p90": 65.6,
+    "n": 122,
+    "sobreestima_pct": 63.9
+   },
+   "err_centro_cm": {
+    "mae": 8.0,
+    "n": 94
+   },
+   "err_ancho_cm": {
+    "mae": 15.1,
+    "n": 94
+   },
+   "latencia_ms": 40.2
+  },
+  "inclinacion -3 grados mal": {
+   "n": 192,
+   "con_peligro": 122,
+   "peligro_no_visto_pct": 40.2,
+   "peligro_no_visto": 49,
+   "peligro_visible": {
+    "n": 12,
+    "no_visto": 5,
+    "pct": 41.7
+   },
+   "peligro_en_zona_ciega": {
+    "n": 110,
+    "no_visto": 44,
+    "pct": 40.0
+   },
+   "por_clase": {
+    "maceta": {
+     "peligros": 59,
+     "no_vistos": 22
+    },
+    "obstaculo": {
+     "peligros": 19,
+     "no_vistos": 2
+    },
+    "borde_bajo": {
+     "peligros": 10,
+     "no_vistos": 8
+    },
+    "pared": {
+     "peligros": 34,
+     "no_vistos": 17
+    }
+   },
+   "paradas_inutiles_pct": 2.9,
+   "err_dist_cm": {
+    "mediana": 27.6,
+    "p10": 8.7,
+    "p90": 77.9,
+    "n": 109,
+    "sobreestima_pct": 96.3
+   },
+   "err_centro_cm": {
+    "mae": 5.6,
+    "n": 99
+   },
+   "err_ancho_cm": {
+    "mae": 14.5,
+    "n": 99
+   },
+   "latencia_ms": 39.6
+  }
+ }
+}

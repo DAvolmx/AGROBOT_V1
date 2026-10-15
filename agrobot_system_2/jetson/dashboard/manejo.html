@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AgroBot · Manejo manual</title>
+<style>body{font:18px system-ui;background:#10241c;color:#edf5ef;max-width:760px;margin:auto;padding:24px}button{font:inherit;padding:22px;border:0;border-radius:12px;background:#c8e3d2;color:#10241c;touch-action:manipulation;cursor:pointer}button:disabled{opacity:.4;cursor:default}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:24px 0}.stop{background:#fa6464;color:#220808;font-weight:bold}input{width:100%}pre{white-space:pre-wrap;font:15px system-ui;background:#1d382c;padding:16px;border-radius:12px}a{color:#b7e8d0}small{color:#b7ccbf}</style>
+<h1>Manejo manual</h1><p>Cada toque mueve durante 0,3 segundos. No se acumulan órdenes.</p>
+<label>Potencia solicitada: <b id="powerLabel">25%</b><input id="power" type="range" min="0" max="60" value="25" step="5"></label>
+<small>Máximo 60% adelante y 35% atrás. Es potencia, no velocidad medida.</small>
+<div class="grid"><button data-action="izquierda">↖ Curva izquierda</button><button data-action="adelante">↑ Adelante</button><button data-action="derecha">↗ Curva derecha</button><span></span><button data-action="atras">↓ Atrás recto</button><span></span></div>
+<button class="stop" id="stop">PARAR</button>
+<pre id="status">Consultando conexión…</pre><p id="message" role="status"></p>
+<p><a href="/">Cámara y sensores</a> · <a href="http://192.168.12.240/" target="_blank" rel="noopener">Identificar motores en C3</a></p>
+<small>Primero confirmar las cuatro ruedas en el panel C3 y entregar el control a Jetson. La parada corta potencia; el TA6586 queda en rueda libre.</small>
+<script>
+const $=id=>document.getElementById(id);let connected=false,busy=false;
+function buttons(){document.querySelectorAll('[data-action]').forEach(b=>b.disabled=!connected||busy)}
+async function post(path,body){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),keepalive:true});const d=await r.json();if(!r.ok)throw Error(d.error||d.msg||r.status);return d}
+async function stop(){try{await post('/api/emergencia');$('message').textContent='Parada solicitada.'}catch(e){$('message').textContent='Sin enlace con Jetson: usa el corte físico de motores.'}}
+async function drive(action){if(!connected||busy)return;busy=true;buttons();try{await post('/api/drive',{accion:action,escala:Number($('power').value)/100});$('message').textContent='Pulso enviado: '+action}catch(e){$('message').textContent=e.message}finally{setTimeout(()=>{busy=false;buttons()},350)}}
+$('power').oninput=()=>{$('powerLabel').textContent=$('power').value+'%'};
+document.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>drive(b.dataset.action));
+$('stop').onpointerdown=e=>{e.preventDefault();stop()};$('stop').onclick=stop;
+window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.code==='Space'){e.preventDefault();stop();return}const a={ArrowUp:'adelante',ArrowDown:'atras',ArrowLeft:'izquierda',ArrowRight:'derecha'}[e.key];if(a){e.preventDefault();if(!e.repeat)drive(a)}});
+window.addEventListener('blur',stop);document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});window.addEventListener('pagehide',()=>navigator.sendBeacon('/api/emergencia',''));
+async function status(){try{const r=await fetch('/api/estado/completo',{cache:'no-store'});if(!r.ok)throw Error(r.status);const d=await r.json();connected=d.c3.conectado;$('status').textContent=`C3: ${connected?'enlace disponible; verificar mapeo y modo Jetson':'apagada o desconectada'}\nPerfil: ${d.perfil}\nTimeout de órdenes: ${d.deadman_s}s, siempre activo\nIMU: ${d.imu.vigente?'datos recientes':'sin datos recientes; no se usa para dirigir'}`;}catch(e){connected=false;$('status').textContent='Sin conexión con Jetson'}buttons()}
+buttons();status();setInterval(status,1000);
+</script></html>

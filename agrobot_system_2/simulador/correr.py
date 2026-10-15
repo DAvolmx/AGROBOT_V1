@@ -253,7 +253,13 @@ class Episodio:
         import slam
         import sendero
         from pulse_drive import ConductorPulsos
-        from explorador import ExploradorReactivo
+        # FSM nueva conmutable: AGROBOT_FSM=1 usa maquina_estados.MaquinaEstados
+        # (drop-in); por defecto, el explorador reactivo de siempre.
+        import os
+        if os.environ.get("AGROBOT_FSM") == "1":
+            from maquina_estados import MaquinaEstados as ExploradorReactivo
+        else:
+            from explorador import ExploradorReactivo
 
         from costmap_local import CostmapLocal
         self.lidar = slam.LidarReactive()
@@ -893,6 +899,12 @@ class Episodio:
             "bucles_detectados": self.bucles,
             "celdas_visitadas": len(self.visitas),
             "revisitas_max": max((v for v, _ in self.visitas.values()), default=0),
+            # Eficiencia de exploración: celdas NUEVAS (0,5 m) por minuto. Métrica
+            # comparable entre corridas del mismo escenario para evaluar mejoras
+            # de exploración de forma reproducible (no depende del raster del mundo).
+            "celdas_por_min": round(len(self.visitas) / max(self.t_total / 60.0, 1e-6), 1),
+            # Escaneos de planta al vuelo (solo la FSM maquina_estados los cuenta).
+            "escaneos_planta": getattr(self.explorador, "escaneos_planta", None),
             "estado_final": self.explorador.estado,
         }
 

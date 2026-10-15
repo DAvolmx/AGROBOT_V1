@@ -1,0 +1,59 @@
+{
+ "tarea": "obj",
+ "imgsz": 320,
+ "epocas": 40,
+ "base": "yolo11n.pt (COCO)",
+ "segundos_entrenamiento": 1914,
+ "val": {
+  "mAP50": 0.9045,
+  "mAP50_95": 0.7709,
+  "precision": 0.9325,
+  "recall": 0.8168,
+  "por_clase_mAP50": {
+   "maceta_planta": 0.939,
+   "obstaculo": 0.93,
+   "borde_bajo": 0.8446
+  },
+  "ms_por_imagen": {
+   "preprocess": 0.3,
+   "inference": 4.1,
+   "loss": 0.0,
+   "postprocess": 1.6
+  }
+ },
+ "test": {
+  "mAP50": 0.918,
+  "mAP50_95": 0.7838,
+  "precision": 0.9238,
+  "recall": 0.8454,
+  "por_clase_mAP50": {
+   "maceta_planta": 0.93,
+   "obstaculo": 0.8997,
+   "borde_bajo": 0.9241
+  },
+  "ms_por_imagen": {
+   "preprocess": 0.3,
+   "inference": 3.9,
+   "loss": 0.0,
+   "postprocess": 1.6
+  }
+ },
+ "test_nuevo": {
+  "mAP50": 0.8906,
+  "mAP50_95": 0.7554,
+  "precision": 0.9117,
+  "recall": 0.7919,
+  "por_clase_mAP50": {
+   "maceta_planta": 0.8903,
+   "obstaculo": 0.9264,
+   "borde_bajo": 0.8551
+  },
+  "ms_por_imagen": {
+   "preprocess": 0.3,
+   "inference": 3.9,
+   "loss": 0.0,
+   "postprocess": 1.7
+  }
+ },
+ "NO_DEMOSTRADO": "Entrenado y evaluado solo con imágenes sintéticas."
+}

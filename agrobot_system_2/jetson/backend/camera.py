@@ -151,8 +151,12 @@ class CameraWorker:
     # ---------------- hilo de captura ------------------------------------
     def _abrir(self):
         import cv2
-        cap = cv2.VideoCapture(0)
+        from pathlib import Path
+        if not Path("/dev/video0").exists():
+            return None
+        cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
         if not cap.isOpened():
+            cap.release()
             return None
         # MJPG antes que el tamaño: en V4L2 el formato condiciona qué
         # resoluciones y tasas se pueden negociar después.
@@ -182,6 +186,10 @@ class CameraWorker:
                 if cap is None:
                     cap = self._abrir()
                     if cap is None:
+                        with self._lock:
+                            self._frame_crudo = None
+                            self._jpeg = None
+                        self.fps = 0.0
                         self.estado = "sin cámara"
                         self._stop.wait(REOPEN_DELAY_S)
                         continue

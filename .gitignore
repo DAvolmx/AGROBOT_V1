@@ -48,3 +48,15 @@ agrobot_system_2/simulador/texturas/*.png
 
 # Respaldos del router: contienen la clave del Wi-Fi
 respaldos/
+
+# Percepción sintética: derivados regenerables y datos descargados (2026-10-15)
+agrobot_system_2/datos_plagas_reales/internet/
+agrobot_system_2/datos_plagas_real_tmp/
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/yolo_obj/
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/yolo_plagas/
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/yolo_whitefly/
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/runs/
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/weights/
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/modelos/yolo/
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/modelos/*intento*
+*.bak-*

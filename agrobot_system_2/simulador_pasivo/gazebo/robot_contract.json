@@ -1,0 +1,32 @@
+{
+  "contract_version": 1,
+  "robot": {
+    "chassis_length_m": 0.50,
+    "chassis_width_m": 0.33,
+    "front_outer_track_m": 0.19,
+    "rear_outer_track_m": 0.37,
+    "wheelbase_m": 0.37,
+    "passive_front_pivot_limit_deg": 20.0,
+    "drive_wheels": "all"
+  },
+  "ros": {
+    "domain_id": 42,
+    "namespace": "/agrobot",
+    "topics": {
+      "command": "/agrobot/cmd_vel",
+      "odometry": "/agrobot/odom",
+      "lidar": "/agrobot/scan",
+      "camera": "/agrobot/camera/image_raw",
+      "contact": "/agrobot/contact"
+    }
+  },
+  "provenance": {
+    "measured": ["chassis_length_m", "chassis_width_m", "front_outer_track_m", "rear_outer_track_m", "wheelbase_m", "passive_front_pivot_limit_deg"],
+    "unmeasured_physics": ["wheel_radius", "mass", "center_of_gravity", "friction", "motor_response", "pivot_damping"]
+  },
+  "safety": {
+    "simulation_only": true,
+    "never_bridge_to_hardware_domain": true,
+    "hardware_ros_domain_id": 0
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "trained_candidate",
+  "speed": 0.16,
+  "lookahead": 0.25,
+  "gain": 2.0
+}

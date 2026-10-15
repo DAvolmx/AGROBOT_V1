@@ -1,0 +1,18 @@
+{
+  "platform": "esp32:esp32:esp32c3",
+  "core": "3.3.12",
+  "compiler_command": "Arduino compile_commands.json, final sketch rebuilt directly",
+  "binary_bytes": 1053472,
+  "binary_sha256": "fecfcafec75d861e6cb6e70aa54e6e409f09e4dc764c9126982513ac61ef8070",
+  "source_sha256": {
+    "agrobot_c3_v6.ino": "d35de317477b210e0dbe1a8a36f9c0c523f175ec93a00f53371ef72edbb60a10",
+    "control_model.h": "c08b123783fd6d75d24215fc849bd2ec18b9c52a47b6aebce66f0cd6d4bc9d3f",
+    "web_panel.h": "f6e691ac28e8852d03bf3736c4a4c9458e62b358dd1db3ae6f9e47cdb5e424e1"
+  },
+  "hardware_flashed": false,
+  "physical_calibration_verified": false,
+  "data_ram_bytes": 38696,
+  "iram_text_bytes": 66048,
+  "panel_tests_passed": 6,
+  "crc_and_sequence_static_assertions_passed": true
+}

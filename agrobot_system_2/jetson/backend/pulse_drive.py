@@ -1,139 +1,106 @@
-"""
-Manejo manual por pulsos.
-========================
+"""Pulsos manuales finitos para el pivote pasivo trasero.
 
-Cada pulsación del operador es un movimiento de duración fija que ejecuta la
-Jetson, no un "mantener apretado". Tres motivos:
+Base: la reescritura de Codex del 2026-10-15 (sin cola ni giro sobre el eje,
+clamps de `manual_demo`, sin girar marcha atrás). Se le devolvió el 2026-10-15
+lo que esa reescritura había perdido:
 
-  · En el móvil, mantener apretado no funcionaba: el navegador cancela el
-    toque (`pointercancel`) en cuanto el dedo se mueve un píxel o reconoce
-    una pulsación larga, y el robot recibía un arranque seguido de una
-    parada a los pocos milisegundos. Un toque, en cambio, llega siempre.
-  · Si el WiFi pierde el "suelto el botón", con mantener apretado el robot
-    sigue andando. Con pulsos el final lo decide la Jetson, que no depende
-    de la red para parar.
-  · Precisión: un pulso es una distancia repetible. "Adelante, adelante,
-    adelante" son tres pasos iguales.
+  1. EL TROCEADO POR DUTY (`_tramo`). Es el ÚNICO modo de ir más despacio que
+     el suelo de PWM del hardware: los motores no bajan del 78 % de potencia,
+     así que pedir media velocidad casi no frena. Lo que sí funciona es
+     alternar empuje y rueda libre varias veces por segundo (`suavidad_duty`
+     del ciclo con velocidad, el resto a cero): el robot avanza a tirones
+     cortos, mucho más lento y controlable, sin tocar el firmware.
 
-Pulsar la misma dirección con un pulso en curso lo ENCADENA (se suma otro
-pulso, con tope); pulsar otra dirección lo REEMPLAZA en el acto.
+     Por qué importa que esté: el perfil de interior (`perfiles_entorno`) baja
+     `deslizamiento_cm` a 20 PORQUE la velocidad queda en 0,195 m/s. Medido en
+     simulador, al soltar el mando el robot sigue rodando 14 cm a 0,2 m/s pero
+     86 cm a 0,4. Sin el troceado la velocidad real no baja, el margen de
+     parada de 32 cm deja de cubrir el deslizamiento, y el perfil de interior
+     es inseguro. `torque_optimizer` sigue ajustando `suavidad_duty` en
+     caliente, y sin este bucle quedaba escribiendo un campo que nadie leía.
 
-Giros en tierra blanda: un skid-steer que gira sobre sí mismo en suelo
-blando entierra las ruedas y no rota. La maniobra alterna un arco hacia
-delante y otro hacia atrás con el MISMO sentido de giro: las traslaciones
-se cancelan, la rotación se suma, y el movimiento lineal rompe el agarre del
-barro. Es la versión ordenada de lo que el operador hacía a mano
-(izquierda, derecha, adelante, atrás) hasta que el robot giraba.
+  2. LAS DURACIONES POR MODO. La reescritura dejó los tres modos idénticos
+     (0,3 s), con lo que `modo_manejo` no hacía nada.
+
+SIGUE PERDIDO respecto a la versión anterior al 2026-10-15 (no se restauró, no
+se pidió): la `maniobra` de giro en tierra blanda (arco alterno adelante/atrás
+que rompe el agarre del barro; `segmentos` ignora el parámetro `maniobra`) y el
+encadenado de pulsos al repetir dirección.
 """
 import asyncio
 import time
-from collections import deque
 
-TICK_S = 0.05             # 20 Hz, el mismo ritmo al que late el enlace UART
-MAX_ENCOLADO_S = 3.0      # tope de pulsos encadenados
+from manual_demo import V_SCALE, W_SCALE
 
+TICK_S = .05
 ACCIONES = ("adelante", "atras", "izquierda", "derecha")
 
+# Duraciones por modo. `vel_factor` escala la velocidad pedida ANTES de los
+# clamps de manual_demo.
 MODOS = {
-    "interior": {
-        "pulso_recto_s": 0.8,
-        "pulso_giro_s": 0.4,
-        "maniobra_v": 0.0,      # SIN retroceso: solo giro puro (omega)
-        "maniobra_omega": 1.0,
-        "maniobra_medio_s": 0.4,
-        "vel_factor": 1.0,      # 100% velocidad máxima (antes era 0.6)
-    },
-    # Pulsos CORTOS (2026-10-02, pedido del usuario): la mitad de largos
-    # que en interior. Con el firmware nuevo cada pulso recto de 0,8 s
-    # desviaba el rumbo 8-16° a la derecha; con la mitad de pulso se mueve
-    # ~12 cm y se puede corregir antes de quedar cruzado en un pasillo.
-    "preciso": {
-        "pulso_recto_s": 0.4,
-        "pulso_giro_s": 0.25,
-        "maniobra_v": 0.0,      # SIN retroceso: solo giro puro (omega)
-        "maniobra_omega": 1.0,
-        "maniobra_medio_s": 0.25,
-        "vel_factor": 1.0,      # 100% velocidad máxima (antes era 0.6)
-    },
-    "exterior": {
-        "pulso_recto_s": 1.0,
-        "pulso_giro_s": 0.35,
-        "maniobra_v": 0.25,
-        "maniobra_omega": 1.0,
-        "maniobra_medio_s": 0.3,
-        "vel_factor": 1.0,
-    },
+    "interior": {"pulso_recto_s": .8, "pulso_giro_s": .4, "vel_factor": 1.0},
+    # Pulsos CORTOS (2026-10-02, pedido del operador): la mitad que interior.
+    # Con el firmware nuevo un pulso recto de 0,8 s desviaba el rumbo 8-16° a
+    # la derecha; con la mitad se mueve ~12 cm y se corrige antes de quedar
+    # cruzado en un pasillo.
+    "preciso": {"pulso_recto_s": .4, "pulso_giro_s": .25, "vel_factor": 1.0},
+    "exterior": {"pulso_recto_s": 1.0, "pulso_giro_s": .35, "vel_factor": 1.0},
 }
 
 
 class ConductorPulsos:
     def __init__(self, *, send_command, emergency_stop, get_config=None):
-        self._send_command = send_command    # (v, omega, scan)
+        self._send_command = send_command
         self._emergency_stop = emergency_stop
+        # Codex aceptaba get_config y lo descartaba; sin él no hay troceado.
         self._get_config = get_config or (lambda: {"suavidad_duty": 1.0,
                                                    "suavidad_periodo_s": 0.3})
-        self._cola: deque[tuple[float, float, float]] = deque()
-        self._accion_actual: str | None = None
-        self._tarea: asyncio.Task | None = None
-        self.modo = "exterior"
+        self._tarea = None
+        self.modo = "preciso"
 
     @property
-    def activo(self) -> bool:
+    def activo(self):
         return self._tarea is not None and not self._tarea.done()
 
-    def segmentos(self, accion: str, v_max: float, omega_max: float,
-                  maniobra: bool) -> list[tuple[float, float, float]]:
-        """(v, omega, duración) de UNA pulsación. omega > 0 = izquierda."""
-        m = MODOS.get(self.modo, MODOS["exterior"])
+    def _modo(self):
+        return MODOS.get(self.modo, MODOS["preciso"])
+
+    def segmentos(self, accion, v_max, omega_max, maniobra=True):
+        """(v, omega, duración) de UNA pulsación. omega > 0 = izquierda.
+
+        Marcha atrás sin giro a propósito (decisión de Codex, se conserva):
+        con el pivote pasivo, retroceder girando puede cruzar el robot.
+        """
+        if accion not in ACCIONES:
+            raise ValueError('accion desconocida')
+        m = self._modo()
         vf = m["vel_factor"]
-        if accion == "adelante":
-            return [(v_max * vf, 0.0, m["pulso_recto_s"])]
-        if accion == "atras":
-            return [(-v_max * vf, 0.0, m["pulso_recto_s"])]
-        sentido = 1.0 if accion == "izquierda" else -1.0
-        if not maniobra:
-            return [(0.0, sentido * omega_max, m["pulso_giro_s"])]
-        w = sentido * m["maniobra_omega"] * omega_max
-        v = m["maniobra_v"] * v_max * vf
-        return [(v, w, m["maniobra_medio_s"]), (-v, w, m["maniobra_medio_s"])]
+        v = max(0, min(v_max * vf, .60 * V_SCALE))
+        w = max(0, min(omega_max, W_SCALE))
+        if accion == 'atras':
+            return [(-min(v, .35 * V_SCALE), 0., m["pulso_recto_s"])]
+        if accion == 'adelante':
+            return [(v, 0., m["pulso_recto_s"])]
+        sentido = 1. if accion == 'izquierda' else -1.
+        return [(v, sentido * w, m["pulso_giro_s"])]
 
-    def ordenar(self, accion: str, v_max: float, omega_max: float,
-                maniobra: bool = True):
-        nuevos = self.segmentos(accion, v_max, omega_max, maniobra)
-
-        if accion != self._accion_actual or not self.activo:
-            # Otra dirección: se descarta lo pendiente y se arranca ya. La
-            # rampa del actuador suaviza el cambio de sentido.
-            self._cancelar_tarea()
-            self._cola.clear()
-            self._accion_actual = accion
-            self._cola.extend(nuevos)
-            self._tarea = asyncio.create_task(self._ejecutar())
-            return
-
-        # Misma dirección con un pulso en curso: se encadena, con tope, para
-        # que aporrear el botón no deje al robot andando medio minuto.
-        pendiente = sum(d for _, _, d in self._cola)
-        if pendiente + sum(d for _, _, d in nuevos) <= MAX_ENCOLADO_S:
-            self._cola.extend(nuevos)
+    def ordenar(self, accion, v_max, omega_max, maniobra=True):
+        segmentos = self.segmentos(accion, v_max, omega_max, maniobra)
+        if self.activo:
+            return False
+        self._tarea = asyncio.create_task(self._ejecutar(segmentos))
+        return True
 
     def parar(self):
-        self._cancelar_tarea()
-        self._cola.clear()
-        self._accion_actual = None
+        if self._tarea is not None:
+            self._tarea.cancel()
+        self._tarea = None
         self._emergency_stop()
 
     async def _tramo(self, v, w, dur):
-        """Ejecuta un tramo TROCEADO, para poder ir más lento que el mínimo
-        del hardware.
-
-        Los motores no bajan del 78 % de potencia: pedir media velocidad no
-        frena casi nada. Lo que sí funciona es alternar empuje y rueda libre
-        varias veces por segundo (`suavidad_duty` del ciclo con velocidad, el
-        resto a cero). El robot avanza a tirones cortos pero mucho más lento
-        y más controlable, sin tocar el firmware.
-        """
-        cfg = self._get_config()
+        """Un tramo TROCEADO, para poder ir más lento que el mínimo del
+        hardware. Con duty >= 0,99 manda continuo (comportamiento de Codex)."""
+        cfg = self._get_config() or {}
         duty = min(1.0, max(0.15, float(cfg.get("suavidad_duty", 1.0))))
         periodo = max(0.1, float(cfg.get("suavidad_periodo_s", 0.3)))
         fin = time.monotonic() + dur
@@ -151,21 +118,12 @@ class ConductorPulsos:
                 self._send_command(0.0, 0.0, 0)
                 await asyncio.sleep(TICK_S)
 
-    def _cancelar_tarea(self):
-        if self._tarea is not None and not self._tarea.done():
-            self._tarea.cancel()
-        self._tarea = None
-
-    async def _ejecutar(self):
+    async def _ejecutar(self, segmentos):
         try:
-            while self._cola:
-                v, w, dur = self._cola.popleft()
+            for v, w, dur in segmentos:
                 await self._tramo(v, w, dur)
-            # Objetivo a cero: el `tick()` del actuador baja la rampa hasta
-            # parar del todo, sin tirón.
-            self._send_command(0.0, 0.0, 0)
         finally:
-            # Una tarea cancelada por un reemplazo corre este `finally` DESPUÉS
-            # de que `ordenar` fijó la acción nueva: no debe borrarla.
+            # Se conserva el cierre de Codex: al acabar o al cancelar, parada.
             if asyncio.current_task() is self._tarea:
-                self._accion_actual = None
+                self._emergency_stop()
+                self._tarea = None

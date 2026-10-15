@@ -28,6 +28,18 @@ Leerla: `tools/leer_sesion.py`.
 """
 from __future__ import annotations
 
+import threading
+from functools import wraps
+
+def serialized(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        with self._io_lock:
+            if self._closed:
+                return
+            return fn(self, *args, **kwargs)
+    return wrapper
+
 import csv
 import json
 import math
@@ -85,6 +97,8 @@ class Grabador:
                  raiz: Path = RAIZ, reloj=time.monotonic):
         """`leer` = {nombre: callable} para cada fuente (ver `_fila`). Las que
         falten o fallen quedan vacías: grabar nunca debe tumbar al backend."""
+        self._io_lock = threading.RLock()
+        self._closed = False
         self._leer = leer
         self._frame = obtener_frame
         self._cv2 = cv2
@@ -152,6 +166,7 @@ class Grabador:
         }
 
     # ------------------------------------------------------------ ciclo
+    @serialized
     def tick(self):
         """Llamar a TELEMETRIA_HZ. Escribe una fila y decide scan/foto."""
         ahora = self._reloj()
@@ -223,6 +238,7 @@ class Grabador:
         self._t_bloque = self._reloj()
 
     # ------------------------------------------------------------ eventos
+    @serialized
     def evento(self, mensaje: dict):
         """Todo lo que el backend anuncia (state.broadcast), menos el flujo continuo."""
         tipo = mensaje.get("type")
@@ -239,7 +255,9 @@ class Grabador:
         if tipo == "obstacle_warning" and not self.sin_disco:
             self._tomar_foto(self._reloj(), "freno")
 
+    @serialized
     def cerrar(self):
+        self._closed = True
         self.guardar_scans()
         for f in (self._csv_f, self._eventos):
             try:

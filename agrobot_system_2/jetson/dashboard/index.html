@@ -640,6 +640,7 @@ input[type="text"], select { font-family: inherit; }
     <button class="nav-btn" data-tab="tab-nav"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11 20 4l-7 17-2.5-7.5L3 11Z"/></svg></span>Navegación</button>
     <button class="nav-btn" data-tab="tab-slam"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span>SLAM &amp; Telemetría</button>
     <button class="nav-btn" data-tab="tab-ai"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.5 4.5l2 2M17.5 17.5l2 2M19.5 4.5l-2 2M6.5 17.5l-2 2"/></svg></span>Gestor de Modelos IA</button>
+    <button class="nav-btn" data-tab="tab-motores"><span class="ic">⚙</span>Motores y servo</button>
     <button class="nav-btn" data-tab="tab-hw"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.7a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.4 2.7a7.6 7.6 0 0 0-2.6 1.5l-2.4-.7-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.7a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.4-2.7a7.6 7.6 0 0 0 2.6-1.5l2.4.7 2-3.4-2-1.6Z"/></svg></span>Config. Hardware</button>
     <button class="nav-btn" data-tab="tab-params"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h9M17 6h3M4 12h3M9 12h11M4 18h13M19 18h1"/><circle cx="14.5" cy="6" r="2"/><circle cx="6.5" cy="12" r="2"/><circle cx="16.5" cy="18" r="2"/></svg></span>Parámetros</button>
     <button class="nav-btn" data-tab="tab-sistema"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg></span>Sistema</button>
@@ -672,6 +673,7 @@ input[type="text"], select { font-family: inherit; }
 
   <div class="content">
 
+    <div class="tab" id="tab-motores"><iframe id="motor-setup-frame" src="/motores.html" title="Asignación de motores y servo" style="width:100%;height:1100px;border:0;border-radius:16px"></iframe></div>
     <!-- ================= DASHBOARD ================= -->
     <div class="tab active" id="tab-dashboard">
       <!-- Barra superior: Estado de parcela + Modo + Detecciones -->
@@ -743,25 +745,6 @@ input[type="text"], select { font-family: inherit; }
         </div>
       </div>
 
-      <!-- Panel Control v2.0 -->
-      <div class="card" style="background: linear-gradient(135deg, #f5faf7, #ffffff); border: 1px solid #cfe3d2;">
-        <h3 style="margin: 0 0 16px 0; font-size: 16px;">⚡ Control de Motores v2.0</h3>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-          <button onclick="cambiarRed()" style="padding: 12px 16px; background: #00bd4f; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; grid-column: span 2;">🌐 Cambiar Red (Patrullaje ↔ Estación)</button>
-          <div>
-            <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">⚡ Potencia Motor</label>
-            <input type="range" id="pwmSlider" min="0" max="100" value="75" onchange="cambiarPotencia(this.value)" style="width: 100%; cursor: pointer; accent-color: #00bd4f;">
-            <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: #4e6a58;">
-              <span>0%</span>
-              <span id="pwmValue">75%</span>
-              <span>100%</span>
-            </div>
-          </div>
-          <button onclick="motorParar()" style="padding: 12px 16px; background: #ff2d3f; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 700; font-size: 16px;">🛑 PARADA</button>
-          <button id="safeguard-btn" onclick="toggleSafeguard()" style="padding: 12px 16px; background: #ff9500; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; grid-column: span 2;" title="Desactiva el timeout de seguridad (100 ms sin comando = parada)">🔐 Modo demo (safeguard ON)</button>
-        </div>
-      </div>
-
       <!-- Controles -->
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
@@ -808,13 +791,15 @@ input[type="text"], select { font-family: inherit; }
                     <span>SERVO CÁMARA</span>
                     <span class="v mono"><span id="servo-val">0</span>° <span style="color:var(--ink-soft);">· real <span id="servo-real">—</span>°</span></span>
                   </div>
-                  <input type="range" min="0" max="180" value="0" id="servo-slider">
+                  <input type="range" min="25" max="130" value="98" id="servo-slider">
                 </div>
                 <div class="toggle-row">
                   <span style="font-size:16px;">LED de escaneo <span class="mono" style="color:var(--ink-soft); font-size:13.5px;">· real <span id="led-real">—</span></span></span>
                   <label class="switch"><input type="checkbox" id="led-toggle"><div class="track"></div></label>
                 </div>
                 <button class="btn" id="scan-btn">Escanear planta</button>
+                <button class="btn" id="rec-video-btn">● Grabar video</button>
+                <p class="hint" id="rec-video-hint" style="display:none;"></p>
                 <p class="hint">El barrido lo hace la Jetson moviendo el servo; al terminar vuelve a lo que marca este control.
                   Duración y recorrido se ajustan en <b>Parámetros → Autonomía</b>.</p>
               </div>
@@ -1139,6 +1124,7 @@ input[type="text"], select { font-family: inherit; }
               <button class="btn primary" id="refresh-models-btn">🔄 Recargar modelos</button>
               <button class="btn" id="scan-models-btn">📁 Escanear directorio</button>
             </div>
+            <div id="preset-bar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
             <div id="model-list"><div class="empty">Cargando…</div></div>
           </div>
           <div class="card" style="margin-top:16px;">
@@ -1353,11 +1339,11 @@ input[type="text"], select { font-family: inherit; }
               </div>
               <div class="slider-row" style="margin-bottom:14px;">
                 <div class="label-row"><span>Barrido: ángulo inicial</span><span class="v mono" id="p-barrido-min-val">25°</span></div>
-                <input type="range" min="25" max="110" step="1" value="25" id="p-barrido-min">
+                <input type="range" min="25" max="130" step="1" value="25" id="p-barrido-min">
               </div>
               <div class="slider-row">
                 <div class="label-row"><span>Barrido: ángulo final</span><span class="v mono" id="p-barrido-max-val">110°</span></div>
-                <input type="range" min="25" max="110" step="1" value="110" id="p-barrido-max">
+                <input type="range" min="25" max="130" step="1" value="110" id="p-barrido-max">
               </div>
             </div>
             <button class="btn primary" id="p-autonomia-save" style="margin-bottom:18px;">Guardar</button>
@@ -2927,6 +2913,55 @@ input[type="text"], select { font-family: inherit; }
           res.ok ? "El robot se detiene y barre con la cámara." : "No se pudo iniciar.");
   });
 
+  // ---------------------------------------------------------------
+  // Grabar video (los MISMOS frames que el stream, con overlay)
+  // ---------------------------------------------------------------
+  let grabandoVideo = false;
+  function pintarBtnVideo() {
+    const btn = $("rec-video-btn"), hint = $("rec-video-hint");
+    if (!btn) return;
+    btn.textContent = grabandoVideo ? "⏹ Detener grabación" : "● Grabar video";
+    btn.classList.toggle("primary", grabandoVideo);
+    if (hint) hint.style.display = grabandoVideo ? "block" : "none";
+  }
+  if ($("rec-video-btn")) {
+    $("rec-video-btn").addEventListener("click", async () => {
+      const accion = grabandoVideo ? "stop" : "start";
+      let d = {};
+      try {
+        const res = await fetch("/api/video/record", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: accion }),
+        });
+        d = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast("warning", "Grabación de video", d.error || "no se pudo");
+          return;
+        }
+      } catch (e) {
+        toast("warning", "Grabación de video", "sin conexión con el robot");
+        return;
+      }
+      grabandoVideo = (accion === "start");
+      pintarBtnVideo();
+      if (grabandoVideo) {
+        $("rec-video-hint").textContent = "Grabando " + (d.file || "") + " · se guarda en el robot (backend/videos/).";
+        toast("success", "Grabando video", d.file || "");
+      } else {
+        toast("success", "Video guardado", d.file || "");
+      }
+    });
+    // Al cargar, sincroniza por si ya había una grabación en curso.
+    fetch("/api/video/record", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "status" }),
+    }).then((r) => r.json()).then((d) => {
+      grabandoVideo = !!d.grabando; pintarBtnVideo();
+      if (grabandoVideo && $("rec-video-hint"))
+        $("rec-video-hint").textContent = "Grabando " + (d.file || "") + "…";
+    }).catch(() => {});
+  }
+
   function applyActuatorSetpoint(sp) {
     if (!sp) return;
     $("servo-slider").value = sp.servo_angle;
@@ -2981,6 +3016,41 @@ input[type="text"], select { font-family: inherit; }
   async function refreshModels() {
     const res = await fetch("/api/models");
     if (res.ok) renderModels(await res.json());
+    refreshPresets();
+  }
+
+  // Botones Interior / Exterior: usan la misma carga de modelos de arriba.
+  async function cargarModelo(name) {
+    const res = await fetch("/api/models/load", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ name }) });
+    if (res.ok) toast("success", "Modelo cargado", name);
+    else toast("error", "Error al cargar", name);
+    return res.ok;
+  }
+  async function refreshPresets() {
+    const bar = $("preset-bar");
+    const res = await fetch("/api/models/presets");
+    if (!res.ok) return;
+    bar.innerHTML = "";
+    (await res.json()).forEach((p) => {
+      const b = document.createElement("button");
+      b.className = "btn";
+      b.textContent = (p.activo ? "✓ " : "") + p.titulo;
+      b.title = p.nota;
+      b.disabled = !p.disponible;
+      b.addEventListener("click", async () => {
+        try { localStorage.setItem("modelo_anterior", currentActiveModel || ""); } catch (e) {}
+        if (await cargarModelo(p.archivo)) refreshModels();
+      });
+      bar.appendChild(b);
+    });
+    const v = document.createElement("button");
+    v.className = "btn"; v.textContent = "↩ Volver al anterior";
+    v.addEventListener("click", async () => {
+      let prev = ""; try { prev = localStorage.getItem("modelo_anterior") || ""; } catch (e) {}
+      if (!prev) { toast("info", "Sin modelo anterior", "No hay un modelo previo guardado."); return; }
+      if (await cargarModelo(prev)) refreshModels();
+    });
+    bar.appendChild(v);
   }
 
   $("refresh-models-btn").addEventListener("click", refreshModels);
@@ -3268,42 +3338,11 @@ input[type="text"], select { font-family: inherit; }
   });
 
   // --- FUNCIONES MOTOR v2.0 ---
-  async function cambiarPotencia(valor) {
-    document.getElementById('pwmValue').textContent = valor + '%';
-    try {
-      const response = await fetch('/api/motor/comando', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          v: 0.5,
-          omega: 0.0,
-          duty: parseInt(valor)
-        })
-      });
-      if (response.ok) {
-        toast("success", "Motor", "Potencia: " + valor + "%");
-      }
-    } catch(e) {
-      console.error('Error:', e);
-      toast("error", "Error", "No se pudo cambiar la potencia");
-    }
+  function cambiarPotencia(valor) {
+    const label=document.getElementById('pwmValue');
+    if(label)label.textContent=valor+'% (solo seleccion; no mueve motores)';
   }
-
-  async function motorParar() {
-    try {
-      const response = await fetch('/api/motor/parar', {
-        method: 'POST'
-      });
-      if (response.ok) {
-        toast("warning", "PARADA", "🛑 Motor detenido");
-        document.getElementById('pwmSlider').value = 0;
-        document.getElementById('pwmValue').textContent = '0%';
-      }
-    } catch(e) {
-      console.error('Error:', e);
-      toast("error", "Error", "No se pudo detener el motor");
-    }
-  }
+  async function motorParar() { return pararTodo(); }
 
   async function cambiarRed() {
     const modo = prompt('Ingresa "patrullaje" o "estacion":');
@@ -3332,35 +3371,33 @@ input[type="text"], select { font-family: inherit; }
     }
   }
 
-  // ⭐ NUEVO: toggle safeguard (timeout de seguridad)
-  let safeguardEnabled = true;  // por defecto activo
-  async function toggleSafeguard() {
-    try {
-      const response = await fetch('/api/motor/toggle-safeguard', {
-        method: 'POST'
-      });
-      if (response.ok) {
-        const data = await response.json();
-        safeguardEnabled = data.safeguard_enabled;
-        const btn = document.getElementById('safeguard-btn');
-        if (safeguardEnabled) {
-          btn.style.background = '#ff9500';
-          btn.textContent = '🔐 Modo demo (safeguard ON)';
-          toast("success", "Safeguard", "✓ Protección de seguridad activada");
-        } else {
-          btn.style.background = '#c4141f';
-          btn.textContent = '⚠️  Modo demo (safeguard OFF)';
-          toast("warning", "Safeguard", "⚠️ Protección desactivada — modo prueba");
-        }
-      }
-    } catch(e) {
-      console.error('Error:', e);
-      toast("error", "Error", "No se pudo cambiar el safeguard");
-    }
+  function toggleSafeguard() {
+    toast("info","Parada por perdida de orden","Siempre activa en este perfil.");
   }
-
+  const safeguardButton=document.getElementById('safeguard-btn');
+  if(safeguardButton){safeguardButton.disabled=true;safeguardButton.textContent='Timeout siempre activo';}
+  window.addEventListener('blur',()=>pararTodo());
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)pararTodo();});
+  window.addEventListener('pagehide',()=>navigator.sendBeacon('/api/emergencia',''));
+  // Se quitó (2026-10-15) la barra "DEMO MANUAL" que se inyectaba con
+  // document.body.prepend(): el <body> es un layout de barra lateral +
+  // contenido y esa barra pasaba a ser una COLUMNA más, de ~750 px, que
+  // aplastaba todo el dashboard. Además decía "cada toque: 0,3 s", que ya no es
+  // cierto: la duración depende del modo de manejo (pulse_drive.MODOS).
+  const setupTab=document.getElementById('tab-motores');
+  new MutationObserver(()=>{if(!setupTab.classList.contains('active'))document.getElementById('motor-setup-frame').contentWindow.postMessage('motor-setup-stop',location.origin)}).observe(setupTab,{attributes:true,attributeFilter:['class']});
   log("Dashboard iniciado.");   // definido junto a setPill
 })();
 </script>
+
+<style>#fieldCapture{display:none;position:fixed;right:16px;bottom:74px;width:min(620px,calc(100vw - 32px));max-height:75vh;overflow:auto;margin:0;padding:20px;border:1px solid #39ba88;border-radius:16px;background:#122820;color:#eefaf5;z-index:1000}#fieldCapture button,#fieldCapture a{display:inline-block;margin:6px;padding:12px;border-radius:8px;border:1px solid #67b89a;background:#244839;color:white;cursor:pointer}#captureStatus{white-space:pre-wrap;font:14px monospace}</style>
+<button id="openFieldCapture" style="position:fixed;right:130px;bottom:26px;z-index:140;background:#126b44;color:white;padding:14px;border:0;border-radius:12px;cursor:pointer">Datos de campo / Fotos / Video</button><section id="fieldCapture"><h2>Recolección para la simulación</h2><p>Variables y LiDAR a 5 Hz · Fotos a 2 Hz · Video MJPEG hasta 10 FPS. Captura sin órdenes de movimiento.</p>
+<button data-capture="start">Recolectar datos</button><button data-capture="stop">Terminar sesión</button><button data-capture="photo">Tomar foto</button><button data-capture="video" id="captureVideo">Grabar / detener video</button><a href="/api/recoleccion-export">Descargar sesión ZIP</a><div id="captureStatus">Consultando…</div></section>
+<script>
+(()=>{document.getElementById('openFieldCapture').onclick=()=>{const p=document.getElementById('fieldCapture');p.style.display=p.style.display==='block'?'none':'block'};const out=document.getElementById('captureStatus');let busy=false;
+async function update(action){if(busy)return;busy=true;try{const r=await fetch('/api/recoleccion'+(action?'/'+action:''),{method:action?'POST':'GET'});const d=await r.json();if(!r.ok)throw Error(d.error||r.status);out.textContent=(d.active?'● RECOLECTANDO':'○ Detenido')+' | Video: '+(d.video?'grabando':'apagado')+' | Muestras: '+d.samples+' | Descartadas: '+d.dropped+' | Cola: '+d.queue+' | Disco libre: '+d.free_gb+' GB\nSesión: '+(d.session||'—')+(d.error?'\nERROR: '+d.error:'');}catch(e){out.textContent='Error: '+e.message}finally{busy=false}}
+document.querySelectorAll('[data-capture]').forEach(b=>b.onclick=()=>update(b.dataset.capture));update();setInterval(()=>update(),2000)})();
+</script>
+
 </body>
 </html>

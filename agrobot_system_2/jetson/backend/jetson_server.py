@@ -39,6 +39,7 @@ from ble_link import BleActuatorLink
 from enlace_c3 import EnlaceC3
 import udp_actuator_link
 import config_store
+import perfiles_entorno
 import health
 from slam import PoseEstimator, LidarReactive, MapManager
 from costmap_local import CostmapLocal
@@ -55,12 +56,18 @@ from navigation_logger import NavigationLogger, analizar_sesion
 from aprendizaje import Aprendizaje
 from paso_robotico import PasoRobotico
 from suelo_libre import SueloLibre
+from barrido_tilt import (BarridoTilt, FrenoProactivo, EstimadorAltura,
+                          inclinacion_por_servo, SERVO_LEJOS_DEG, SERVO_CERCA_DEG)
 from grabador import Grabador, TELEMETRIA_HZ
 import evasion as evasion_mod
 from cabeceo import CabeceoIMU
 from politica import Politica
 from deslizamiento import MonitorDeslizamiento
 from modo_seguro import ModoSeguro, SEGURO, PRECAUCION
+from supervisor_movimiento import SupervisorMovimiento
+from manual_demo import command as demo_command, reference as demo_reference
+from c3_setup import C3Setup
+c3_setup = C3Setup()
 from auto_comunicacion import inicializar_auto_comunicacion
 
 # =============================================
@@ -157,10 +164,25 @@ lidar_reactive = LidarReactive()
 suelo_libre = SueloLibre()
 lidar_reactive.hueco_camara = lambda: suelo_libre.hueco_delante(
     state.config["slam"]["robot_ancho_cm"] / 100.0)
+# Barrido de tilt + freno proactivo por envolvente de vuelco (ver barrido_tilt.py).
+# Se activa con autonomia.barrido_tilt (OFF por defecto): mueve el servo para ver
+# lo bajo que el LIDAR no ve y frena antes de volcar/atrancarse.
+barrido_tilt_ctrl = BarridoTilt()
+freno_proactivo = FrenoProactivo()
+# Estima la altura del montículo por paralaje al acercarse (ver barrido_tilt.py).
+# h_cam ~ altura de la cámara sobre el suelo.
+estimador_altura = EstimadorAltura(h_cam=0.4)
 costmap = CostmapLocal()
 map_manager = MapManager()
 
 ros_fused_pose: dict | None = None
+# Monotónico de cuándo llegó la última pose del EKF. Sin esto, `current_pose()`
+# devolvía la última pose para siempre aunque el EKF dejara de publicar: una
+# pose CONGELADA que el dashboard y la lógica tomaban como viva (auditoría
+# 2026-10-07). Con el sello se puede saber su antigüedad y no confiar en ella.
+ros_fused_pose_t: float | None = None
+# Pasado este umbral sin pose nueva del EKF, la localización deja de ser fiable.
+POSE_VIEJA_S = 1.5
 ros_last_map: dict | None = None
 
 # Sistema de evasión de obstáculos (NUEVO 2026-09-13)
@@ -332,6 +354,9 @@ class SesgoGiroscopio:
 sesgo_giro = SesgoGiroscopio()
 
 
+from lora_sensor_codec import SampleGate
+lora_sample_gate=SampleGate()
+
 class EnvTelemetryProtocol(asyncio.DatagramProtocol):
     def connection_made(self, transport):
         self.transport = transport
@@ -382,6 +407,9 @@ class EnvTelemetryProtocol(asyncio.DatagramProtocol):
                                f"downlink LoRaWAN.",
                     "tipo": "sistema",
                 }))
+            return
+
+        if payload.get("sensor_v") == 3 and not lora_sample_gate.accept(payload):
             return
 
         seq = payload.get("seq")
@@ -548,51 +576,65 @@ class ActuatorController:
         v_ref, omega_ref = self._apply_ramp(
             self._obj_v, self._obj_omega, state.config["safety"])
 
-        # Frenado por LIDAR. Vale para todo lo que mueve el robot: pulsos
-        # manuales, Nav2 y la patrulla. (Aquí había una rama previa para
-        # ControladorEvasion que nunca se ejecutaba: exigía un atributo
-        # `_lidar_scan` que no existe en ningún archivo.)
-        v_seg, aviso = lidar_reactive.limitar_velocidad(v_ref, state.config["slam"])
-        if v_seg != v_ref:
-            # La rampa sigue desde lo realmente aplicado. Si no, al
-            # despejarse el obstáculo el robot saltaba de 0 a la velocidad
-            # pedida sin rampa: un scan con un hueco bastaba para un tirón.
-            self._ramp_v = v_seg
-            ahora = time.monotonic()
-            if aviso is not None and ahora - self._ultimo_aviso_t > 0.25:
-                self._ultimo_aviso_t = ahora
-                # _schedule y NO _lanzar: `send_command` también se llama desde
-                # el hilo de ROS (callback de /cmd_vel de Nav2), donde no hay
-                # bucle de eventos. `_lanzar` lanzaba ahí RuntimeError y la
-                # excepción MATABA el hilo del puente ROS: el backend se
-                # quedaba sin LIDAR, sin mapa y sin poder navegar, con el
-                # proceso vivo y respondiendo HTTP (2026-09-17).
-                _schedule(state.broadcast({"type": "obstacle_warning", "data": aviso}))
-            v_ref = v_seg
+        try:
+            v_ref, omega_ref = demo_reference(v_ref, omega_ref)
+        except (ValueError, TypeError):
+            v_ref = omega_ref = 0.0
+        if not self.link.connected:
+            v_ref = omega_ref = 0.0
+            self._obj_v = self._obj_omega = self._ramp_v = self._ramp_omega = 0.0
 
-        # Patinaje y modo seguro: recortan TODO lo que mueve el robot, igual
-        # que el freno por LIDAR. En SEGURO la autonomía queda en 0 y el
-        # mando manual va lento (para sacarlo del apuro).
-        factor = min(monitor_desliz.factor_velocidad(),
-                     modo_seg.factor(manual=not _autonomia_activa()))
-        if factor < 1.0:
-            v_ref *= factor
-            omega_ref *= factor
-        monitor_desliz.on_orden(v_ref, omega_ref)
+        # Frenado por LIDAR DESHABILITADO: permite manejo manual sin restricciones en pasillos
+        # (comentado 2026-10-07 — usuario pide control total sin bloqueos automáticos)
+        # v_seg, aviso = lidar_reactive.limitar_velocidad(v_ref, state.config["slam"])
+        # if v_seg != v_ref:
+        #     self._ramp_v = v_seg
+        #     ahora = time.monotonic()
+        #     if aviso is not None and ahora - self._ultimo_aviso_t > 0.25:
+        #         self._ultimo_aviso_t = ahora
+        #         _schedule(state.broadcast({"type": "obstacle_warning", "data": aviso}))
+        #     v_ref = v_seg
+
+        # Patinaje y modo seguro DESHABILITADOS: control manual sin restricciones
+        # (comentado 2026-10-07 — usuario pide control total sin limitaciones automáticas)
+        # factor = min(monitor_desliz.factor_velocidad(),
+        #              modo_seg.factor(manual=not _autonomia_activa()))
+        # if factor < 1.0:
+        #     v_ref *= factor
+        #     omega_ref *= factor
+        # monitor_desliz.on_orden(v_ref, omega_ref)  # DESHABILITADO: sin monitoreo restrictivo
+
+        # PROTECCIÓN FINAL COMÚN (supervisor): único punto por el que pasa TODO
+        # lo que mueve el robot (manual, Nav2, patrulla, exploración), así que
+        # es el lugar correcto para enclavar la emergencia y unificar límites.
+        # OFF por defecto (`safety.supervisor_activo`): activar tras validar.
+        # NO reemplaza el freno por LIDAR (capa aparte, sigue bajo tu control).
+        if state.config.get("safety", {}).get("supervisor_activo", False):
+            v_ref, omega_ref, _mot_sup = supervisor.proteccion_final(v_ref, omega_ref)
 
         if abs(v_ref) > 1e-3 or abs(omega_ref) > 1e-3:
             self._t_movimiento = time.monotonic()
         pose_estimator.on_command(v_ref, omega_ref)
         ros_bridge.publish_wheel_odom(v_ref, omega_ref)
         self.link.set_actuators(self._servo_angle_with_offset(), state.led_on)
-        self.link.send_command(v_ref, omega_ref, scan_cmd)
+        self.link.send_command(v_ref, self._giro_signo() * omega_ref, scan_cmd)
 
     def send_actuator_update(self):
         """Manda servo/LED sin tocar el movimiento: reusa la velocidad que
         la rampa ya tiene aplicada, en vez de forzar 0 (si el robot va en
         marcha y el operador toca el LED, no debe dar un tirón)."""
         self.link.set_actuators(self._servo_angle_with_offset(), state.led_on)
-        self.link.send_command(self._ramp_v, self._ramp_omega, 0)
+        self.link.send_command(self._ramp_v, self._giro_signo() * self._ramp_omega, 0)
+
+    def _giro_signo(self) -> int:
+        """-1 si el giro está invertido por hardware (config control.invertir_giro).
+
+        Corrige por SOFTWARE el caso "pido izquierda y va a la derecha" sin
+        reflashear: se niega omega JUSTO al enviar a la C3. No se toca el omega
+        LÓGICO (el que va a la odometría/EKF y respeta la convención ROS
+        omega>0=izquierda): es solo una corrección de cableado en el borde del
+        actuador, así el giroscopio y lo comandado quedan con el mismo signo."""
+        return -1 if state.config.get("control", {}).get("invertir_giro", False) else 1
 
     def _servo_angle_with_offset(self) -> int:
         """Aplica el offset de calibración al ángulo pedido. Antes este
@@ -612,6 +654,13 @@ class ActuatorController:
         self._obj_omega = 0.0
         self._ramp_last_t = time.monotonic()
         state.led_on = False
+        # Enclava la emergencia en el supervisor SOLO si está activo: así, con
+        # el flag OFF el supervisor queda dormido y no acumula estado (a
+        # `emergency_stop` también lo llaman `park`/desconexión/watchdog, que no
+        # son emergencias reales). Con el flag ON, la protección final rechaza
+        # todo movimiento hasta un rearme explícito (supervisor.rearmar, salud OK).
+        if state.config.get("safety", {}).get("supervisor_activo", False):
+            supervisor.emergencia()
         pose_estimator.on_command(0.0, 0.0)
         ros_bridge.publish_wheel_odom(0.0, 0.0)
         self.link.emergency_stop()
@@ -643,6 +692,7 @@ def _schedule(coro):
 
 
 def _ros_on_cmd_vel(v_ref: float, omega_ref: float):
+    return  # manual demo: Nav2 does not own motors
     """Nav2 publicó /cmd_vel — se manda por el mismo UDP binario de siempre.
     Solo (v, omega): el robot es diferencial, no hay componente lateral."""
     if actuator_proto is not None:
@@ -703,8 +753,9 @@ def _ros_on_scan_points(points: list[dict]):
 
 def _ros_on_fused_pose(pose: dict):
     """robot_localization publicó /odometry/filtered — reemplaza al PoseEstimator casero."""
-    global ros_fused_pose, _ultimo_envio_pose
+    global ros_fused_pose, ros_fused_pose_t, _ultimo_envio_pose
     ros_fused_pose = pose
+    ros_fused_pose_t = time.monotonic()
     ahora = time.monotonic()
     if ahora - _ultimo_envio_pose < 0.12:      # ~8 Hz al dashboard
         return
@@ -733,6 +784,13 @@ def _ros_on_map(map_dict: dict):
 monitor_desliz = MonitorDeslizamiento()
 modo_seg = ModoSeguro()
 
+# Supervisor central de movimiento (ver supervisor_movimiento.py). Por ahora
+# solo se usa su PROTECCIÓN FINAL COMÚN (emergencia enclavada + límites), y SOLO
+# si `safety.supervisor_activo` está en true (OFF por defecto): así se puede
+# validar sin cambiar el comportamiento actual. Los límites salen de los topes
+# FÍSICOS reales del firmware (V_MAX/OMEGA_MAX), no de los ficticios del backend.
+supervisor = SupervisorMovimiento(v_max=0.55, omega_max=1.5)
+
 
 def _ros_on_odom_lidar(v: float, w: float):
     """Velocidad medida por rf2o (hilo de ROS): solo actualiza números."""
@@ -752,6 +810,24 @@ def current_pose() -> dict:
     y ya publicó al menos una vez; si no, cae al filtro complementario
     casero de slam.py para que el dashboard nunca se quede sin lectura."""
     return ros_fused_pose if ros_fused_pose is not None else pose_estimator.snapshot()
+
+
+def pose_edad_s() -> float | None:
+    """Segundos desde la última pose del EKF, o None si nunca llegó una.
+
+    Reloj monótono (no time.time): inmune a saltos del reloj del sistema, que
+    en esta Jetson sin RTC pueden ser de años al arrancar (ver memoria)."""
+    if ros_fused_pose_t is None:
+        return None
+    return time.monotonic() - ros_fused_pose_t
+
+
+def pose_confiable() -> bool:
+    """¿La localización es de fiar AHORA? False si el EKF no corre o si su
+    última pose es más vieja que POSE_VIEJA_S (pose congelada). Los modos que
+    dependen de localización deben consultarlo antes de navegar con la pose."""
+    edad = pose_edad_s()
+    return edad is not None and edad <= POSE_VIEJA_S
 
 
 # =============================================
@@ -777,6 +853,8 @@ async def ws_handler(request: web.Request):
             "health": _salud_completa(),
             "pose": current_pose(),
             "pose_source": "ros_ekf" if ros_fused_pose is not None else "dead_reckoning",
+            "pose_edad_s": (round(e, 2) if (e := pose_edad_s()) is not None else None),
+            "pose_confiable": pose_confiable(),
             "lidar_scan": _decimar(lidar_reactive.last_scan or [], RADAR_MAX_PUNTOS),
             "map": ros_last_map,
             "ros_available": ros_bridge.available,
@@ -814,12 +892,20 @@ async def ws_handler(request: web.Request):
                 # Antes se mandaba v=1 crudo y el firmware lo recortaba a
                 # V_MAX en silencio: la UI decía 1.0 m/s y el robot iba a
                 # 0.55, y no había forma de pedir marcha lenta.
-                ctrl = state.config["control"]
-                scale = _unit(cmd.get("scale", 1.0), lo=0.0)
-                v = _unit(cmd.get("v", 0.0)) * ctrl["max_v_mps"] * scale
-                omega = _unit(cmd.get("omega", 0.0)) * ctrl["max_omega_rps"] * scale
-                scan = int(bool(cmd.get("scan", False)))
-                actuator_proto.send_command(v, omega, scan)
+                try:
+                    v, omega = demo_command(cmd.get("v",0),cmd.get("omega",0),
+                                            float(cmd.get("scale",1))*100)
+                except (ValueError, TypeError):
+                    actuator_proto.emergency_stop()
+                    continue
+                if conductor is not None:
+                    conductor.parar()
+                if enlace_c3 is not None and enlace_c3.connected:
+                    if (v or omega) and not await _c3_ready_for_drive():
+                        actuator_proto.emergency_stop()
+                        await ws.send_json({"type":"error","error":"Configura la C3 1.1 y entrega control a Jetson"})
+                        continue
+                    actuator_proto.send_command(v, omega, 0)
 
             elif cmd.get("type") == "actuator":
                 # Servo / LED. Va por su propio mensaje y NO pasa por el
@@ -841,6 +927,10 @@ async def ws_handler(request: web.Request):
 
     finally:
         state.ws_clients.discard(ws)
+        if conductor is not None:
+            conductor.parar()
+        if actuator_proto is not None:
+            actuator_proto.emergency_stop()
 
     return ws
 
@@ -946,6 +1036,27 @@ def _autonomia_activa() -> bool:
                 or (explorador is not None and explorador.activo))
 
 
+def _barrido_activo() -> bool:
+    """¿Activo el barrido de tilt + freno proactivo? (flag de config, OFF def.)"""
+    return bool(state.config["autonomia"].get("barrido_tilt"))
+
+
+def _barrido_estable() -> bool:
+    """Con el barrido activo, ¿el servo está quieto en un ángulo conocido del
+    barrido? Entonces la geometría (corregida por tilt) vale para suelo_libre."""
+    if not _barrido_activo():
+        return False
+    st = state.actuator_status or {}
+    if not st or st.get("scanning") or time.time() - st.get("_received_at", 0) > 1.0:
+        return False
+    ang = st.get("servo_angle")
+    if ang is None:
+        return False
+    off = state.config["calibration"]["servo_offset_deg"]
+    return min(abs(ang - (SERVO_LEJOS_DEG + off)),
+               abs(ang - (SERVO_CERCA_DEG + off))) <= SERVO_TOLERANCIA_DEG
+
+
 def _detener_autonomia():
     """Lo mismo que el botón de parar misión: la patrulla y el explorador
     primero (si no, vuelven a mandar velocidad o una meta a Nav2)."""
@@ -962,6 +1073,19 @@ def _detener_autonomia():
 MODO_SEGURO_HZ = 5
 
 
+def _imu_vuelco() -> dict:
+    """Acelerómetro (g) y velocidad de balanceo (gyroY, eje de avance) del
+    último paquete del IMU, para que modo_seguro detecte inclinación/vuelco.
+    Vacío si aún no hay IMU: así no dispara nada."""
+    env = state.env_telemetry or {}
+    if "accelZ" not in env:
+        return {}
+    return {
+        "acc": (env.get("accelX", 0.0), env.get("accelY", 0.0), env.get("accelZ", 0.0)),
+        "giro_roll_dps": env.get("gyroY", 0.0),
+    }
+
+
 def _entradas_modo_seguro() -> dict:
     ahora = time.time()
     vistos = health._last_seen
@@ -976,6 +1100,7 @@ def _entradas_modo_seguro() -> dict:
         "temp_c": (state.system_stats or {}).get("temp_c"),
         "ekf_var_vx": (ros_fused_pose or {}).get("var_vx") if ros_bridge.available else None,
         "mapa_corrupto": bool((ros_last_map or {}).get("corrupto")),
+        **_imu_vuelco(),
     }
 
 
@@ -1188,6 +1313,7 @@ async def _bucle_suelo_libre():
     cámara al frente y quieta: con el servo girado la geometría no vale y un
     obstáculo saldría a una distancia falsa."""
     ultimo_n = None
+    recorrido = 0.0        # distancia avanzada, para el paralaje de altura
     while True:
         await asyncio.sleep(1.0 / SUELO_HZ)
         try:
@@ -1198,12 +1324,45 @@ async def _bucle_suelo_libre():
                 continue
             ultimo_n = dato[2]
             al_frente, _ = _servo_al_frente()
-            if not al_frente:
+            # Con el barrido activo la cámara mira a propósito al suelo cercano o
+            # al sendero: si está quieta en un ángulo conocido, la geometría
+            # corregida por tilt (ver _geometria_camara) sí vale.
+            if not al_frente and not _barrido_estable():
                 suelo_libre.ultimo = None          # nada de datos con la cámara girada
                 continue
             await asyncio.to_thread(suelo_libre.analizar, cv2, dato[0], _geometria_camara())
+            # Paralaje: con el barrido activo, acumula avance y alimenta el
+            # estimador de altura con la distancia al obstáculo que ve la cámara.
+            if _barrido_activo():
+                recorrido += abs(getattr(actuator_proto, "_ramp_v", 0.0)) / SUELO_HZ
+                hueco = suelo_libre.hueco_delante(
+                    state.config["slam"]["robot_ancho_cm"] / 100.0)
+                estimador_altura.alimentar(recorrido, hueco, time.monotonic())
         except Exception as exc:
             print(f"[suelo] análisis falló: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(1.0)
+
+
+async def _bucle_barrido_tilt():
+    """Mueve el servo de tilt en barrido (lejos=sendero / cerca=suelo) cuando el
+    barrido está activo y hay autonomía. Con el flag OFF no toca el servo: lo
+    maneja el operador. A ~5 Hz, suficiente para el dwell del barrido."""
+    t0 = time.monotonic()
+    anterior = None
+    while True:
+        await asyncio.sleep(0.2)
+        try:
+            if not _barrido_activo() or not _autonomia_activa() or actuator_proto is None:
+                anterior = None
+                continue
+            v = abs(getattr(actuator_proto, "_ramp_v", 0.0))
+            ang = clamp_servo(barrido_tilt_ctrl.angulo(time.monotonic() - t0, v))
+            if ang != anterior:
+                state.servo_angle = ang
+                actuator_proto.send_actuator_update()
+                anterior = ang
+        except Exception as exc:
+            print(f"[barrido] falló: {type(exc).__name__}: {exc}", flush=True)
             await asyncio.sleep(1.0)
 
 
@@ -1343,7 +1502,7 @@ async def evasion_get_handler(request: web.Request):
     return web.json_response(evasion_estado)
 
 
-def _parada_total(origen: str) -> list[str]:
+def _parada_total(origen: str, remote: bool = True) -> list[str]:
     """PARADA DE EMERGENCIA: detiene TODO lo que puede mover el robot.
 
     Un solo sitio para todos los caminos (botón del dashboard por HTTP o
@@ -1377,6 +1536,8 @@ def _parada_total(origen: str) -> list[str]:
     _schedule(state.broadcast({"type": "toast", "data": {
         "kind": "error", "title": "PARADA DE EMERGENCIA",
         "message": f"Todo detenido ({origen})."}}))
+    if remote:
+        _schedule(c3_setup.stop())
     return hecho
 
 
@@ -1433,6 +1594,14 @@ async def paso_post_handler(request: web.Request):
                               "escala": paso_robotico.escala})
 
 
+async def _c3_ready_for_drive():
+    try:
+        d = await c3_setup.status()
+        return bool(d.get("compatible") and d.get("verified") and not d.get("fault") and d.get("mode") == "JETSON")
+    except Exception:
+        return False
+
+
 async def drive_handler(request: web.Request):
     """POST /api/drive  {"accion": "adelante|atras|izquierda|derecha|parar",
                          "escala": 0.1..1, "maniobra": true}
@@ -1462,17 +1631,49 @@ async def drive_handler(request: web.Request):
     _detener_evasion()
     if paso_robotico is not None and paso_robotico.estado.get("activo"):
         paso_robotico.detener()
-    ctrl = state.config["control"]
-    escala = _unit(body.get("escala", 1.0), lo=0.0)
-    conductor.ordenar(accion,
-                      v_max=ctrl["max_v_mps"] * escala,
-                      omega_max=ctrl["max_omega_rps"] * escala,
-                      maniobra=bool(body.get("maniobra", True)))
-    return web.json_response({"ok": True, "accion": accion})
+    if enlace_c3 is None or not enlace_c3.connected:
+        return web.json_response({"error":"C3 apagada o sin enlace"},status=503)
+    try:
+        v, _ = demo_command(1,0,float(body.get("escala",.25))*100)
+    except (ValueError, TypeError):
+        return web.json_response({"error":"potencia invalida"},status=400)
+    if not await _c3_ready_for_drive():
+        return web.json_response({"error":"Carga firmware 1.1, confirma las ruedas y entrega control a Jetson en Motores y servo"},status=409)
+    accepted = conductor.ordenar(accion,v_max=v,omega_max=1.5,maniobra=False)
+    return web.json_response({"ok":accepted,"accion":accion,"duracion_s":.3,
+                              "error":None if accepted else "pulso en curso; no se acumula"},
+                              status=200 if accepted else 409)
+
+
+
+def _tilt_servo_extra() -> float:
+    """Inclinación extra de la cámara por el ÁNGULO DEL SERVO, respecto a HOME.
+
+    Corregido el 2026-10-14. Antes esto solo se sumaba con `barrido_tilt`
+    activo (flag OFF por defecto), así que con el servo parado fuera de HOME la
+    proyección al suelo seguía suponiendo la inclinación de HOME. Con el servo
+    a 76° —el ángulo que se usa para mirar el sendero— la cámara mira ~33°
+    abajo y la geometría asumía 15,5°: el suelo estimado se va al doble de
+    distancia y el sendero aparece corrido. El tilt del servo se conoce
+    siempre (es una orden propia), así que se aplica siempre.
+
+    Se prefiere el ángulo CONFIRMADO por el actuador y, si su telemetría está
+    vieja, el último ordenado: es la mejor estimación disponible y suponer HOME
+    es peor que suponer la orden. El modelo (ganancia 0,8°/°) sigue sin
+    verificar físicamente -> calibracion_camara.VERIFICADO.
+    """
+    st = state.actuator_status or {}
+    ang = st.get("servo_angle")
+    if ang is None or time.time() - st.get("_received_at", 0) > 1.0:
+        ang = state.servo_angle            # último ordenado (ya sin offset)
+    else:
+        ang -= state.config["calibration"]["servo_offset_deg"]
+    return inclinacion_por_servo(ang)
 
 
 def _geometria_camara() -> dict:
-    """La geometría de la cámara, corregida con lo que cabecea el chasis.
+    """La geometría de la cámara, corregida con el tilt del servo y con lo que
+    cabecea el chasis.
 
     El detector de senderos proyecta la imagen al suelo suponiendo una
     inclinación fija de la cámara. En la huerta el robot cabecea en cada surco
@@ -1484,12 +1685,14 @@ def _geometria_camara() -> dict:
     geometría cruda a propósito: alimenta el EKF y no se toca sin medirlo.
     """
     g = state.config["odometria_webcam"]
-    if not state.config["autonomia"].get("compensar_cabeceo", True):
+    extra = _tilt_servo_extra()
+    if state.config["autonomia"].get("compensar_cabeceo", True):
+        cabeceo = cabeceo_imu.grados
+        if cabeceo is not None:            # None = sin telemetría todavía
+            extra += cabeceo
+    if not extra:
         return g
-    cabeceo = cabeceo_imu.grados
-    if cabeceo is None:                       # sin telemetría todavía
-        return g
-    return {**g, "camara_inclinacion_deg": g["camara_inclinacion_deg"] + cabeceo}
+    return {**g, "camara_inclinacion_deg": g["camara_inclinacion_deg"] + extra}
 
 
 async def sendero_vista_handler(request: web.Request):
@@ -1518,10 +1721,24 @@ async def sendero_vista_handler(request: web.Request):
 
 
 async def drive_mode_handler(request: web.Request):
-    """GET: modo actual. POST {"modo": "interior"|"exterior"}: cambia el modo."""
+    """GET: modo actual. POST {"modo": ..., "perfil": bool}: cambia el modo.
+
+    `modo` cambia la duración de los pulsos (pulse_drive.MODOS). Con
+    `"perfil": true` aplica ADEMÁS los umbrales espaciales de ese entorno
+    (perfiles_entorno): hasta el 2026-10-14 el modo solo tocaba los pulsos, y
+    el robot seguía exigiendo 1 m libre por delante para moverse —el perfil de
+    huerta— lo que en una sala con macetas lo deja clavado.
+    """
     if request.method == "GET":
-        return web.json_response({"modo": conductor.modo if conductor else "exterior",
-                                  "modos": list(MODOS.keys())})
+        actual = conductor.modo if conductor else "exterior"
+        return web.json_response({
+            "modo": actual, "modos": list(MODOS.keys()),
+            "perfiles": list(perfiles_entorno.PERFILES.keys()),
+            # Qué cambiaría al aplicar cada perfil, sin aplicarlo.
+            "perfil_pendiente": {
+                n: {k: {"antes": a, "despues": d}
+                    for k, (a, d) in perfiles_entorno.diferencias(state.config, n).items()}
+                for n in perfiles_entorno.PERFILES}})
     body = await request.json()
     modo = body.get("modo", "exterior")
     if modo not in MODOS:
@@ -1531,12 +1748,26 @@ async def drive_mode_handler(request: web.Request):
     # Se guarda: antes cada reinicio del backend volvía a "exterior" (pulsos
     # de 1 s a toda velocidad) sin avisar (2026-10-02).
     state.config = config_store.update_section("control", {"modo_manejo": modo})
-    await state.broadcast({"type": "drive_mode", "data": {"modo": modo}})
+
+    difs = {}
+    if body.get("perfil") and modo in perfiles_entorno.PERFILES:
+        try:
+            difs = perfiles_entorno.aplicar(config_store, state.config, modo)
+        except perfiles_entorno.PerfilIncoherente as exc:
+            # No se aplica a medias: el margen de parada y la velocidad van
+            # juntos o no van.
+            return web.json_response({"error": f"perfil incoherente: {exc}"},
+                                     status=400)
+        state.config = config_store.load()
+
+    await state.broadcast({"type": "drive_mode", "data": {"modo": modo,
+                                                          "perfil": difs}})
+    detalle = (f"Cambiado a modo {modo}" if not difs else
+               f"Modo {modo} + perfil de entorno ({len(difs)} umbrales)")
     await state.broadcast({"type": "toast", "data": {
-        "kind": "success", "title": "Modo de manejo",
-        "message": f"Cambiado a modo {modo}",
+        "kind": "success", "title": "Modo de manejo", "message": detalle,
     }})
-    return web.json_response({"ok": True, "modo": modo})
+    return web.json_response({"ok": True, "modo": modo, "perfil": difs})
 
 
 def _foco(encendido: bool):
@@ -1615,7 +1846,17 @@ def _conducir_pulso(accion: str, maniobra: bool = True):
     maniobra de tierra blanda haría girar al robot rozándola."""
     ctrl = state.config["control"]
     escala = state.config["autonomia"]["escala_velocidad"]
-    conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * escala,
+    v_max = ctrl["max_v_mps"] * escala
+    # Freno proactivo: si la cámara ve un montículo bajo delante (lo que el
+    # LIDAR alto no ve), baja a la velocidad segura de la envolvente de vuelco
+    # ANTES de llegar. Solo con el barrido activo y para ir hacia delante.
+    if _barrido_activo() and accion == "adelante":
+        hueco = suelo_libre.hueco_delante(state.config["slam"]["robot_ancho_cm"] / 100.0)
+        # Altura estimada por paralaje; si aún no hay estimación, tope_velocidad
+        # usa el peor caso conservador.
+        altura = estimador_altura.altura()
+        v_max = min(v_max, freno_proactivo.tope_velocidad(hueco, v_max, altura_m=altura))
+    conductor.ordenar(accion, v_max=v_max,
                       omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
 
 
@@ -1739,59 +1980,97 @@ async def patrol_scan_handler(request: web.Request):
 # ===== GRABACIÓN DE VIDEO =====
 # =============================================
 video_recording = False
-video_writer = None
-video_frames_queue = None
+_video_task: "asyncio.Task | None" = None
+_video_file: str | None = None
 VIDEO_DIR = _AQUI / "videos"
 VIDEO_DIR.mkdir(exist_ok=True)
+VIDEO_FPS = 15          # metadato de reproducción; aproxima el ritmo del stream
+
+
+async def _bucle_grabar_video(filename: str):
+    """Graba a disco los MISMOS frames que ve el stream (con overlay YOLO).
+
+    El handler anterior creaba el VideoWriter pero NADIE le pasaba frames: el
+    .mp4 salía vacío. Acá nos suscribimos a la cámara (igual que el MJPEG),
+    decodificamos cada JPEG a BGR y lo escribimos. El writer se crea con el
+    TAMAÑO REAL del primer frame (antes se fijaba 1920x1080 a ciegas y, si no
+    coincidía, write() fallaba en silencio)."""
+    global video_recording, _video_file
+    import numpy as np          # np no está en el scope global de este módulo
+    if camera is None or cv2 is None:
+        video_recording = False
+        return
+    cola = camera.subscribe()
+    writer = None
+    n = 0
+    try:
+        while video_recording:
+            try:
+                jpeg = await asyncio.wait_for(cola.get(), timeout=2.0)
+            except asyncio.TimeoutError:
+                continue
+            frame = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+            if frame is None:
+                continue
+            if writer is None:
+                h, w = frame.shape[:2]
+                writer = cv2.VideoWriter(
+                    str(VIDEO_DIR / filename),
+                    cv2.VideoWriter_fourcc(*"mp4v"), VIDEO_FPS, (w, h))
+                if not writer.isOpened():
+                    print(f"[VIDEO] no se pudo abrir el writer para {filename}", flush=True)
+                    video_recording = False
+                    break
+            writer.write(frame)
+            n += 1
+    except asyncio.CancelledError:
+        pass
+    finally:
+        camera.unsubscribe(cola)
+        if writer is not None:
+            writer.release()
+        print(f"[VIDEO] grabación cerrada: {filename} ({n} frames)", flush=True)
+
 
 async def video_record_handler(request: web.Request):
-    """Inicia o detiene la grabación de video desde la cámara."""
-    global video_recording, video_writer, video_frames_queue
+    """Inicia o detiene la grabación de video desde la cámara.
+    POST {"action": "start"|"stop"|"status"}."""
+    global video_recording, _video_task, _video_file
 
     body = await request.json()
     action = body.get("action", "start")
 
+    if action == "status":
+        return web.json_response({"grabando": video_recording, "file": _video_file})
+
     if action == "start":
         if video_recording:
-            return web.json_response({"error": "ya hay una grabación en curso"}, status=400)
+            return web.json_response({"error": "ya hay una grabación en curso",
+                                      "file": _video_file}, status=400)
+        if camera is None:
+            return web.json_response({"error": "cámara no disponible"}, status=503)
+        _video_file = f"agrobot_video_{int(time.time())}.mp4"
+        video_recording = True
+        _video_task = asyncio.create_task(_bucle_grabar_video(_video_file))
+        print(f"[VIDEO] iniciando grabación: {_video_file}", flush=True)
+        return web.json_response({"ok": True, "file": _video_file})
 
-        # crear archivo de salida
-        timestamp = int(time.time())
-        filename = f"agrobot_video_{timestamp}.mp4"
-        video_path = VIDEO_DIR / filename
-
-        # inicializar video writer con los parámetros de la cámara
-        if camera is not None:
-            # usar dimensiones estándar (1920x1080 o lo que tenga la cámara)
-            w, h, fps = 1920, 1080, 30
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            video_writer = cv2.VideoWriter(str(video_path), fourcc, fps, (w, h))
-            video_recording = True
-            video_frames_queue = asyncio.Queue()
-
-            print(f"[VIDEO] Iniciando grabación: {filename}")
-            return web.json_response({"ok": True, "file": filename})
-        else:
-            return web.json_response({"error": "cámara no disponible"}, status=500)
-
-    elif action == "stop":
+    if action == "stop":
         if not video_recording:
             return web.json_response({"error": "no hay grabación en curso"}, status=400)
-
         video_recording = False
-        if video_writer is not None:
-            video_writer.release()
-            video_writer = None
+        if _video_task is not None:
+            try:
+                await asyncio.wait_for(_video_task, timeout=3.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                _video_task.cancel()
+            _video_task = None
+        archivo = _video_file
+        _video_file = None
+        print(f"[VIDEO] grabación detenida: {archivo}", flush=True)
+        return web.json_response({"ok": True, "file": archivo})
 
-        # obtener el nombre del archivo desde el path
-        timestamp = int(time.time())
-        filename = f"agrobot_video_{timestamp - 60}.mp4"  # aproximado
-
-        print(f"[VIDEO] Grabación detenida: {filename}")
-        return web.json_response({"ok": True, "file": filename})
-
-    else:
-        return web.json_response({"error": "acción inválida"}, status=400)
+    return web.json_response({"error": "acción inválida"}, status=400)
 
 
 async def _avisar_al_gateway(payload: dict):
@@ -1924,6 +2203,12 @@ def list_model_files() -> list[dict]:
 
 async def models_list_handler(request: web.Request):
     return web.json_response(list_model_files())
+
+
+async def models_presets_handler(request: web.Request):
+    import modelos_preset
+    return web.json_response(modelos_preset.listar(
+        MODELS_DIR, state.config["ai"]["active_model"]))
 
 
 async def models_load_handler(request: web.Request):
@@ -2711,11 +2996,11 @@ async def start_background(app: web.Application):
     global actuator_proto, ble_link, enlace_c3
     ctrl = state.config["control"]
     ble_link = BleActuatorLink(
-        v_max=ctrl["max_v_mps"], omega_max=ctrl["max_omega_rps"])
+        v_max=0.55, omega_max=1.5)
     # Vía de respaldo por WiFi (ver enlace_c3.py). Si el puerto no se puede
     # abrir, queda solo el BLE, como antes.
     wifi_c3 = await udp_actuator_link.abrir(lambda _trama: None)
-    enlace_c3 = EnlaceC3(ble_link, wifi_c3)
+    enlace_c3 = EnlaceC3(ble_link, wifi_c3, wifi_only=True)
     actuator_proto = ActuatorController(enlace_c3)
     enlace_c3._on_status = actuator_proto.on_status
     enlace_c3.start()
@@ -2723,6 +3008,8 @@ async def start_background(app: web.Application):
     # --- SISTEMA AUTOMÁTICO DE COMUNICACIÓN ---
     global auto_comunicacion
     try:
+        if os.environ.get("AGROBOT_AUTO_COMUNICACION", "0") != "1":
+            raise RuntimeError("desactivado: requiere corregir interfaz WiFi y contrato de configuración")
         auto_comunicacion = await inicializar_auto_comunicacion(
             config_store=state.config,
             modo_wifi="patrullaje"
@@ -2788,6 +3075,7 @@ async def start_background(app: web.Application):
     app["zupt_task"] = asyncio.create_task(_bucle_zupt())
     app["modo_seguro_task"] = asyncio.create_task(_bucle_modo_seguro())
     app["suelo_libre_task"] = asyncio.create_task(_bucle_suelo_libre())
+    app["barrido_tilt_task"] = asyncio.create_task(_bucle_barrido_tilt())
 
     # Patrulla autónoma. Se crea acá y no arriba porque sus callbacks
     # necesitan el `actuator_proto` que se acaba de construir.
@@ -2830,7 +3118,19 @@ async def start_background(app: web.Application):
         camara_al_frente=_servo_al_frente,
         get_geometria=_geometria_camara,
         get_costmap=lambda: costmap)
-    explorador = ExploradorReactivo(
+    # FSM conmutable detrás de un flag OFF por defecto: `maquina_estados.
+    # MaquinaEstados` tiene la MISMA interfaz que ExploradorReactivo (drop-in),
+    # añade estados explícitos + telemetría de transiciones y ganchos de escaneo
+    # de planta. Validada en el simulador (AGROBOT_FSM, A/B 2026-10-07). Se
+    # activa con `autonomia.maquina_estados: true`.
+    _ClaseExpl = ExploradorReactivo
+    if state.config["autonomia"].get("maquina_estados", False):
+        try:
+            from maquina_estados import MaquinaEstados as _ClaseExpl
+            print("[exploración] usando MaquinaEstados (FSM)", flush=True)
+        except Exception as exc:
+            print(f"[exploración] FSM no disponible ({exc}); uso ExploradorReactivo", flush=True)
+    explorador = _ClaseExpl(
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
         get_pose=ros_bridge.pose_en_mapa,
         conducir=_conducir_pulso,
@@ -3248,99 +3548,48 @@ async def diagnostico_wifi_handler(request: web.Request):
     return web.json_response(analisis)
 
 
-# --- HANDLERS DE MOTOR (v2.0) ---
-async def motor_comando_handler(request: web.Request):
-    """Control de motores con duty cycle dinámico."""
+# Manual demo: a single command path and truthful status.
+async def motor_comando_handler(request):
     try:
         data = await request.json()
-        v = data.get("v", 0.0)
-        omega = data.get("omega", 0.0)
-        duty = data.get("duty", 100)
+        v, w = demo_command(data.get("v",0), data.get("omega",0), data.get("duty",100))
+    except (ValueError, TypeError, AttributeError):
+        return web.json_response({"error":"orden invalida"}, status=400)
+    if v == 0 and w == 0:
+        _parada_total("motor HTTP cero")
+        return web.json_response({"status":"parada solicitada"})
+    if enlace_c3 is None or not enlace_c3.connected:
+        return web.json_response({"error":"C3 apagada o sin enlace"}, status=503)
+    if conductor is not None:
+        conductor.parar()
+    if not await _c3_ready_for_drive():
+        return web.json_response({"error":"Firmware o configuración pendiente; abre Motores y servo"},status=409)
+    actuator_proto.send_command(v,w,0)
+    return web.json_response({"status":"orden enviada", "referencia_v":v, "referencia_w":w,
+                              "velocidad_medida":False, "caduca_s":DEADMAN_S})
 
-        v = max(-1.0, min(1.0, float(v)))
-        omega = max(-1.0, min(1.0, float(omega)))
-        duty = max(0, min(100, int(duty)))
+async def motor_parar_handler(request):
+    hecho = _parada_total("motor HTTP parada")
+    return web.json_response({"status":"parada solicitada", "detenido":hecho,
+                              "c3_conectada":bool(enlace_c3 and enlace_c3.connected)})
 
-        cmd = {
-            "v": v,
-            "omega": omega,
-            "duty": duty
-        }
+async def motor_toggle_safeguard_handler(request):
+    return web.json_response({"error":"El timeout no se desactiva", "safeguard_enabled":True}, status=409)
 
-        if state.enlace_c3 and state.enlace_c3.ble and state.enlace_c3.ble.connected:
-            await state.enlace_c3.ble.enviar_comando(json.dumps(cmd))
-            print(f"[motor-cmd] enviado: v={v:.2f}, ω={omega:.2f}, duty={duty}%", flush=True)
-            return web.json_response({"status": "ok", "comando": cmd})
-        else:
-            return web.json_response({"status": "error", "msg": "BLE no conectado"}, status=503)
-    except Exception as e:
-        return web.json_response({"status": "error", "msg": str(e)}, status=400)
-
-
-async def motor_parar_handler(request: web.Request):
-    """Parada de emergencia - motores a 0."""
-    try:
-        cmd = {"v": 0.0, "omega": 0.0, "duty": 0}
-
-        if state.enlace_c3 and state.enlace_c3.ble and state.enlace_c3.ble.connected:
-            await state.enlace_c3.ble.enviar_comando(json.dumps(cmd))
-            print("[motor-parar] 🛑 PARADA DE EMERGENCIA", flush=True)
-            return web.json_response({"status": "parado"})
-        else:
-            return web.json_response({"status": "error", "msg": "BLE no conectado"}, status=503)
-    except Exception as e:
-        return web.json_response({"status": "error", "msg": str(e)}, status=400)
-
-
-# ⭐ NUEVO: toggle safeguard (timeout de seguridad)
-_safeguard_enabled = True  # global state
-
-
-async def motor_toggle_safeguard_handler(request: web.Request):
-    """⭐ POST /api/motor/toggle-safeguard — desactiva/activa el timeout de seguridad.
-
-    En pruebas, a veces el timeout de 500ms (parada automática sin comando) molesta.
-    Este endpoint lo desactiva: el robot sigue adelante indefinidamente sin órdenes.
-
-    Response: {"safeguard_enabled": bool}
-    """
-    global _safeguard_enabled
-    _safeguard_enabled = not _safeguard_enabled
-
-    status_str = "ACTIVADO" if _safeguard_enabled else "DESACTIVADO"
-    print(f"[motor-safeguard] 🔐 Timeout de seguridad {status_str}", flush=True)
-
-    return web.json_response({"safeguard_enabled": _safeguard_enabled})
-
-
-async def estado_completo_handler(request: web.Request):
-    """Retorna estado completo del sistema (C3, WiFi, BLE)."""
-    try:
-        ble_connected = False
-        if state.enlace_c3 and state.enlace_c3.ble:
-            ble_connected = state.enlace_c3.ble.connected
-
-        return web.json_response({
-            "timestamp": time.time(),
-            "c3": {
-                "v": 0.0,
-                "omega": 0.0,
-                "duty": 0,
-                "conectado": ble_connected
-            },
-            "wifi": {
-                "modo": "patrullaje",
-                "conectado": True
-            },
-            "ble": {
-                "conectado": ble_connected
-            },
-            "motor": {
-                "status": "ok" if ble_connected else "desconectado"
-            }
-        })
-    except Exception as e:
-        return web.json_response({"status": "error", "msg": str(e)}, status=500)
+async def estado_completo_handler(request):
+    link = enlace_c3.resumen() if enlace_c3 is not None else {}
+    wifi = link.get("wifi") or {}
+    env = state.env_telemetry or {}
+    received = env.get("_received_at")
+    age = max(0,time.time()-received) if received else None
+    return web.json_response({"timestamp":time.time(), "perfil":"demo-manual-trasero-v1",
+        "c3":{"conectado":bool(link.get("conectado")), "firmware_verificado":False},
+        "wifi":wifi, "ble":{"conectado":bool(link.get("ble"))},
+        "motor":{"status":"enlace disponible" if link.get("conectado") else "apagado o desconectado",
+                 "referencias":actuator_proto.velocidades() if actuator_proto else None,
+                 "velocidad_medida":False},
+        "imu":{"edad_s":age,"vigente":age is not None and age<1.0},
+        "safeguard_enabled":True,"deadman_s":DEADMAN_S})
 
 # --- FIN HANDLERS ---
 
@@ -3353,6 +3602,9 @@ def create_app() -> web.Application:
         print(f"[seguridad] SIN clave de dashboard ({CLAVE_DASHBOARD_PATH} no existe): "
               f"cualquiera en la red puede mover el robot")
         app = web.Application()
+    c3_setup.on_claim = lambda: _parada_total("configuracion C3", remote=False)
+    app.router.add_get("/api/c3/setup", c3_setup.get_handler)
+    app.router.add_post("/api/c3/setup/{action}", c3_setup.post_handler)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/video", video_handler)
     app.router.add_post("/api/video/record", video_record_handler)
@@ -3382,6 +3634,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/session-report", session_report_handler)
     app.router.add_get("/api/models", models_list_handler)
     app.router.add_post("/api/models/load", models_load_handler)
+    app.router.add_get("/api/models/presets", models_presets_handler)
     app.router.add_get("/api/hardware", hardware_get_handler)
     app.router.add_post("/api/hardware", hardware_update_handler)
     app.router.add_get("/api/calibration", calibration_get_handler)
@@ -3414,6 +3667,18 @@ def create_app() -> web.Application:
     app.router.add_post("/api/nav_cal/start", nav_cal_start_handler)
     app.router.add_post("/api/nav_cal/stop", nav_cal_stop_handler)
     app.router.add_get("/api/nav_cal/status", nav_cal_status_handler)
+    from recoleccion import install as install_collection
+    install_collection(app, lambda: {
+        "env": state.env_telemetry, "actuator_status": state.actuator_status,
+        "setpoint": {"servo_deg": state.servo_angle, "led": state.led_on},
+        "velocities": actuator_proto.velocidades(), "pose": current_pose(),
+        "pose_age_s": pose_edad_s(), "pose_reliable": pose_confiable(),
+        "lidar_scan": lidar_reactive.last_scan, "lidar_timestamp": lidar_reactive.last_scan_at,
+        "lidar_age_s": lidar_reactive.edad_scan_s(), "security": estado_seguridad(),
+        "system_stats": state.system_stats, "camera": camera.snapshot() if camera else None,
+        "detections": state.detections[-20:], "configuration": state.config,
+        "mission_active": state.mission_active,
+    }, lambda: camera.ultimo_frame() if camera else None)
     app.router.add_static("/captures", CAPTURES_DIR, show_index=False)
 
     # --- Training dashboard endpoints ---
@@ -3468,6 +3733,14 @@ def create_app() -> web.Application:
     app.on_startup.append(start_background)
     app.on_cleanup.append(on_cleanup)
     load_yolo_model(app)
+    @web.middleware
+    async def demo_guard(request, handler):
+        blocked = {"/api/mission/start", "/api/exploracion/start", "/api/evasion/start",
+                   "/api/patrol/auto", "/api/nav/set_goal", "/api/paso", "/api/nav_cal/start"}
+        if request.method == "POST" and request.path in blocked:
+            return web.json_response({"error":"Perfil de demostracion: solo manejo manual"},status=409)
+        return await handler(request)
+    app.middlewares.append(demo_guard)
     return app
 
 

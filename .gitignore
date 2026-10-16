@@ -60,3 +60,6 @@ agrobot_system_2/simulador_pasivo/percepcion_sintetica/weights/
 agrobot_system_2/simulador_pasivo/percepcion_sintetica/modelos/yolo/
 agrobot_system_2/simulador_pasivo/percepcion_sintetica/modelos/*intento*
 *.bak-*
+
+# Drivers de terceros compilados localmente (no versionar)
+agrobot_system_2/drivers/

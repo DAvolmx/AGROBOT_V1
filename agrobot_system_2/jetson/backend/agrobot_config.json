@@ -55,10 +55,10 @@
     "sendero_adaptativo": true,
     "sendero_igualar_luz": true,
     "compensar_cabeceo": true,
-    "politica_activa": true,
+    "sendero_parada_incierta_ciclos": 5,
     "sendero_si_no_cabe": "aviso",
     "sendero_holgura_lateral_cm": 14,
-    "sendero_parada_incierta_ciclos": 5
+    "politica_activa": true
   },
   "odometria_webcam": {
     "habilitada": true,
@@ -73,7 +73,7 @@
     "max_omega_rps": 4.0,
     "suavidad_duty": 1.0,
     "suavidad_periodo_s": 0.3,
-    "modo_manejo": "exterior",
+    "modo_manejo": "preciso",
     "c3_wifi_only": false
   },
   "safety": {

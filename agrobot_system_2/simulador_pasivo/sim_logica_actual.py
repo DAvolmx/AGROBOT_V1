@@ -115,6 +115,10 @@ class Config:
     fw_inner: float = 65.0
     fw_slew: float = 60.0
     fw_gap_ms: float = 25.0
+    # Firmware flasheado: "skidsteer_v3" (original BLE+WiFi, PWM por software de 200 ms, sin
+    # rampa, gira sobre su eje) o "1.2" (rampa, sin giro en el sitio, /config). Desde el
+    # 2026-10-16 el robot lleva el skidsteer_v3; los fw_* solo afectan al "1.2".
+    firmware: str = "skidsteer_v3"
 
     def slam_cfg(self):
         return {"robot_largo_cm": self.robot_largo_cm, "robot_ancho_cm": self.robot_ancho_cm,
@@ -194,6 +198,102 @@ class MotoresFirmware:
                     self.duty[i] += max(-step, min(step, goal - self.duty[i]))
             out.append(self.dir[i] * self.duty[i])
         return out                                 # duty firmado real de cada canal, en %
+
+
+# ======================================================================
+# Firmware skid-steer v3 ORIGINAL (esp32c3_actuador_v3_skidsteer.ino / agrobot_c3_skidsteer)
+# ======================================================================
+SK_V_MAX, SK_OMEGA_MAX, SK_TRACK, SK_RADIO = 0.55, 1.5, 0.33, 0.06
+SK_PERIODO_S = 0.200            # MOTOR_PERIODO_MS: PWM por SOFTWARE, 5 Hz
+SK_DEAD_S = 0.020               # DEAD_TIME_MS al invertir
+SK_BOOST, SK_UMBRAL, SK_HIST, SK_MON_S = 1.15, 0.85, 10, 0.100   # anti-hundimiento
+
+
+def sk_mix(v: float, w: float, boost: float = 1.0):
+    """Port de applyMotors(): devuelve (duty_izq, sent_izq, duty_der, sent_der) en %.
+    Suposición: el lado "IZQ" del firmware es el izquierdo físico (lo que el operador deja
+    configurado en el dashboard); omega>0 gira a la izquierda."""
+    vx = max(-SK_V_MAX, min(SK_V_MAX, v))
+    om = max(-SK_OMEGA_MAX, min(SK_OMEGA_MAX, w))
+    k = om * (SK_TRACK / 2.0) / SK_RADIO
+    vi, vd = vx - k, vx + k
+    m = max(abs(vi), abs(vd))
+    if m > SK_V_MAX:
+        vi, vd = vi / m * SK_V_MAX, vd / m * SK_V_MAX
+
+    def duty(x):
+        f = min(1.0, abs(x) / SK_V_MAX)
+        return min(100, int(round(f * 100 * boost))) if f > 0.02 else 0
+    di, dd = duty(vi), duty(vd)
+    return di, (1 if vi >= 0 else -1), dd, (1 if vd >= 0 else -1)
+
+
+class MotoresSkidSteer:
+    """Firmware original: duty por rueda -> ENCENDIDO/APAGADO por software (ciclo de 200 ms).
+    Encendido = tension completa (+-100 %); apagado = rueda libre (ambos pines a LOW).
+    Interfaz igual que MotoresFirmware: recibir(pv, pw, t) y tick(t) -> [R1, L1, L2, R2] en %."""
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.duty = [0] * 4            # dutyPedido por rueda
+        self.sent = [0] * 4
+        self.libre_hasta = [0.0] * 4
+        self.completo = [False] * 4    # dcCompleto
+        self.t_ciclo = 0.0             # cicloMotoraAt (global)
+        self.refreshed = -1e9
+        self.hist = [0] * SK_HIST
+        self.hi = 0
+        self.t_mon = 0.0
+        self.boost = 1.0
+
+    def _poner(self, i, duty, sent, t):
+        if duty == 0:
+            sent = 0
+        if sent != self.sent[i]:
+            self.libre_hasta[i] = t + SK_DEAD_S
+            self.sent[i] = sent
+        self.duty[i] = duty
+
+    def recibir(self, pv, pw, t):
+        self.refreshed = t
+        di, si, dd, sd = sk_mix(pv * 0.01 * SK_V_MAX, pw * 0.01 * SK_OMEGA_MAX, self.boost)
+        # orden del firmware [R1, L1, L2, R2]: R* = lado izquierdo del mix ("IZQ"), L* = derecho
+        for i, (du, se) in enumerate(((di, si), (dd, sd), (dd, sd), (di, si))):
+            self._poner(i, du, se, t)
+
+    def tick(self, t):
+        if t - self.refreshed > DEADMAN_FW_S:             # failsafe: sin ordenes -> todo apagado
+            for i in range(4):
+                self._poner(i, 0, 0, t)
+        if t - self.t_mon >= SK_MON_S:                    # updateAntiHundimiento()
+            self.t_mon = t
+            self.hist[self.hi] = sum(self.duty) // 4
+            self.hi = (self.hi + 1) % SK_HIST
+            self.boost = SK_BOOST if sum(self.hist) / SK_HIST > SK_UMBRAL * 100 else 1.0
+        out = []
+        for i in range(4):
+            if t < self.libre_hasta[i] or self.sent[i] == 0 or self.duty[i] <= 0:
+                self.completo[i] = False
+                out.append(0.0)
+                continue
+            if not self.completo[i]:
+                self.completo[i] = True
+                self.t_ciclo = t                          # arranca ciclo nuevo (como el .ino)
+            if self.duty[i] >= 100:
+                on = True
+            else:
+                on = ((t - self.t_ciclo) % SK_PERIODO_S) < SK_PERIODO_S * self.duty[i] / 100.0
+            out.append(100.0 * self.sent[i] if on else 0.0)
+        return out
+
+
+def crear_firmware(cfg: Config):
+    return MotoresSkidSteer(cfg) if cfg.firmware == "skidsteer_v3" else _Firmware12(cfg)
+
+
+class _Firmware12(MotoresFirmware):
+    def recibir(self, pv, pw, t):
+        self.set_targets(fw_mix(pv * 0.01 * V_SCALE, pw * 0.01 * W_SCALE, self.cfg), t)
 
 
 # ======================================================================
@@ -448,11 +548,12 @@ class Hip:
     dead: float = 0.0          # duty (%) por debajo del cual el motor no vence la fricción
     bias: float = 1.0          # fuerza relativa del módulo trasero (motores iguales = 1)
     semilla_chasis: int = 0
-    # Rozamiento viscoso de rodadura por rueda (N·m por rad/s). El valor por defecto del
-    # simulador (0,001) hacía rodar al robot 63 cm por pulso; lo MEDIDO el 2026-10-02 fueron
-    # 26,2 ± 2,2 cm (n=4, firmware antiguo, ~87 % de duty). Eso corresponde a ~0,02. Es UN dato
-    # y el duty exacto es incierto (78-100 % => 0,015-0,03), por eso se aleatoriza.
-    drag: float = 0.02
+    # Rozamiento viscoso de rodadura por rueda (N·m por rad/s). Calibrado el 2026-10-16 contra
+    # el ÚNICO dato real: 26,2 ± 2,2 cm por pulso (n=4, firmware antiguo, escala .4, ~87 % de duty,
+    # 1 s). Con ese pulso equivalente el ajuste da ~0,17 (0,15 -> 28 cm, 0,20 -> 24 cm). El
+    # valor anterior (0,02) sale de calibrar con el modelo de firmware 1.2 y rodaba 82 cm por
+    # pulso con el skid-steer v3. Incertidumbre: duty y duración exactos del pulso viejo.
+    drag: float = 0.17
 
 
 def hip_por_semilla(semilla: int) -> Hip:
@@ -460,7 +561,7 @@ def hip_por_semilla(semilla: int) -> Hip:
     return Hip(mu=float(rng.choice([0.65, 0.8, 0.95])),
                dead=float(rng.choice([0.0, 25.0, 40.0])),
                bias=float(rng.choice([1.0, 2.0])), semilla_chasis=int(semilla),
-               drag=float(rng.choice([0.012, 0.02, 0.03])))
+               drag=float(rng.choice([0.13, 0.17, 0.22])))
 
 
 def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
@@ -478,7 +579,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
 
     act = ActuadorJetson(cfg)
     cond = Conductor(cfg, act)
-    fw = MotoresFirmware(cfg)
+    fw = crear_firmware(cfg)
     lidar = LidarReactive()
     cola_enlace = []                               # (t_llegada, pct_v, pct_w)
 
@@ -544,7 +645,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
             cola_enlace.append((t + LATENCIA_ENLACE_S, _pct(act.out_v, V_SCALE), _pct(act.out_w, W_SCALE)))
         while cola_enlace and cola_enlace[0][0] <= t + 1e-9:
             _, pv, pw = cola_enlace.pop(0)
-            fw.set_targets(fw_mix(pv * 0.01 * V_SCALE, pw * 0.01 * W_SCALE, cfg), t)
+            fw.recibir(pv, pw, t)
         # ---- firmware + dinámica (10 ms) ----
         duties = fw.tick(t)
         duty_max_visto = max(duty_max_visto, max(abs(x) for x in duties))

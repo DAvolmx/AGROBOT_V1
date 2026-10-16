@@ -68,6 +68,8 @@ from supervisor_movimiento import SupervisorMovimiento
 from manual_demo import command as demo_command, reference as demo_reference
 from c3_setup import C3Setup
 c3_setup = C3Setup()
+from c3_pines import C3Pines
+c3_pines = C3Pines(lambda: enlace_c3)
 from auto_comunicacion import inicializar_auto_comunicacion
 
 # =============================================
@@ -1595,11 +1597,9 @@ async def paso_post_handler(request: web.Request):
 
 
 async def _c3_ready_for_drive():
-    try:
-        d = await c3_setup.status()
-        return bool(d.get("compatible") and d.get("verified") and not d.get("fault") and d.get("mode") == "JETSON")
-    except Exception:
-        return False
+    """La C3 manda con solo estar enlazada (firmware skid-steer: sin panel web,
+    sin mapeo que confirmar). Antes exigía el firmware 1.2 por HTTP."""
+    return bool(enlace_c3 is not None and enlace_c3.connected)
 
 
 async def drive_handler(request: web.Request):
@@ -1638,7 +1638,7 @@ async def drive_handler(request: web.Request):
     except (ValueError, TypeError):
         return web.json_response({"error":"potencia invalida"},status=400)
     if not await _c3_ready_for_drive():
-        return web.json_response({"error":"Carga firmware 1.1, confirma las ruedas y entrega control a Jetson en Motores y servo"},status=409)
+        return web.json_response({"error":"C3 sin enlace"},status=409)
     accepted = conductor.ordenar(accion,v_max=v,omega_max=1.5,maniobra=False)
     return web.json_response({"ok":accepted,"accion":accion,"duracion_s":.3,
                               "error":None if accepted else "pulso en curso; no se acumula"},
@@ -3000,6 +3000,8 @@ async def start_background(app: web.Application):
     # Vía de respaldo por WiFi (ver enlace_c3.py). Si el puerto no se puede
     # abrir, queda solo el BLE, como antes.
     wifi_c3 = await udp_actuator_link.abrir(lambda _trama: None)
+    if wifi_c3 is not None:
+        wifi_c3.on_cfg = c3_pines.on_cfg
     enlace_c3 = EnlaceC3(ble_link, wifi_c3, wifi_only=True)
     actuator_proto = ActuatorController(enlace_c3)
     enlace_c3._on_status = actuator_proto.on_status
@@ -3603,6 +3605,11 @@ def create_app() -> web.Application:
               f"cualquiera en la red puede mover el robot")
         app = web.Application()
     c3_setup.on_claim = lambda: _parada_total("configuracion C3", remote=False)
+    app.router.add_get("/api/c3/pines", c3_pines.get_handler)
+    app.router.add_post("/api/c3/pines", c3_pines.set_handler)
+    app.router.add_post("/api/c3/pines/reset", c3_pines.reset_handler)
+    app.router.add_post("/api/c3/pines/intercambiar", c3_pines.swap_handler)
+    app.router.add_post("/api/c3/prueba", c3_pines.test_handler)
     app.router.add_get("/api/c3/setup", c3_setup.get_handler)
     app.router.add_post("/api/c3/setup/{action}", c3_setup.post_handler)
     app.router.add_get("/ws", ws_handler)

@@ -1,0 +1,14 @@
+[Unit]
+Description=AgroBot — interfaz ap0 (adaptador USB RTL8188ETV, o radio interna de respaldo)
+After=network.target systemd-modules-load.service
+Before=hostapd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/agrobot-ap0-up.sh
+ExecStop=-/usr/local/sbin/agrobot-ap0-down.sh
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

@@ -42,6 +42,10 @@ LIDAR_VIEJO_S = 1.0          # explorador.SCAN_VIEJO_S
 MAX_RECUPERACIONES = 8
 
 
+# Grabador opcional (generar_dataset_slam.py): .scan(t, pts|None, (lx, ly), psi) y .paso(t, v_cmd, w_cmd, (lx, ly), psi).
+GRABADOR = None
+
+
 # ---------------------------------------------------------------------------------------------
 # Catálogo
 # ---------------------------------------------------------------------------------------------
@@ -302,6 +306,7 @@ def episodio_fallas(esc, cfg, semilla: int, fallo: str = "ninguno", lecciones: A
     prox_expl, prox_cond, prox_jet = S.TICK_EXPLORADOR, 0.0, 0.0
     sin_corregir = 0
     contactos, prev_choque, cerca_cada, mundo_cerca = 0, False, 0, mundo
+    traj = []
     n_contacto, t_ult_choque = None, -1e9
     t_contactos = []
     ultimo = robot.centro()
@@ -338,6 +343,8 @@ def episodio_fallas(esc, cfg, semilla: int, fallo: str = "ninguno", lecciones: A
         """Un scan del LIDAR con las fallas aplicadas. None = el LIDAR no entregó nada."""
         nonlocal descartar_scan
         if any(a <= t < b for (a, b) in ctx["cortes_lidar"]):
+            if GRABADOR is not None:
+                GRABADOR.scan(t, None, robot.lidar_pos(), robot.psi_real())
             return None
         persona = ctx["persona"]
         e = esc_lidar
@@ -353,6 +360,8 @@ def episodio_fallas(esc, cfg, semilla: int, fallo: str = "ninguno", lecciones: A
             ang = float(rng_f.uniform(-12, 12))
             pts = [p for p in pts if abs(((p["angle_deg"] + 180) % 360) - 180 - ang) > 4] + \
                   [{"angle_deg": ang % 360, "distance_m": float(rng_f.uniform(0.15, 0.30))}]
+        if GRABADOR is not None:
+            GRABADOR.scan(t, pts, (lx, ly), robot.psi_real())
         return pts
 
     def lanzar_recuperacion(motivo):
@@ -557,6 +566,8 @@ def episodio_fallas(esc, cfg, semilla: int, fallo: str = "ninguno", lecciones: A
         duties = fw.tick(t)
         robot.step(dt, duties, hip.dead)
         t += dt
+        if GRABADOR is not None:
+            GRABADOR.paso(t, act.out_v, act.out_w, robot.lidar_pos(), robot.psi_real())
 
         # ---------------- métricas, colisión y respuesta física ----------------
         cx, cy = robot.centro()
@@ -613,7 +624,7 @@ def episodio_fallas(esc, cfg, semilla: int, fallo: str = "ninguno", lecciones: A
                 t_contactos.clear()
                 lanzar_recuperacion("choques")
         if traza and int(round(t / dt)) % 10 == 0:
-            pass
+            traj.append((t, cx, cy, robot.psi_real(), robot.delta(), bool(prev_choque), max(abs(x) for x in duties), 0))
 
         if esc.meta_xy is not None:
             if math.hypot(cx - esc.meta_xy[0], cy - esc.meta_xy[1]) < 0.25:
@@ -629,6 +640,7 @@ def episodio_fallas(esc, cfg, semilla: int, fallo: str = "ninguno", lecciones: A
     progreso = max(0.0, min(1.0, avance / max(recorrido, 1e-6)))
     permitidos = FALLOS[fallo].contactos_permitidos
     return {
+        **({"traza": traj} if traza else {}),
         "escenario": esc.nombre, "fallo": fallo, "config": cfg.nombre, "semilla": semilla,
         "llego": bool(ok), "contactos": contactos, "contactos_permitidos": permitidos,
         "pasa": bool(ok and contactos <= permitidos), "progreso": round(progreso, 3), "t_s": round(t, 1),

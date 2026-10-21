@@ -848,8 +848,8 @@ class Hip:
     giro_gain: float = 1.0
 
 
-LATERAL_OPCIONES = (30.0, 15.0, 8.0)
-GIRO_GAIN_OPCIONES = (0.45, 0.30, 0.20)
+LATERAL_OPCIONES = (9.0, 7.0, 5.5)     # 2026-10-21: giro ~15° por toque a cada lado (antes ~10°)
+GIRO_GAIN_OPCIONES = (0.60, 0.45, 0.30)
 
 
 def hip_por_semilla(semilla: int) -> Hip:

@@ -1,0 +1,17 @@
+{
+ "id": "davidgomez32/agrobot-slam-correccion",
+ "title": "agrobot-slam-correccion",
+ "code_file": "agrobot-slam-correccion.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_tpu": false,
+ "enable_internet": false,
+ "dataset_sources": [
+  "davidgomez32/agrobot-slam-correction"
+ ],
+ "competition_sources": [],
+ "kernel_sources": [],
+ "model_sources": []
+}

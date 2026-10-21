@@ -1,0 +1,11 @@
+{
+ "title": "agrobot-slam-correction",
+ "id": "davidgomez32/agrobot-slam-correction",
+ "licenses": [
+  {
+   "name": "CC0-1.0"
+  }
+ ],
+ "subtitle": "Dataset del simulador AGROBOT para corregir la odometría por scans (SLAM 2D)",
+ "isPrivate": true
+}

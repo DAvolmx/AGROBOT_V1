@@ -230,12 +230,13 @@ def main():
     ap.add_argument("--procs", type=int, default=6)
     ap.add_argument("--semillas", type=int, default=6)
     ap.add_argument("--rapido", action="store_true")
+    ap.add_argument("--fallas", default=None, help="lista separada por comas (por defecto las 8 generales)")
     ap.add_argument("--salida", default=None)
     a = ap.parse_args()
     cfg = PG.config_base(a.config)
     escs = ["sala_vacia", "pasillo_macetas", "eslalon_macetas", "curva_pasillo", "recto_tope", "sala_cuadrada",
             "hileras_cuadricula", "zigzag_hileras"]
-    fallos = FALLOS_GENERALES
+    fallos = tuple(a.fallas.split(",")) if a.fallas else FALLOS_GENERALES
     semillas = tuple(range(200, 200 + a.semillas))
     huecos = (0.60,)
     if a.rapido:

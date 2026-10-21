@@ -48,7 +48,10 @@ INVERTIR_GIRO = False
 class EnlaceC3:
     def __init__(self, ble: BleActuatorLink, wifi: UdpActuatorLink | None = None, *, wifi_only: bool = False):
         self.wifi_only = wifi_only
-        ble.positive_led = wifi_only
+        # El estado del foco se manda INVERTIDO (el foco es de lógica normal y el firmware escribe el pin
+        # como activo en bajo). 2026-10-16: el LED volvió a verse al revés con el firmware suave; se corrige
+        # aquí, en software, sin tocar el firmware. Para volver atrás: positive_led = True.
+        ble.positive_led = False
         self.ble = ble
         self.wifi = wifi
         self._on_status = None

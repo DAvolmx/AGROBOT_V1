@@ -11,13 +11,17 @@ def finite(value, low, high):
         raise ValueError('orden fuera de rango')
     return value
 
-def command(v, w, duty=100):
+def command(v, w, duty=100, pivote=False):
     v, w, duty = finite(v,-1,1), finite(w,-1,1), finite(duty,0,100)
     v *= duty/100
     if abs(v) < .004:
+        # Giro EN EL SITIO: solo con el firmware «suave» (las traseras pivotan). Con el firmware
+        # anterior girar sin avanzar no mueve las ruedas, por eso sigue apagado por defecto.
+        if pivote and abs(w) >= .02:
+            return 0., w*W_SCALE
         return 0., 0.
     return max(-.35,min(.60,v))*V_SCALE, (0. if v < 0 else w*W_SCALE)
 
-def reference(v,w):
+def reference(v,w,pivote=False):
     v,w = finite(v,-100,100), finite(w,-100,100)
-    return command(max(-1,min(1,v/V_SCALE)), max(-1,min(1,w/W_SCALE)))
+    return command(max(-1,min(1,v/V_SCALE)), max(-1,min(1,w/W_SCALE)), pivote=pivote)

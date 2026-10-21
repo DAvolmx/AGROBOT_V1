@@ -16,6 +16,10 @@ button.sec{background:#e3ede6;color:#18382c}button.danger{background:#af2735;fon
 <p class="muted">Mantén pulsado <b>+</b> o <b>−</b>: la prueba se corta al soltar. «+» debe mover la rueda hacia delante; si gira al revés marca «Invertir» y guarda.</p></div>
 <div class="card"><b>Intercambiar dos ruedas</b> <span class="muted">(si la rueda que se mueve no es la que dice el nombre)</span>
 <div class="row" style="margin-top:8px"><select id="sa"></select><span>⇄</span><select id="sb"></select><button id="swap">Intercambiar pines</button></div></div>
+<div class="card"><b>Fuerza y suavidad</b> <span class="muted">(se guardan en la C3; al aplicar, el robot se detiene)</span>
+<div id="limites" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:10px"></div>
+<div class="row" style="margin-top:10px"><button class="sec" id="limReset">Límites de fábrica</button></div>
+<p class="muted"><b>Arranque mínimo</b>: si un motor solo zumba al pedirle poco, súbelo hasta que arranque. <b>Pivote</b>: potencia de las traseras al girar (las delanteras nunca giran en sentido contrario).</p></div>
 <div class="row"><button class="sec" id="reset">Valores de fábrica</button><button class="sec" id="recargar">Recargar de la C3</button></div>
 <button class="danger" id="parar" style="margin-top:14px">PARAR TODOS LOS MOTORES</button>
 <script src="/motores.js"></script></body></html>

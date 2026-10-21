@@ -29,16 +29,19 @@ todo este módulo se vuelve un no-op silencioso y el sistema sigue
 funcionando con el PoseEstimator/LidarReactive caseros de slam.py como
 antes — así el mismo jetson_server.py corre con o sin ROS instalado.
 """
+import base64
 import math
 import threading
 import time
+
+import numpy as np
 
 # Limites del envio de /map al dashboard. Ver _map_cb para el porque.
 #   · 1 s entre envios: slam_toolbox publica cada 2 s, pero el mapa cambia
 #     despacio y el ojo no distingue mas.
 #   · 250.000 celdas ~ 500x500. Como lista de enteros de Python son unos 9 MB,
 #     que es asumible; sin tope, un mapa de 2000x2000 son 145 MB por copia.
-MAPA_PERIODO_S = 1.0
+MAPA_PERIODO_S = 0.5
 MAPA_MAX_CELDAS = 250_000
 # Un mapa de una casa o una huerta no pasa de unas decenas de metros. El
 # 2026-09-30 salió uno de 9,7 km x 21 m (193868 x 426 celdas, 82 MB por
@@ -404,14 +407,15 @@ if ROS_AVAILABLE:
             while w and h and (w // paso) * (h // paso) > MAPA_MAX_CELDAS:
                 paso += 1
 
+            # numpy: reordenar 250.000 celdas con listas de Python eran
+            # ~30 ms por mapa; con vistas son microsegundos.
+            rejilla = np.frombuffer(bytes(datos), dtype=np.int8).reshape(h, w) if w and h \
+                else np.zeros((0, 0), dtype=np.int8)
             if paso > 1:
-                filas = range(0, h, paso)
-                cols = range(0, w, paso)
-                datos = [datos[y * w + x] for y in filas for x in cols]
-                w, h = len(cols), len(filas)
+                rejilla = rejilla[::paso, ::paso]
+                h, w = rejilla.shape
                 res = res * paso
-            else:
-                datos = list(datos)
+            datos = np.ascontiguousarray(rejilla).tobytes()   # -1 queda como 255
 
             self._on_map({
                 "width": w,
@@ -419,7 +423,9 @@ if ROS_AVAILABLE:
                 "resolution": res,
                 "origin_x": msg.info.origin.position.x,
                 "origin_y": msg.info.origin.position.y,
-                "data": datos,
+                # Binario en base64 (1 byte/celda, unas 8x menos que la lista
+                # JSON) y sin crear 250.000 enteros de Python por mensaje.
+                "data_b64": base64.b64encode(datos).decode("ascii"),
                 "received_at": ahora,
                 "extension_m": extension_m,
                 "corrupto": extension_m > MAPA_EXTENSION_SOSPECHOSA_M,

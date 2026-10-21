@@ -4829,3 +4829,20 @@ al 80 %/100 %, watchdog del loop). Robot en el pasillo.
 - Robot metido bajo una mesa contra una caja de plástico baja (el LIDAR
   marcaba 72 cm libres; la cámara la tenía delante): no se movió.
 
+
+## 2026-10-21 — geometría real, firmware maxfrente, entrenamiento de manejo y percepción
+- **Geometría corregida (croquis del usuario):** pivote trasero con las ruedas más separadas (38 cm), eje fijo delantero
+  estrecho (28 cm) con los motores fuertes; LIDAR a 24 cm del eje trasero y 37,5 cm del suelo (ciego bajo ~34 cm).
+  `geometria_robot.py`, `config_store.py`, footprints de Nav2 y simulador (`sim_logica_actual.py`, GEOMETRIA croquis).
+- **Firmware `agrobot_c3_skidsteer_maxfrente`:** ruedas delanteras al 100 % de PWM; el lado lento conserva la proporción
+  (si no, toda curva era un giro en el sitio). Servo hasta 160°. Sin flashear en el robot (decisión del usuario).
+- **Backend:** `control.invertir_giro` (izquierda/derecha cruzadas), modo seguro apagado por defecto, freno LIDAR autónomo
+  apagado, `entorno_auto.py` (interior/exterior automático), `imu_nivel.py` (calibración con el robot nivelado),
+  zoom de cámara, pestaña «asistido» del dashboard, Nav2 sin bloqueo de cmd_vel.
+- **Simulador y entrenamiento:** `episodio_fallas.py` (15 fallas + choques + paradas de escaneo + manejo asistido),
+  `entrenar_robusto.py` (embudo filtro→validación→prueba), `entrenar_fallas.py`, `pruebas_geometria.py` (informe con tablas y
+  capturas: recto a tope, sala cuadrada, hileras, zigzag). Física de giro ajustada al toque real (~10°/toque):
+  `Hip.giro_gain`, `Hip.lateral`. Sesiones: `tools/sesion_manejo_optimo.sh`, `tools/sesion_10h.sh`.
+- **Percepción:** `entrenar_col.py`, `coliflor_dataset.py`, `coliflor_entrenar.py`, `entorno_entrenar.py`, sesiones de entrenamiento.
+- **Resultados honestos:** ningún modelo de manejo cumple aún los 5 criterios (éxito ≥90 % en el peor pasillo); la física del
+  simulador es hipótesis. No se desplegó nada. Pesos (.pt) y `build/` del firmware NO se versionan.

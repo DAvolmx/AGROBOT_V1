@@ -97,7 +97,7 @@ bool servoListo = false;
 bool scanning = false;
 unsigned long scanStartMillis = 0;
 const unsigned long SCAN_SWEEP_MS = 10000;
-const int SERVO_MIN_ANGLE  = 25, SERVO_MAX_ANGLE  = 110, SERVO_PARK_ANGLE = 98;
+const int SERVO_MIN_ANGLE  = 25, SERVO_MAX_ANGLE  = 160, SERVO_PARK_ANGLE = 98;
 int  currentServoAngle = SERVO_PARK_ANGLE;
 bool ledOn = false;
 

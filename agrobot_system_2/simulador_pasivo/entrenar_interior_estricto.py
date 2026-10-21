@@ -1,4 +1,4 @@
-"""Tanda LIGERA y ESTRICTA de interiores con el firmware skid-steer v3 flasheado hoy.
+"""Tanda LIGERA y ESTRICTA de interiores con el firmware «suave» v4 (firmware/agrobot_c3_suave).
 
 Uso:  python3 entrenar_interior_estricto.py [--n 24] [--procs 6]
 Salida: ~/.agrobot/aprendizaje/interior_estricto_<fecha>.json + resumen por pantalla.
@@ -39,7 +39,22 @@ SALIDA = Path.home() / ".agrobot" / "aprendizaje"
 ESCS = ["sala_vacia", "pasillo_macetas", "eslalon_macetas", "curva_pasillo"]
 SUB = 0.0025       # converge aquí (0,005 tenía hasta 6 % de error en un pulso; 0,00125 y 0,0006 = igual)
 TRAIN, VAL, TEST = list(range(40, 44)), list(range(44, 50)), list(range(50, 60))
-# Solo lo que importa con el skid-steer v3 (no tiene rampa, minp ni reducción interior).
+# Firmware "suave" v4: además de lo de la Jetson se buscan sus límites de fuerza/suavidad, que son
+# ajustables desde el dashboard sin reflashear. Siempre minp <= min(adel, atras) (regla del firmware).
+# Conducción CONTINUA (control_pasillo.PasilloController) + límites del firmware suave.
+ESPACIO_CC = {
+    "cc_v": [0.22, 0.27, 0.32],
+    "cc_kp": [1.5, 3.0, 5.0],
+    "cc_kd": [0.3, 0.6, 1.0],
+    "cc_kh": [1.2, 2.5, 4.0],
+    "cc_kl": [0.5, 2.0, 4.0],
+    "cc_wmax": [0.5, 0.8],
+    "cc_dstop": [0.25, 0.30, 0.40],
+    "su_pivote": [70, 90, 100],
+    "su_minp": [30, 40, 50],
+    "su_acel": [60, 120, 250],
+}
+BASE_CC = {"control": "continuo", "pivote_en_sitio": True}
 ESPACIO = {
     "modo": ["interior", "preciso", "exterior"],
     "escala_velocidad": [0.2, 0.3, 0.5],
@@ -47,6 +62,12 @@ ESPACIO = {
     "sendero_tol_cm": [5, 7, 10, 15],
     "avance_libre_cm": [40, 70, 100],
     "cono_frontal_deg": [10, 20, 30],
+    "su_adel": [60, 80, 100],
+    "su_atras": [50, 60],
+    "su_pivote": [70, 90, 100],
+    "su_minp": [30, 40, 50],
+    "su_acel": [60, 120, 250],
+    "su_frena": [150, 300, 600],
 }
 
 
@@ -195,16 +216,17 @@ def main():
     ap.add_argument("--n", type=int, default=24)
     ap.add_argument("--procs", type=int, default=6)
     ap.add_argument("--top", type=int, default=5)
+    ap.add_argument("--control", choices=("pulsos", "continuo"), default="pulsos")
     a = ap.parse_args()
     t0 = time.perf_counter()
-    salida = {"fecha": time.strftime("%Y-%m-%d %H:%M"), "firmware_modelado": "skidsteer_v3",
-              "semillas": {"train": TRAIN, "val": VAL, "test": TEST}}
+    salida = {"fecha": time.strftime("%Y-%m-%d %H:%M"), "pivote": S.PIVOTE, "firmware_modelado": "suave_v4",
+              "semillas": {"train": TRAIN, "val": VAL, "test": TEST}, "control": a.control}
     print("[0] puerta de validez del simulador…", flush=True)
     ok0, det = puerta0()
     salida["puerta0"] = det
     print(json.dumps(det, ensure_ascii=False), flush=True)
     SALIDA.mkdir(parents=True, exist_ok=True)
-    fich = SALIDA / f"interior_estricto_{time.strftime('%Y%m%d_%H%M')}.json"
+    fich = SALIDA / f"interior_estricto_{S.PIVOTE}_{time.strftime('%Y%m%d_%H%M')}.json"
     if not ok0:
         salida["veredicto"] = "SIMULADOR NO VALIDO: no se entrena"
         fich.write_text(json.dumps(salida, indent=1, ensure_ascii=False))
@@ -214,12 +236,13 @@ def main():
     rng = random.Random(20261016)
     actual, perfil = S.config_actual(), S.config_interior_perfil()
     cands, vistos = [], set()
+    esp, base = (ESPACIO_CC, BASE_CC) if a.control == "continuo" else (ESPACIO, {})
     while len(cands) < a.n:
-        d = {k: rng.choice(v) for k, v in ESPACIO.items()}
+        d = {k: rng.choice(v) for k, v in esp.items()}
         if tuple(d.values()) in vistos:
             continue
         vistos.add(tuple(d.values()))
-        cands.append(S.Config(nombre=f"c{len(cands):02d}", **d))
+        cands.append(S.Config(nombre=f"c{len(cands):02d}", **base, **d))
     cfgn = {c.nombre: c for c in [actual, perfil] + cands}
 
     with Pool(a.procs) as pool:

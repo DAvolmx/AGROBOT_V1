@@ -37,8 +37,12 @@ def _constante(texto, nombre):
 def test_el_servo_de_la_jetson_coincide_con_el_del_firmware():
     ino = INO.read_text()
     assert protocol.SERVO_MIN_DEG == _constante(ino, "SERVO_MIN")
-    assert protocol.SERVO_MAX_DEG == _constante(ino, "SERVO_MAX")
     assert protocol.SERVO_HOME_DEG == _constante(ino, "SERVO_HOME")
+    # El tope alto se amplió a 160 el 2026-10-19 (pedido del operador) en el firmware VIGENTE (skid-steer v3,
+    # sin 1.2): el 1.2 se queda en 130 y ya no se usa.
+    vigente = (RAIZ / "firmware" / "agrobot_c3_skidsteer" / "agrobot_c3_skidsteer.ino").read_text()
+    assert protocol.SERVO_MIN_DEG == _constante(vigente, "SERVO_MIN_ANGLE")
+    assert protocol.SERVO_MAX_DEG == _constante(vigente, "SERVO_MAX_ANGLE")
 
 
 def test_las_escalas_v_omega_coinciden():
@@ -94,14 +98,14 @@ def _acepta_el_firmware(t):
         return False
     magic, v, w, servo, flags, seq, crc = struct.unpack(CMD_FORMAT, t)
     return (magic == 0xA5 and crc8(t[:7]) == crc and -100 <= v <= 100 and -100 <= w <= 100
-            and 25 <= servo <= 130 and not (flags & ~3))
+            and 25 <= servo <= protocol.SERVO_MAX_DEG and not (flags & ~3))
 
 
 def test_toda_trama_que_arma_la_jetson_la_acepta_el_firmware():
     enlace = BleActuatorLink(v_max=0.55, omega_max=1.5)
     for v in (-0.55, -0.2, 0.0, 0.195, 0.33, 0.55, 5.0, -5.0):       # incluye fuera de escala
         for om in (-1.5, 0.0, 1.5, 9.0):
-            for servo in (0, 24, 25, 76, 98, 130, 131, 255):          # incluye fuera de rango
+            for servo in (0, 24, 25, 76, 98, 130, 160, 161, 255):          # incluye fuera de rango
                 enlace._v, enlace._omega = v, om
                 enlace.set_actuators(servo_angle=servo, led=bool(servo % 2))
                 assert _acepta_el_firmware(enlace.pack()), (v, om, servo)

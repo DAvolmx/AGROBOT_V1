@@ -14,7 +14,7 @@ import sim_logica_actual as S
 
 
 def _planta(mu=0.8, drag=0.02, seed=0):
-    return replace(S.parametros_rusticos(seed), mu=mu, rolling_drag=drag, front_drive_bias=1.0, substep=0.01)
+    return replace(S.parametros_rusticos(seed), mu=mu, rolling_drag=drag, front_drive_bias=1.0, substep=0.005)   # 0,01 es INESTABLE (ver memoria)
 
 
 # --- mezcla del firmware ---------------------------------------------------
@@ -202,3 +202,68 @@ def test_el_fondo_esta_lejos_de_la_meta():
         esc = S.escenarios_interior()[nombre]
         fondo = max(x for w in esc.paredes for x in (w[0], w[2]))
         assert fondo - esc.goal_x > 1.5
+
+
+# ---- Croquis del operador (2026-10-20): LIDAR descentrado y a 37,5 cm, geometría nueva ----
+def test_el_lidar_esta_a_24_cm_del_eje_trasero_y_5_cm_delante_del_centro():
+    import sim_logica_actual as S
+    from robot_rustico import parametros_rusticos
+    if S.GEOMETRIA != "croquis":
+        return
+    rb = S.RobotModelo(parametros_rusticos(0), (0.0, 0.0, 0.0))
+    ox, oy = rb.d.q[0], rb.d.q[1]                                  # eje FIJO delantero (origen del modelo)
+    lx, ly = rb.lidar_pos()
+    cx, cy = rb.centro()
+    assert abs(math.hypot(lx - ox, ly - oy) - S.LIDAR_DESDE_EJE_M) < 1e-9
+    assert abs(S.LIDAR_DESDE_EJE_M - 0.13) < 1e-9                  # 37 - 24 cm
+    assert abs(math.hypot(lx - cx, ly - cy) - 0.055) < 1e-9        # 5,5 cm del centro
+    # Pivote atrás: el LIDAR queda DELANTE del centro según el avance real (x real = adelante)
+    assert lx > cx
+    # el módulo del pivote (atrás) es el ancho y el eje fijo (delante) el estrecho
+    assert S.PIVOTE_EXT_M > S.FIJO_EXT_M
+
+
+def test_firmware_maxfrente_delanteras_al_100_y_traseras_proporcionales():
+    import sim_logica_actual as S
+    cfg = S.Config(firmware="maxfrente", tras_factor=1.0)
+    fw = S.crear_firmware(cfg)
+    assert isinstance(fw, S.MotoresMaxFrente)
+    for t in range(0, 60):
+        fw.recibir(30, 0, t * 0.01)         # 30 % de v: duty proporcional bajo
+        out = fw.tick(t * 0.01 + 0.03)
+    R1, L1, L2, R2 = fw.duty[0], fw.duty[1], fw.duty[2], fw.duty[3]
+    assert R1 == 100 and L1 == 100          # delanteras a tope en cuanto hay mando
+    assert 0 < L2 < 100 and 0 < R2 < 100    # traseras proporcionales
+    fw0 = S.crear_firmware(S.Config(firmware="maxfrente", tras_factor=0.0))
+    fw0.recibir(30, 0, 0.0)
+    assert fw0.duty[2] == 0 and fw0.duty[3] == 0 and fw0.duty[0] == 100
+    fw.recibir(0, 0, 1.0)                   # sin mando: todo parado
+    assert fw.duty == [0, 0, 0, 0]
+    fw.recibir(0, 60, 1.1)                  # giro: un lado adelante, el otro atrás, ambos delanteros a 100 %
+    assert fw.duty[0] == 100 and fw.duty[1] == 100 and fw.sent[0] == -fw.sent[1]
+
+
+def test_el_lidar_no_ve_macetas_bajas_pero_si_paredes_y_macetas_altas(monkeypatch):
+    import numpy as np
+    import sim_logica_actual as S
+    esc = S.Escenario("t", [(3.0, -2.0, 3.0, 2.0)], [(1.0, 0.0, 0.1)], goal_x=3.0)
+    rng = np.random.default_rng(0)
+
+    def frente(pts):
+        return min((p["distance_m"] for p in pts if abs(((p["angle_deg"] + 180) % 360) - 180) < 3), default=math.inf)
+    monkeypatch.setattr(S, "ALTURA_LIDAR_M", 0.375)
+    monkeypatch.setattr(S, "ALTURA_MACETA_M", 0.45)
+    assert frente(S.lidar_scan(esc, 0, 0, 0.0, rng)) < 1.1          # la maceta alta se ve
+    monkeypatch.setattr(S, "ALTURA_MACETA_M", 0.20)
+    d = frente(S.lidar_scan(esc, 0, 0, 0.0, rng))
+    assert 2.9 < d < 3.1                                            # la baja no: solo se ve la pared del fondo
+
+
+def test_la_geometria_del_croquis_llega_a_la_dinamica_y_a_la_huella():
+    import sim_logica_actual as S
+    p = S.replace(S.parametros_rusticos(0), front_outer=S.PIVOTE_EXT_M, rear_outer=S.FIJO_EXT_M)
+    rb = S.RobotModelo(p, (0.0, 0.0, 0.0))
+    assert rb.d.p.rear_outer == S.FIJO_EXT_M and rb.d.p.front_outer == S.PIVOTE_EXT_M
+    assert rb.geo.cuerpo_largo == S.CUERPO_L and rb.geo.cuerpo_ancho == S.CUERPO_A
+    hip = S.hip_por_semilla(3)
+    assert hip.eje_fijo in S.FIJO_OPCIONES and hip.bias in S.BIAS_OPCIONES

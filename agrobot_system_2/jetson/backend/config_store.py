@@ -33,6 +33,9 @@ DEFAULTS = {
         # /api/diagnostics el `cabeceo_deg` debe volverse NEGATIVO (positivo =
         # morro abajo). Si sube, poner -1 aquí.
         "imu_cabeceo_signo": 1,
+        # Gravedad (ax, ay, az en g) medida con el robot quieto y NIVELADO (POST /api/calibracion/imu_nivel).
+        # None = sin calibrar. Ver imu_nivel.py.
+        "imu_gravedad_nivel": None,
     },
     "hardware": {
         "camera_enabled": True,
@@ -61,6 +64,9 @@ DEFAULTS = {
         # "autonomo" (solo con la patrulla en marcha) o "nunca". Con
         # cualquiera, la detección tiene que persistir y el robot haberse
         # movido desde el último escaneo (patrol.py).
+        # Clases que son la PLANTA (no una plaga): al detectarlas el robot escanea, pero no se emite el
+        # aviso «Plaga detectada» ni se manda alerta al gateway. Las demás clases se tratan como plaga.
+        "clases_planta": ["col_planta", "col_cogollo", "maceta_planta"],
         "escanear_al_detectar": "siempre",
     },
     "slam": {
@@ -70,13 +76,17 @@ DEFAULTS = {
         # media carrocería a las distancias: así "adelante: 30 cm" significa
         # 30 cm hasta tocar, no hasta el centro del robot. El `footprint` de
         # nav2_params.yaml es aparte y va en metros: si cambia esto, cambiarlo.
-        "robot_largo_cm": 40,
+        "robot_largo_cm": 49,
+        # El LIDAR NO está en el centro (croquis 2026-10-20): a 24 cm del eje trasero. Distancia del LIDAR a la cara
+        # delantera y a la trasera, para restar la carrocería correcta a cada lado (ver slam.distancias).
+        "lidar_adelante_cm": 18.5,
+        "lidar_atras_cm": 30.5,
         # 37 cm = ancho exterior del eje TRASERO (medido). Era 35 hasta el
         # 2026-10-14: subestimaba la envolvente 1 cm por lado en los ocho
         # sitios que comprueban holgura, incluido el hueco visual de suelo
         # libre. El delantero mide 19, pero la holgura la manda lo más ancho.
         # Fuente única: geometria_robot.ANCHO_ENVOLVENTE_M.
-        "robot_ancho_cm": 37,
+        "robot_ancho_cm": 38,
         # Sectores del LIDAR. El trasero es el espejo del frontal.
         # Frontal estrecho = pasa por pasillos sin frenar por las paredes;
         # ancho = ve antes las esquinas, pero se frena más a menudo.
@@ -209,8 +219,31 @@ DEFAULTS = {
         # modo elegido se perdía en cada reinicio (2026-10-02). "preciso" =
         # pulsos cortos, lo que pidió el usuario.
         "modo_manejo": "preciso",
+        # Elegir solo interior/exterior según LIDAR+cámara (entorno_auto.py). False = solo SUGIERE.
+        "entorno_auto": False,
+        # Giro INVERTIDO por cableado: «pido izquierda y va a la derecha». Se niega omega JUSTO al enviar a la C3
+        # (ActuatorController._giro_signo), así que vale para manual, exploración, patrulla y Nav2, y la odometría
+        # y el giroscopio siguen coincidiendo con lo comandado. True desde 2026-10-20 (medido por el operador).
+        "invertir_giro": True,
+        # Tope de lo que Nav2 puede mandar a los motores (la patrulla y «ir a meta» pasan por aquí). Se recorta en el
+        # backend: se cambia sin reiniciar ROS. Subirlos solo tras ver que navega bien a esta velocidad.
+        "nav2_v_max_mps": 0.25,
+        "nav2_w_max_rps": 0.6,
+        # Perfil de demostración: True bloquea TODO lo autónomo (exploración, misión, patrulla, Nav2...).
+        # Hasta el 2026-10-16 estaba fijo en el código; ahora se elige aquí.
+        "solo_manual": False,
+        # Giro EN EL SITIO (v=0, omega!=0): solo con el firmware «suave» (las traseras pivotan).
+        "pivote_en_sitio": False,
     },
     "safety": {
+        # Frenado por LIDAR/cámara SOLO cuando el robot va solo (exploración, patrulla, misión, Nav2):
+        # no avanza si hay algo a menos de margen+deslizamiento (slam.*) ni sin datos frescos del LIDAR.
+        # El manejo manual no se toca. Apagarlo solo para pruebas.
+        "freno_lidar_autonomo": True,
+        # MODO SEGURO (FDIR, modo_seguro.py): al entrar detiene la autonomía y queda enclavado hasta
+        # rearmar. APAGADO por defecto desde 2026-10-19 (pedido del operador): la inclinación del IMU
+        # (28-77°) lo disparaba durante las pruebas de exploración/SLAM. Se activa desde el dashboard.
+        "modo_seguro_activo": False,
         "heartbeat_stale_warn_s": 5,
         "heartbeat_stale_err_s": 20,
         # limitador de rampa (slew-rate) sobre los comandos v/omega antes de

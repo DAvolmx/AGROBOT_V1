@@ -50,14 +50,14 @@ STATUS_SIZE = struct.calcsize(STATUS_FORMAT)
 # Se recorta en los dos lados a proposito — el firmware es la ultima linea
 # de defensa, pero la Jetson no debe mandar nunca un angulo imposible.
 SERVO_MIN_DEG = 25
-SERVO_MAX_DEG = 130
+SERVO_MAX_DEG = 160   # 2026-10-19: pedido del operador (antes 130); el firmware también debe permitir 160
 
 # Reposo: camara mirando al frente.
 SERVO_HOME_DEG = 98
 
 
 def clamp_servo(angle: float) -> int:
-    """Recorta al recorrido util (25°-130°). Cualquier valor fuera de rango
+    """Recorta al recorrido util (25°-160°). Cualquier valor fuera de rango
     —por ejemplo tras sumarle el offset de calibración— se corta acá y no en
     el firmware, que es actuador puro."""
     return int(max(SERVO_MIN_DEG, min(SERVO_MAX_DEG, round(angle))))

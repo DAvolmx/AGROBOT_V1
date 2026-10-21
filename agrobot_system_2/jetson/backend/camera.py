@@ -72,6 +72,8 @@ class CameraWorker:
         self._frame_crudo = None     # último frame sin dibujar, para YOLO y odometría
         self._frame_ts = 0.0         # time.monotonic() de la captura
         self._frame_seq = 0          # sube con cada frame: permite saber si hay uno nuevo
+        self.zoom = 1.0              # zoom de la cámara (1 = campo completo, hasta ZOOM_MAX)
+        self._res_abierta = (640, 480)
         self._cajas = []             # últimas detecciones dibujables
         self._cajas_ts = 0.0
         self._ultimo_aviso = {}      # clase -> ts del último aviso emitido
@@ -121,6 +123,13 @@ class CameraWorker:
             with self._lock:
                 self._cajas = []
 
+    def set_zoom(self, z: float) -> float:
+        """Zoom 1.0-ZOOM_MAX. Con zoom > 1 la cámara se abre a 1280x720 y se recorta el centro (detalle real,
+        no solo un reescalado); el recorte vuelve a 640x480 para que YOLO y las cajas sigan alineados.
+        Solo para inspeccionar con el robot quieto: SLAM/sendero esperan el campo completo (1.0)."""
+        self.zoom = max(1.0, min(ZOOM_MAX, float(z)))
+        return self.zoom
+
     def subscribe(self) -> asyncio.Queue:
         q = asyncio.Queue(maxsize=1)
         self._suscriptores.add(q)
@@ -161,8 +170,10 @@ class CameraWorker:
         # MJPG antes que el tamaño: en V4L2 el formato condiciona qué
         # resoluciones y tasas se pueden negociar después.
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        ancho, alto = (1280, 720) if self.zoom > 1.0 else (640, 480)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, ancho)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, alto)
+        self._res_abierta = (ancho, alto)
         cap.set(cv2.CAP_PROP_FPS, 30)
         # Buffer de 1: si el consumidor se atrasa queremos el frame NUEVO,
         # no ir sacando frames viejos de una cola.
@@ -195,6 +206,11 @@ class CameraWorker:
                         continue
                     self.estado = "capturando"
 
+                # Cambiar entre 1x (640x480) y zoom (1280x720) pide reabrir la cámara.
+                if (self.zoom > 1.0) != (self._res_abierta[0] > 640):
+                    cap.release(); cap = None
+                    continue
+
                 ok, frame = cap.read()
                 if not ok:
                     # Un fallo de lectura suele ser desconexión USB. Se cierra
@@ -205,6 +221,8 @@ class CameraWorker:
                     continue
 
                 self._on_beat("camera")
+                if self.zoom > 1.0:
+                    frame = _recorte_zoom(cv2, frame, self.zoom)
                 with self._lock:
                     self._frame_crudo = frame
                     self._frame_ts = time.monotonic()
@@ -350,6 +368,18 @@ class CameraWorker:
                 self._on_detection,
                 {"class": nombre, "confidence": conf, "ts": ahora},
                 frame if guardar else None)
+
+
+ZOOM_MAX = 4.0
+
+
+def _recorte_zoom(cv2, frame, z):
+    """Centro del cuadro con el campo de un 4:3 a 1x (alto completo / z), reescalado a 640x480."""
+    h, w = frame.shape[:2]
+    ch = max(60, int(h / z))
+    cw = min(w, int(ch * 4 / 3))
+    y0, x0 = (h - ch) // 2, (w - cw) // 2
+    return cv2.resize(frame[y0:y0 + ch, x0:x0 + cw], (640, 480), interpolation=cv2.INTER_CUBIC)
 
 
 def _fijar_framerate_camara():

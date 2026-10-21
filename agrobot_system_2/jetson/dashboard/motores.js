@@ -57,7 +57,28 @@ async function cargar() {
 $('pot').oninput = () => { $('potv').textContent = $('pot').value + '%'; };
 $('swap').onclick = async () => {
   try { await api('/api/c3/pines/intercambiar', {a: +$('sa').value, b: +$('sb').value}); msg('Pines intercambiados.'); } catch (e) { msg(e.message); }
-  cargar();
+  const LIM_TXT = {adel: 'Máx. adelante %', atras: 'Máx. atrás %', pivote: 'Potencia de pivote (traseras) %',
+  minp: 'Arranque mínimo %', acel: 'Aceleración %/s', frena: 'Frenado %/s', tras: 'Fuerza extra de las traseras %',
+  dif_del: '% del giro que hacen las delanteras (0 = solo traseras, 100 = skid-steer)', periodo: 'Ráfaga de tensión completa, ms (0 = PWM continuo)', refuerzo: 'Anti-hundimiento % (100 = apagado)'};
+async function cargarLimites() {
+  try {
+    const d = await api('/api/c3/limites'); const box = $('limites'); box.innerHTML = '';
+    Object.entries(d.rangos).forEach(([k, r]) => {
+      const lab = document.createElement('label'); lab.className = 'muted';
+      lab.innerHTML = `${LIM_TXT[k] || k}<br><input type="number" min="${r.min}" max="${r.max}" step="1" style="width:90px">`
+        + ` <button class="sec">Aplicar</button> <span class="muted">(${r.min}–${r.max})</span>`;
+      const inp = lab.querySelector('input'); inp.value = d.limites[k] ?? r.defecto; inp.disabled = !d.conectada || d.limites[k] === undefined;
+      lab.querySelector('button').disabled = inp.disabled;
+      lab.querySelector('button').onclick = async () => {
+        try { await api('/api/c3/limites', {nombre: k, valor: +inp.value}); msg(`${LIM_TXT[k]}: ${inp.value}. El robot está detenido.`); } catch (e) { msg(e.message); }
+        cargarLimites();
+      };
+      box.appendChild(lab);
+    });
+  } catch (e) { msg(e.message); }
+}
+$('limReset').onclick = async () => { try { await api('/api/c3/limites/reset', {}); msg('Límites de fábrica restaurados.'); } catch (e) { msg(e.message); } cargarLimites(); };
+cargar(); cargarLimites();
 };
 $('reset').onclick = async () => { try { await api('/api/c3/pines/reset', {}); msg('Valores de fábrica restaurados.'); } catch (e) { msg(e.message); } cargar(); };
 $('recargar').onclick = cargar;

@@ -24,9 +24,9 @@ slam_toolbox:
     # más allá domina el multipath (rebotes de muros lejanos) que crea
     # fantasmas en el mapa.
     max_laser_range: 8.0
-    minimum_time_interval: 0.2
+    minimum_time_interval: 0.1
     transform_publish_period: 0.02
-    map_update_interval: 1.0
+    map_update_interval: 0.5
     tf_buffer_duration: 30.0
     transform_timeout: 0.2
 

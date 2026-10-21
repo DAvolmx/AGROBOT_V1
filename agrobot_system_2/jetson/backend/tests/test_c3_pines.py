@@ -70,3 +70,28 @@ def test_prueba_valida_rangos():
 def test_sin_enlace():
     p = m.C3Pines(lambda: None)
     assert run(p.test_handler(Req({"rueda": 0, "sentido": 1, "pct": 30}))).status == 503
+
+
+def test_limites_trama_y_validacion():
+    r = bytes([0xC7, 3, 55, 0, 1, 4, 0]); r += bytes([crc8(r)])
+    assert m.unpack_lim_reply(r) == {"id": 3, "nombre": "minp", "valor": 55, "ok": True}
+    assert m.unpack_lim_reply(r[:7] + b"\x00") is None
+    assert m.limites_validos({"adel": 80, "atras": 60, "minp": 50}) is None
+    assert m.limites_validos({k: v[2] for k, v in m.LIMITES.items()}) is None      # defecto valido
+    assert m.limites_validos({"adel": 80, "atras": 50, "minp": 60}) is not None      # minp > atras
+    assert m.limites_validos({"pivote": 20}) is not None
+
+
+def test_lim_set_handler_envia_y_rechaza_invalidos():
+    p, w = _setup()
+    p.limites.update({k: v[2] for k, v in m.LIMITES.items()})
+    for malo in ({"nombre": "x", "valor": 5}, {"nombre": "adel", "valor": 5}, {"nombre": "minp", "valor": 70},
+                 {"nombre": "acel", "valor": True}):
+        assert run(p.lim_set_handler(Req(malo))).status == 400, malo
+    assert not w.enviadas
+    p2 = m.C3Pines(lambda: type("E", (), {"wifi": w})())
+    p2.limites.update(p.limites)
+    w.enviadas.clear()
+    run(p2.lim_set_handler(Req({"nombre": "acel", "valor": 200})))     # sin respuesta de la C3: 504, pero la orden sale
+    t = w.enviadas[-1]
+    assert t[1] == m.OP_LIM_SET and t[2] == 4 and (t[3] | t[4] << 8) == 200 and crc8(t[:7]) == t[7]

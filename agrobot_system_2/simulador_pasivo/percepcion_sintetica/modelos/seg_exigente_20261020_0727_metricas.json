@@ -1,0 +1,1470 @@
+{
+ "meta": {
+  "nombre": "seg_exigente_20261020_0727",
+  "arquitectura": "smp.Unet",
+  "encoder": "timm-mobilenetv3_large_100",
+  "encoder_weights": "imagenet",
+  "in_channels": 3,
+  "clases": [
+   "fondo",
+   "camino_libre",
+   "planta_maceta",
+   "borde_bajo",
+   "obstaculo"
+  ],
+  "n_clases": 5,
+  "media": [
+   0.48500001430511475,
+   0.4560000002384186,
+   0.4059999883174896
+  ],
+  "std": [
+   0.2290000021457672,
+   0.2240000069141388,
+   0.22499999403953552
+  ],
+  "preprocesado": "RGB uint8 -> /255 -> (x-media)/std -> relleno reflejado 8 px arriba y abajo (240->256); la salida se recorta 8 px por arriba y por abajo",
+  "entrada": {
+   "alto": 240,
+   "ancho": 320,
+   "alto_con_relleno": 256
+  },
+  "pad": 8,
+  "geometria_camara": {
+   "altura": 0.4,
+   "inclinacion": 15.5,
+   "hfov": 71.0,
+   "adelante": 0.42
+  },
+  "mejor_epoca": 35,
+  "epocas": 40,
+  "val_miou_mejor": 0.9623,
+  "semilla": 0,
+  "dataset": {
+   "sesiones_train": 160,
+   "fotogramas_train": 3840
+  },
+  "fecha": "2026-10-20 12:52",
+  "metricas": {
+   "val": {
+    "iou": {
+     "fondo": 0.9948,
+     "camino_libre": 0.9945,
+     "planta_maceta": 0.9796,
+     "borde_bajo": 0.8845,
+     "obstaculo": 0.9583
+    },
+    "precision": {
+     "fondo": 0.9976,
+     "camino_libre": 0.9979,
+     "planta_maceta": 0.9878,
+     "borde_bajo": 0.9385,
+     "obstaculo": 0.972
+    },
+    "recall": {
+     "fondo": 0.9972,
+     "camino_libre": 0.9966,
+     "planta_maceta": 0.9916,
+     "borde_bajo": 0.9389,
+     "obstaculo": 0.9855
+    },
+    "miou": 0.9623,
+    "pixeles": {
+     "fondo": 19751681,
+     "camino_libre": 27516852,
+     "planta_maceta": 6223786,
+     "borde_bajo": 159965,
+     "obstaculo": 1643716
+    },
+    "exactitud": 0.9957
+   },
+   "test": {
+    "iou": {
+     "fondo": 0.993,
+     "camino_libre": 0.9935,
+     "planta_maceta": 0.9792,
+     "borde_bajo": 0.8997,
+     "obstaculo": 0.9441
+    },
+    "precision": {
+     "fondo": 0.9967,
+     "camino_libre": 0.9972,
+     "planta_maceta": 0.987,
+     "borde_bajo": 0.9537,
+     "obstaculo": 0.9694
+    },
+    "recall": {
+     "fondo": 0.9963,
+     "camino_libre": 0.9963,
+     "planta_maceta": 0.992,
+     "borde_bajo": 0.9407,
+     "obstaculo": 0.9731
+    },
+    "miou": 0.9619,
+    "pixeles": {
+     "fondo": 28326989,
+     "camino_libre": 34982349,
+     "planta_maceta": 7622145,
+     "borde_bajo": 356014,
+     "obstaculo": 2440503
+    },
+    "exactitud": 0.9948
+   },
+   "test_nuevo": {
+    "iou": {
+     "fondo": 0.993,
+     "camino_libre": 0.9928,
+     "planta_maceta": 0.9742,
+     "borde_bajo": 0.8475,
+     "obstaculo": 0.9408
+    },
+    "precision": {
+     "fondo": 0.9971,
+     "camino_libre": 0.998,
+     "planta_maceta": 0.9819,
+     "borde_bajo": 0.8829,
+     "obstaculo": 0.9642
+    },
+    "recall": {
+     "fondo": 0.9959,
+     "camino_libre": 0.9948,
+     "planta_maceta": 0.992,
+     "borde_bajo": 0.9548,
+     "obstaculo": 0.9749
+    },
+    "miou": 0.9497,
+    "pixeles": {
+     "fondo": 15790080,
+     "camino_libre": 21356074,
+     "planta_maceta": 5114188,
+     "borde_bajo": 173417,
+     "obstaculo": 1803041
+    },
+    "exactitud": 0.9939
+   }
+  },
+  "NO_DEMOSTRADO": "Entrenado y evaluado SOLO con imágenes sintéticas. No hay evaluación sobre fotos reales. No desplegar sin evaluación independiente real y reversión."
+ },
+ "historial": [
+  {
+   "epoca": 1,
+   "perdida": 1.6856,
+   "val_miou": 0.5816,
+   "val_iou": {
+    "fondo": 0.8817,
+    "camino_libre": 0.9297,
+    "planta_maceta": 0.8524,
+    "borde_bajo": 0.2209,
+    "obstaculo": 0.0232
+   }
+  },
+  {
+   "epoca": 2,
+   "perdida": 0.5408,
+   "val_miou": 0.8014,
+   "val_iou": {
+    "fondo": 0.9727,
+    "camino_libre": 0.9725,
+    "planta_maceta": 0.9085,
+    "borde_bajo": 0.4382,
+    "obstaculo": 0.7149
+   }
+  },
+  {
+   "epoca": 3,
+   "perdida": 0.3116,
+   "val_miou": 0.8302,
+   "val_iou": {
+    "fondo": 0.9798,
+    "camino_libre": 0.979,
+    "planta_maceta": 0.9131,
+    "borde_bajo": 0.543,
+    "obstaculo": 0.7362
+   }
+  },
+  {
+   "epoca": 4,
+   "perdida": 0.2708,
+   "val_miou": 0.8463,
+   "val_iou": {
+    "fondo": 0.9788,
+    "camino_libre": 0.9807,
+    "planta_maceta": 0.9258,
+    "borde_bajo": 0.581,
+    "obstaculo": 0.7652
+   }
+  },
+  {
+   "epoca": 5,
+   "perdida": 0.2735,
+   "val_miou": 0.7688,
+   "val_iou": {
+    "fondo": 0.95,
+    "camino_libre": 0.9737,
+    "planta_maceta": 0.8881,
+    "borde_bajo": 0.5013,
+    "obstaculo": 0.531
+   }
+  },
+  {
+   "epoca": 6,
+   "perdida": 0.2627,
+   "val_miou": 0.839,
+   "val_iou": {
+    "fondo": 0.9812,
+    "camino_libre": 0.9803,
+    "planta_maceta": 0.9355,
+    "borde_bajo": 0.5565,
+    "obstaculo": 0.7411
+   }
+  },
+  {
+   "epoca": 7,
+   "perdida": 0.1928,
+   "val_miou": 0.8424,
+   "val_iou": {
+    "fondo": 0.9825,
+    "camino_libre": 0.9823,
+    "planta_maceta": 0.926,
+    "borde_bajo": 0.5889,
+    "obstaculo": 0.7321
+   }
+  },
+  {
+   "epoca": 8,
+   "perdida": 0.1877,
+   "val_miou": 0.8648,
+   "val_iou": {
+    "fondo": 0.9869,
+    "camino_libre": 0.9842,
+    "planta_maceta": 0.9413,
+    "borde_bajo": 0.5809,
+    "obstaculo": 0.8305
+   }
+  },
+  {
+   "epoca": 9,
+   "perdida": 0.1497,
+   "val_miou": 0.9018,
+   "val_iou": {
+    "fondo": 0.9899,
+    "camino_libre": 0.9893,
+    "planta_maceta": 0.9455,
+    "borde_bajo": 0.7335,
+    "obstaculo": 0.8506
+   }
+  },
+  {
+   "epoca": 10,
+   "perdida": 0.1506,
+   "val_miou": 0.8678,
+   "val_iou": {
+    "fondo": 0.9763,
+    "camino_libre": 0.9798,
+    "planta_maceta": 0.9317,
+    "borde_bajo": 0.6169,
+    "obstaculo": 0.8342
+   }
+  },
+  {
+   "epoca": 11,
+   "perdida": 0.1296,
+   "val_miou": 0.8608,
+   "val_iou": {
+    "fondo": 0.9443,
+    "camino_libre": 0.981,
+    "planta_maceta": 0.9581,
+    "borde_bajo": 0.7504,
+    "obstaculo": 0.6704
+   }
+  },
+  {
+   "epoca": 12,
+   "perdida": 0.1395,
+   "val_miou": 0.9118,
+   "val_iou": {
+    "fondo": 0.9905,
+    "camino_libre": 0.9895,
+    "planta_maceta": 0.9595,
+    "borde_bajo": 0.7385,
+    "obstaculo": 0.8812
+   }
+  },
+  {
+   "epoca": 13,
+   "perdida": 0.1157,
+   "val_miou": 0.9097,
+   "val_iou": {
+    "fondo": 0.9861,
+    "camino_libre": 0.9902,
+    "planta_maceta": 0.9556,
+    "borde_bajo": 0.7572,
+    "obstaculo": 0.8595
+   }
+  },
+  {
+   "epoca": 14,
+   "perdida": 0.1174,
+   "val_miou": 0.9141,
+   "val_iou": {
+    "fondo": 0.9886,
+    "camino_libre": 0.9907,
+    "planta_maceta": 0.9659,
+    "borde_bajo": 0.7366,
+    "obstaculo": 0.8886
+   }
+  },
+  {
+   "epoca": 15,
+   "perdida": 0.1008,
+   "val_miou": 0.9217,
+   "val_iou": {
+    "fondo": 0.9857,
+    "camino_libre": 0.9899,
+    "planta_maceta": 0.9616,
+    "borde_bajo": 0.8101,
+    "obstaculo": 0.8613
+   }
+  },
+  {
+   "epoca": 16,
+   "perdida": 0.1108,
+   "val_miou": 0.9261,
+   "val_iou": {
+    "fondo": 0.9891,
+    "camino_libre": 0.9895,
+    "planta_maceta": 0.9685,
+    "borde_bajo": 0.7781,
+    "obstaculo": 0.9053
+   }
+  },
+  {
+   "epoca": 17,
+   "perdida": 0.0901,
+   "val_miou": 0.9305,
+   "val_iou": {
+    "fondo": 0.9908,
+    "camino_libre": 0.9916,
+    "planta_maceta": 0.9696,
+    "borde_bajo": 0.797,
+    "obstaculo": 0.9033
+   }
+  },
+  {
+   "epoca": 18,
+   "perdida": 0.0876,
+   "val_miou": 0.9267,
+   "val_iou": {
+    "fondo": 0.9916,
+    "camino_libre": 0.9919,
+    "planta_maceta": 0.9692,
+    "borde_bajo": 0.7714,
+    "obstaculo": 0.9094
+   }
+  },
+  {
+   "epoca": 19,
+   "perdida": 0.103,
+   "val_miou": 0.9419,
+   "val_iou": {
+    "fondo": 0.9932,
+    "camino_libre": 0.9925,
+    "planta_maceta": 0.9684,
+    "borde_bajo": 0.8308,
+    "obstaculo": 0.9248
+   }
+  },
+  {
+   "epoca": 20,
+   "perdida": 0.0832,
+   "val_miou": 0.939,
+   "val_iou": {
+    "fondo": 0.9918,
+    "camino_libre": 0.9923,
+    "planta_maceta": 0.97,
+    "borde_bajo": 0.8276,
+    "obstaculo": 0.9133
+   }
+  },
+  {
+   "epoca": 21,
+   "perdida": 0.0787,
+   "val_miou": 0.9236,
+   "val_iou": {
+    "fondo": 0.9867,
+    "camino_libre": 0.9927,
+    "planta_maceta": 0.9655,
+    "borde_bajo": 0.8156,
+    "obstaculo": 0.8576
+   }
+  },
+  {
+   "epoca": 22,
+   "perdida": 0.0742,
+   "val_miou": 0.9358,
+   "val_iou": {
+    "fondo": 0.9916,
+    "camino_libre": 0.9924,
+    "planta_maceta": 0.9613,
+    "borde_bajo": 0.8349,
+    "obstaculo": 0.8987
+   }
+  },
+  {
+   "epoca": 23,
+   "perdida": 0.0664,
+   "val_miou": 0.9338,
+   "val_iou": {
+    "fondo": 0.9903,
+    "camino_libre": 0.9909,
+    "planta_maceta": 0.9665,
+    "borde_bajo": 0.8218,
+    "obstaculo": 0.8997
+   }
+  },
+  {
+   "epoca": 24,
+   "perdida": 0.0715,
+   "val_miou": 0.9511,
+   "val_iou": {
+    "fondo": 0.9923,
+    "camino_libre": 0.9933,
+    "planta_maceta": 0.9778,
+    "borde_bajo": 0.8544,
+    "obstaculo": 0.9378
+   }
+  },
+  {
+   "epoca": 25,
+   "perdida": 0.0696,
+   "val_miou": 0.9476,
+   "val_iou": {
+    "fondo": 0.9916,
+    "camino_libre": 0.9937,
+    "planta_maceta": 0.9774,
+    "borde_bajo": 0.844,
+    "obstaculo": 0.9312
+   }
+  },
+  {
+   "epoca": 26,
+   "perdida": 0.0566,
+   "val_miou": 0.9398,
+   "val_iou": {
+    "fondo": 0.9918,
+    "camino_libre": 0.9933,
+    "planta_maceta": 0.9655,
+    "borde_bajo": 0.8565,
+    "obstaculo": 0.8921
+   }
+  },
+  {
+   "epoca": 27,
+   "perdida": 0.0486,
+   "val_miou": 0.9555,
+   "val_iou": {
+    "fondo": 0.9931,
+    "camino_libre": 0.9935,
+    "planta_maceta": 0.9769,
+    "borde_bajo": 0.8722,
+    "obstaculo": 0.9421
+   }
+  },
+  {
+   "epoca": 28,
+   "perdida": 0.0535,
+   "val_miou": 0.9505,
+   "val_iou": {
+    "fondo": 0.9906,
+    "camino_libre": 0.9939,
+    "planta_maceta": 0.9785,
+    "borde_bajo": 0.8764,
+    "obstaculo": 0.913
+   }
+  },
+  {
+   "epoca": 29,
+   "perdida": 0.0491,
+   "val_miou": 0.9488,
+   "val_iou": {
+    "fondo": 0.9902,
+    "camino_libre": 0.9938,
+    "planta_maceta": 0.9775,
+    "borde_bajo": 0.874,
+    "obstaculo": 0.9084
+   }
+  },
+  {
+   "epoca": 30,
+   "perdida": 0.042,
+   "val_miou": 0.9485,
+   "val_iou": {
+    "fondo": 0.9902,
+    "camino_libre": 0.994,
+    "planta_maceta": 0.9771,
+    "borde_bajo": 0.872,
+    "obstaculo": 0.9092
+   }
+  },
+  {
+   "epoca": 31,
+   "perdida": 0.0431,
+   "val_miou": 0.9499,
+   "val_iou": {
+    "fondo": 0.9916,
+    "camino_libre": 0.9936,
+    "planta_maceta": 0.9766,
+    "borde_bajo": 0.861,
+    "obstaculo": 0.9269
+   }
+  },
+  {
+   "epoca": 32,
+   "perdida": 0.0403,
+   "val_miou": 0.9583,
+   "val_iou": {
+    "fondo": 0.9941,
+    "camino_libre": 0.994,
+    "planta_maceta": 0.9776,
+    "borde_bajo": 0.8746,
+    "obstaculo": 0.9512
+   }
+  },
+  {
+   "epoca": 33,
+   "perdida": 0.0402,
+   "val_miou": 0.9579,
+   "val_iou": {
+    "fondo": 0.9945,
+    "camino_libre": 0.9944,
+    "planta_maceta": 0.9781,
+    "borde_bajo": 0.8717,
+    "obstaculo": 0.9507
+   }
+  },
+  {
+   "epoca": 34,
+   "perdida": 0.0378,
+   "val_miou": 0.9615,
+   "val_iou": {
+    "fondo": 0.9946,
+    "camino_libre": 0.9942,
+    "planta_maceta": 0.979,
+    "borde_bajo": 0.8838,
+    "obstaculo": 0.9557
+   }
+  },
+  {
+   "epoca": 35,
+   "perdida": 0.0373,
+   "val_miou": 0.9623,
+   "val_iou": {
+    "fondo": 0.9948,
+    "camino_libre": 0.9945,
+    "planta_maceta": 0.9796,
+    "borde_bajo": 0.8845,
+    "obstaculo": 0.9583
+   }
+  },
+  {
+   "epoca": 36,
+   "perdida": 0.0352,
+   "val_miou": 0.9618,
+   "val_iou": {
+    "fondo": 0.995,
+    "camino_libre": 0.9944,
+    "planta_maceta": 0.9791,
+    "borde_bajo": 0.8824,
+    "obstaculo": 0.9581
+   }
+  },
+  {
+   "epoca": 37,
+   "perdida": 0.0364,
+   "val_miou": 0.9617,
+   "val_iou": {
+    "fondo": 0.9948,
+    "camino_libre": 0.9944,
+    "planta_maceta": 0.9793,
+    "borde_bajo": 0.8842,
+    "obstaculo": 0.9557
+   }
+  },
+  {
+   "epoca": 38,
+   "perdida": 0.0365,
+   "val_miou": 0.962,
+   "val_iou": {
+    "fondo": 0.9948,
+    "camino_libre": 0.9944,
+    "planta_maceta": 0.9795,
+    "borde_bajo": 0.8832,
+    "obstaculo": 0.9577
+   }
+  },
+  {
+   "epoca": 39,
+   "perdida": 0.0348,
+   "val_miou": 0.9619,
+   "val_iou": {
+    "fondo": 0.9949,
+    "camino_libre": 0.9945,
+    "planta_maceta": 0.979,
+    "borde_bajo": 0.885,
+    "obstaculo": 0.9558
+   }
+  },
+  {
+   "epoca": 40,
+   "perdida": 0.0353,
+   "val_miou": 0.9618,
+   "val_iou": {
+    "fondo": 0.9949,
+    "camino_libre": 0.9945,
+    "planta_maceta": 0.9792,
+    "borde_bajo": 0.8828,
+    "obstaculo": 0.9578
+   }
+  }
+ ],
+ "por_grupo": {
+  "val": {
+   "sala/baldosa": {
+    "iou": {
+     "fondo": 0.9943,
+     "camino_libre": 0.9952,
+     "planta_maceta": 0.9655,
+     "borde_bajo": 0.8738,
+     "obstaculo": 0.9436
+    },
+    "precision": {
+     "fondo": 0.9973,
+     "camino_libre": 0.9978,
+     "planta_maceta": 0.9832,
+     "borde_bajo": 0.9501,
+     "obstaculo": 0.9596
+    },
+    "recall": {
+     "fondo": 0.997,
+     "camino_libre": 0.9973,
+     "planta_maceta": 0.9817,
+     "borde_bajo": 0.9158,
+     "obstaculo": 0.9827
+    },
+    "miou": 0.9545,
+    "pixeles": {
+     "fondo": 3792903,
+     "camino_libre": 6259723,
+     "planta_maceta": 666392,
+     "borde_bajo": 52632,
+     "obstaculo": 287550
+    },
+    "exactitud": 0.9955
+   },
+   "vivero/alfombra": {
+    "iou": {
+     "fondo": 0.988,
+     "camino_libre": 0.9927,
+     "planta_maceta": 0.9859,
+     "borde_bajo": null,
+     "obstaculo": 0.8497
+    },
+    "precision": {
+     "fondo": 0.9936,
+     "camino_libre": 0.9979,
+     "planta_maceta": 0.9918,
+     "borde_bajo": null,
+     "obstaculo": 0.8532
+    },
+    "recall": {
+     "fondo": 0.9943,
+     "camino_libre": 0.9948,
+     "planta_maceta": 0.994,
+     "borde_bajo": null,
+     "obstaculo": 0.9953
+    },
+    "miou": 0.9541,
+    "pixeles": {
+     "fondo": 889147,
+     "camino_libre": 1875487,
+     "planta_maceta": 902789,
+     "borde_bajo": 0,
+     "obstaculo": 18977
+    },
+    "exactitud": 0.9945
+   },
+   "vivero/hormigon": {
+    "iou": {
+     "fondo": 0.9952,
+     "camino_libre": 0.9939,
+     "planta_maceta": 0.986,
+     "borde_bajo": null,
+     "obstaculo": 0.8988
+    },
+    "precision": {
+     "fondo": 0.9976,
+     "camino_libre": 0.9979,
+     "planta_maceta": 0.9918,
+     "borde_bajo": null,
+     "obstaculo": 0.9301
+    },
+    "recall": {
+     "fondo": 0.9976,
+     "camino_libre": 0.996,
+     "planta_maceta": 0.9941,
+     "borde_bajo": null,
+     "obstaculo": 0.9638
+    },
+    "miou": 0.9685,
+    "pixeles": {
+     "fondo": 1981411,
+     "camino_libre": 3591207,
+     "planta_maceta": 1775675,
+     "borde_bajo": 0,
+     "obstaculo": 24507
+    },
+    "exactitud": 0.9959
+   },
+   "pasillo/hormigon": {
+    "iou": {
+     "fondo": 0.9961,
+     "camino_libre": 0.9936,
+     "planta_maceta": 0.9775,
+     "borde_bajo": 0.8367,
+     "obstaculo": 0.9811
+    },
+    "precision": {
+     "fondo": 0.9984,
+     "camino_libre": 0.998,
+     "planta_maceta": 0.9817,
+     "borde_bajo": 0.9527,
+     "obstaculo": 0.9865
+    },
+    "recall": {
+     "fondo": 0.9977,
+     "camino_libre": 0.9955,
+     "planta_maceta": 0.9956,
+     "borde_bajo": 0.873,
+     "obstaculo": 0.9945
+    },
+    "miou": 0.957,
+    "pixeles": {
+     "fondo": 4306241,
+     "camino_libre": 3673058,
+     "planta_maceta": 578929,
+     "borde_bajo": 18980,
+     "obstaculo": 638792
+    },
+    "exactitud": 0.9963
+   },
+   "vivero/baldosa": {
+    "iou": {
+     "fondo": 0.9955,
+     "camino_libre": 0.9931,
+     "planta_maceta": 0.9821,
+     "borde_bajo": 0.8483,
+     "obstaculo": 0.9244
+    },
+    "precision": {
+     "fondo": 0.9978,
+     "camino_libre": 0.9975,
+     "planta_maceta": 0.99,
+     "borde_bajo": 0.9,
+     "obstaculo": 0.9315
+    },
+    "recall": {
+     "fondo": 0.9976,
+     "camino_libre": 0.9955,
+     "planta_maceta": 0.9919,
+     "borde_bajo": 0.9366,
+     "obstaculo": 0.9918
+    },
+    "miou": 0.9487,
+    "pixeles": {
+     "fondo": 1985347,
+     "camino_libre": 2451937,
+     "planta_maceta": 1037006,
+     "borde_bajo": 8944,
+     "obstaculo": 46366
+    },
+    "exactitud": 0.9955
+   },
+   "pasillo/madera": {
+    "iou": {
+     "fondo": 0.991,
+     "camino_libre": 0.9894,
+     "planta_maceta": 0.9582,
+     "borde_bajo": null,
+     "obstaculo": 0.9412
+    },
+    "precision": {
+     "fondo": 0.9954,
+     "camino_libre": 0.9955,
+     "planta_maceta": 0.975,
+     "borde_bajo": null,
+     "obstaculo": 0.971
+    },
+    "recall": {
+     "fondo": 0.9956,
+     "camino_libre": 0.9938,
+     "planta_maceta": 0.9824,
+     "borde_bajo": null,
+     "obstaculo": 0.9685
+    },
+    "miou": 0.97,
+    "pixeles": {
+     "fondo": 1318332,
+     "camino_libre": 1594977,
+     "planta_maceta": 436304,
+     "borde_bajo": 0,
+     "obstaculo": 336787
+    },
+    "exactitud": 0.9908
+   },
+   "sala/madera": {
+    "iou": {
+     "fondo": 0.9975,
+     "camino_libre": 0.998,
+     "planta_maceta": 0.9776,
+     "borde_bajo": 0.9623,
+     "obstaculo": null
+    },
+    "precision": {
+     "fondo": 0.9989,
+     "camino_libre": 0.9992,
+     "planta_maceta": 0.9882,
+     "borde_bajo": 0.9722,
+     "obstaculo": null
+    },
+    "recall": {
+     "fondo": 0.9986,
+     "camino_libre": 0.9988,
+     "planta_maceta": 0.9891,
+     "borde_bajo": 0.9895,
+     "obstaculo": null
+    },
+    "miou": 0.9838,
+    "pixeles": {
+     "fondo": 1899459,
+     "camino_libre": 3378196,
+     "planta_maceta": 218972,
+     "borde_bajo": 32973,
+     "obstaculo": 0
+    },
+    "exactitud": 0.9983
+   },
+   "pasillo/baldosa": {
+    "iou": {
+     "fondo": 0.9933,
+     "camino_libre": 0.9935,
+     "planta_maceta": 0.983,
+     "borde_bajo": 0.9024,
+     "obstaculo": 0.9622
+    },
+    "precision": {
+     "fondo": 0.9976,
+     "camino_libre": 0.9973,
+     "planta_maceta": 0.9877,
+     "borde_bajo": 0.9409,
+     "obstaculo": 0.976
+    },
+    "recall": {
+     "fondo": 0.9957,
+     "camino_libre": 0.9961,
+     "planta_maceta": 0.9952,
+     "borde_bajo": 0.9566,
+     "obstaculo": 0.9854
+    },
+    "miou": 0.9669,
+    "pixeles": {
+     "fondo": 1988259,
+     "camino_libre": 2735589,
+     "planta_maceta": 582454,
+     "borde_bajo": 46436,
+     "obstaculo": 176862
+    },
+    "exactitud": 0.9952
+   },
+   "sala/hormigon": {
+    "iou": {
+     "fondo": 0.9974,
+     "camino_libre": 0.999,
+     "planta_maceta": 0.9603,
+     "borde_bajo": null,
+     "obstaculo": null
+    },
+    "precision": {
+     "fondo": 0.9992,
+     "camino_libre": 0.9995,
+     "planta_maceta": 0.9792,
+     "borde_bajo": null,
+     "obstaculo": null
+    },
+    "recall": {
+     "fondo": 0.9982,
+     "camino_libre": 0.9995,
+     "planta_maceta": 0.9803,
+     "borde_bajo": null,
+     "obstaculo": null
+    },
+    "miou": 0.9856,
+    "pixeles": {
+     "fondo": 694149,
+     "camino_libre": 1123786,
+     "planta_maceta": 25265,
+     "borde_bajo": 0,
+     "obstaculo": 0
+    },
+    "exactitud": 0.9988
+   },
+   "pasillo/alfombra": {
+    "iou": {
+     "fondo": 0.9969,
+     "camino_libre": 0.9967,
+     "planta_maceta": null,
+     "borde_bajo": null,
+     "obstaculo": 0.9741
+    },
+    "precision": {
+     "fondo": 0.999,
+     "camino_libre": 0.9989,
+     "planta_maceta": null,
+     "borde_bajo": null,
+     "obstaculo": 0.981
+    },
+    "recall": {
+     "fondo": 0.998,
+     "camino_libre": 0.9978,
+     "planta_maceta": null,
+     "borde_bajo": null,
+     "obstaculo": 0.9928
+    },
+    "miou": 0.9892,
+    "pixeles": {
+     "fondo": 896433,
+     "camino_libre": 832892,
+     "planta_maceta": 0,
+     "borde_bajo": 0,
+     "obstaculo": 113875
+    },
+    "exactitud": 0.9976
+   }
+  },
+  "test": {
+   "vivero/hormigon": {
+    "iou": {
+     "fondo": 0.991,
+     "camino_libre": 0.9923,
+     "planta_maceta": 0.9846,
+     "borde_bajo": 0.5941,
+     "obstaculo": 0.8368
+    },
+    "precision": {
+     "fondo": 0.9959,
+     "camino_libre": 0.9971,
+     "planta_maceta": 0.9911,
+     "borde_bajo": 0.6292,
+     "obstaculo": 0.9089
+    },
+    "recall": {
+     "fondo": 0.9951,
+     "camino_libre": 0.9951,
+     "planta_maceta": 0.9934,
+     "borde_bajo": 0.914,
+     "obstaculo": 0.9134
+    },
+    "miou": 0.8797,
+    "pixeles": {
+     "fondo": 1407305,
+     "camino_libre": 2535827,
+     "planta_maceta": 1514265,
+     "borde_bajo": 5002,
+     "obstaculo": 67201
+    },
+    "exactitud": 0.9936
+   },
+   "pasillo/madera": {
+    "iou": {
+     "fondo": 0.9948,
+     "camino_libre": 0.9931,
+     "planta_maceta": 0.971,
+     "borde_bajo": 0.9629,
+     "obstaculo": 0.9485
+    },
+    "precision": {
+     "fondo": 0.9971,
+     "camino_libre": 0.9968,
+     "planta_maceta": 0.983,
+     "borde_bajo": 0.9809,
+     "obstaculo": 0.978
+    },
+    "recall": {
+     "fondo": 0.9977,
+     "camino_libre": 0.9963,
+     "planta_maceta": 0.9876,
+     "borde_bajo": 0.9813,
+     "obstaculo": 0.9691
+    },
+    "miou": 0.9741,
+    "pixeles": {
+     "fondo": 7799388,
+     "camino_libre": 6814784,
+     "planta_maceta": 1140253,
+     "borde_bajo": 133062,
+     "obstaculo": 701313
+    },
+    "exactitud": 0.9951
+   },
+   "pasillo/alfombra": {
+    "iou": {
+     "fondo": 0.9931,
+     "camino_libre": 0.991,
+     "planta_maceta": 0.9633,
+     "borde_bajo": 0.4322,
+     "obstaculo": 0.9544
+    },
+    "precision": {
+     "fondo": 0.9959,
+     "camino_libre": 0.9971,
+     "planta_maceta": 0.98,
+     "borde_bajo": 0.4635,
+     "obstaculo": 0.9756
+    },
+    "recall": {
+     "fondo": 0.9972,
+     "camino_libre": 0.9938,
+     "planta_maceta": 0.9826,
+     "borde_bajo": 0.8647,
+     "obstaculo": 0.9777
+    },
+    "miou": 0.8668,
+    "pixeles": {
+     "fondo": 2608640,
+     "camino_libre": 2455769,
+     "planta_maceta": 201714,
+     "borde_bajo": 4206,
+     "obstaculo": 259271
+    },
+    "exactitud": 0.9942
+   },
+   "vivero/madera": {
+    "iou": {
+     "fondo": 0.9906,
+     "camino_libre": 0.9934,
+     "planta_maceta": 0.9798,
+     "borde_bajo": null,
+     "obstaculo": 0.9206
+    },
+    "precision": {
+     "fondo": 0.9937,
+     "camino_libre": 0.9973,
+     "planta_maceta": 0.9865,
+     "borde_bajo": null,
+     "obstaculo": 0.9898
+    },
+    "recall": {
+     "fondo": 0.9968,
+     "camino_libre": 0.9961,
+     "planta_maceta": 0.9931,
+     "borde_bajo": null,
+     "obstaculo": 0.9295
+    },
+    "miou": 0.9711,
+    "pixeles": {
+     "fondo": 2610754,
+     "camino_libre": 4350997,
+     "planta_maceta": 1988103,
+     "borde_bajo": 0,
+     "obstaculo": 266146
+    },
+    "exactitud": 0.9937
+   },
+   "pasillo/hormigon": {
+    "iou": {
+     "fondo": 0.993,
+     "camino_libre": 0.9938,
+     "planta_maceta": 0.9585,
+     "borde_bajo": 0.9254,
+     "obstaculo": 0.9712
+    },
+    "precision": {
+     "fondo": 0.9973,
+     "camino_libre": 0.9973,
+     "planta_maceta": 0.9676,
+     "borde_bajo": 0.9782,
+     "obstaculo": 0.9858
+    },
+    "recall": {
+     "fondo": 0.9957,
+     "camino_libre": 0.9965,
+     "planta_maceta": 0.9903,
+     "borde_bajo": 0.9448,
+     "obstaculo": 0.985
+    },
+    "miou": 0.9684,
+    "pixeles": {
+     "fondo": 2242257,
+     "camino_libre": 2406107,
+     "planta_maceta": 307497,
+     "borde_bajo": 40030,
+     "obstaculo": 533709
+    },
+    "exactitud": 0.9944
+   },
+   "sala/madera": {
+    "iou": {
+     "fondo": 0.9959,
+     "camino_libre": 0.9949,
+     "planta_maceta": 0.9816,
+     "borde_bajo": 0.6913,
+     "obstaculo": 0.9783
+    },
+    "precision": {
+     "fondo": 0.9985,
+     "camino_libre": 0.9965,
+     "planta_maceta": 0.9888,
+     "borde_bajo": 0.9743,
+     "obstaculo": 0.9828
+    },
+    "recall": {
+     "fondo": 0.9973,
+     "camino_libre": 0.9983,
+     "planta_maceta": 0.9926,
+     "borde_bajo": 0.7042,
+     "obstaculo": 0.9953
+    },
+    "miou": 0.9284,
+    "pixeles": {
+     "fondo": 3413828,
+     "camino_libre": 5015143,
+     "planta_maceta": 492852,
+     "borde_bajo": 37564,
+     "obstaculo": 256613
+    },
+    "exactitud": 0.9964
+   },
+   "vivero/baldosa": {
+    "iou": {
+     "fondo": 0.9899,
+     "camino_libre": 0.9926,
+     "planta_maceta": 0.9853,
+     "borde_bajo": null,
+     "obstaculo": 0.9433
+    },
+    "precision": {
+     "fondo": 0.9959,
+     "camino_libre": 0.9974,
+     "planta_maceta": 0.9905,
+     "borde_bajo": null,
+     "obstaculo": 0.9573
+    },
+    "recall": {
+     "fondo": 0.9939,
+     "camino_libre": 0.9951,
+     "planta_maceta": 0.9947,
+     "borde_bajo": null,
+     "obstaculo": 0.9847
+    },
+    "miou": 0.9778,
+    "pixeles": {
+     "fondo": 822707,
+     "camino_libre": 1802060,
+     "planta_maceta": 1008977,
+     "borde_bajo": 0,
+     "obstaculo": 52656
+    },
+    "exactitud": 0.9946
+   },
+   "pasillo/baldosa": {
+    "iou": {
+     "fondo": 0.9884,
+     "camino_libre": 0.9925,
+     "planta_maceta": 0.9854,
+     "borde_bajo": 0.9318,
+     "obstaculo": 0.8871
+    },
+    "precision": {
+     "fondo": 0.9963,
+     "camino_libre": 0.9971,
+     "planta_maceta": 0.991,
+     "borde_bajo": 0.9691,
+     "obstaculo": 0.8932
+    },
+    "recall": {
+     "fondo": 0.992,
+     "camino_libre": 0.9953,
+     "planta_maceta": 0.9943,
+     "borde_bajo": 0.9604,
+     "obstaculo": 0.9924
+    },
+    "miou": 0.957,
+    "pixeles": {
+     "fondo": 3914678,
+     "camino_libre": 4464080,
+     "planta_maceta": 530376,
+     "borde_bajo": 90815,
+     "obstaculo": 216051
+    },
+    "exactitud": 0.9934
+   },
+   "sala/alfombra": {
+    "iou": {
+     "fondo": 0.9959,
+     "camino_libre": 0.9965,
+     "planta_maceta": 0.9751,
+     "borde_bajo": 0.9583,
+     "obstaculo": 0.9211
+    },
+    "precision": {
+     "fondo": 0.9971,
+     "camino_libre": 0.9991,
+     "planta_maceta": 0.9901,
+     "borde_bajo": 0.9701,
+     "obstaculo": 0.9351
+    },
+    "recall": {
+     "fondo": 0.9988,
+     "camino_libre": 0.9974,
+     "planta_maceta": 0.9848,
+     "borde_bajo": 0.9874,
+     "obstaculo": 0.984
+    },
+    "miou": 0.9694,
+    "pixeles": {
+     "fondo": 1376593,
+     "camino_libre": 2068351,
+     "planta_maceta": 190612,
+     "borde_bajo": 16446,
+     "obstaculo": 34398
+    },
+    "exactitud": 0.9971
+   },
+   "sala/baldosa": {
+    "iou": {
+     "fondo": 0.9943,
+     "camino_libre": 0.9953,
+     "planta_maceta": 0.9785,
+     "borde_bajo": 0.925,
+     "obstaculo": 0.9327
+    },
+    "precision": {
+     "fondo": 0.9976,
+     "camino_libre": 0.998,
+     "planta_maceta": 0.9863,
+     "borde_bajo": 0.9399,
+     "obstaculo": 0.9555
+    },
+    "recall": {
+     "fondo": 0.9967,
+     "camino_libre": 0.9973,
+     "planta_maceta": 0.992,
+     "borde_bajo": 0.9831,
+     "obstaculo": 0.975
+    },
+    "miou": 0.9651,
+    "pixeles": {
+     "fondo": 2130839,
+     "camino_libre": 3069231,
+     "planta_maceta": 247496,
+     "borde_bajo": 28889,
+     "obstaculo": 53145
+    },
+    "exactitud": 0.9965
+   }
+  },
+  "test_nuevo": {
+   "vivero/madera": {
+    "iou": {
+     "fondo": 0.9948,
+     "camino_libre": 0.9947,
+     "planta_maceta": 0.9778,
+     "borde_bajo": null,
+     "obstaculo": 0.9151
+    },
+    "precision": {
+     "fondo": 0.998,
+     "camino_libre": 0.9983,
+     "planta_maceta": 0.9831,
+     "borde_bajo": null,
+     "obstaculo": 0.9804
+    },
+    "recall": {
+     "fondo": 0.9968,
+     "camino_libre": 0.9964,
+     "planta_maceta": 0.9945,
+     "borde_bajo": null,
+     "obstaculo": 0.9321
+    },
+    "miou": 0.9706,
+    "pixeles": {
+     "fondo": 3103954,
+     "camino_libre": 5224246,
+     "planta_maceta": 2429802,
+     "borde_bajo": 0,
+     "obstaculo": 301198
+    },
+    "exactitud": 0.9943
+   },
+   "pasillo/baldosa": {
+    "iou": {
+     "fondo": 0.9923,
+     "camino_libre": 0.9871,
+     "planta_maceta": 0.9709,
+     "borde_bajo": 0.8721,
+     "obstaculo": 0.9649
+    },
+    "precision": {
+     "fondo": 0.9952,
+     "camino_libre": 0.9972,
+     "planta_maceta": 0.9833,
+     "borde_bajo": 0.9013,
+     "obstaculo": 0.9723
+    },
+    "recall": {
+     "fondo": 0.997,
+     "camino_libre": 0.9898,
+     "planta_maceta": 0.9872,
+     "borde_bajo": 0.9642,
+     "obstaculo": 0.9922
+    },
+    "miou": 0.9574,
+    "pixeles": {
+     "fondo": 4052386,
+     "camino_libre": 3702622,
+     "planta_maceta": 683152,
+     "borde_bajo": 34176,
+     "obstaculo": 743664
+    },
+    "exactitud": 0.9929
+   },
+   "vivero/baldosa": {
+    "iou": {
+     "fondo": 0.9898,
+     "camino_libre": 0.9873,
+     "planta_maceta": 0.9814,
+     "borde_bajo": null,
+     "obstaculo": 0.9103
+    },
+    "precision": {
+     "fondo": 0.9951,
+     "camino_libre": 0.9966,
+     "planta_maceta": 0.9882,
+     "borde_bajo": null,
+     "obstaculo": 0.927
+    },
+    "recall": {
+     "fondo": 0.9947,
+     "camino_libre": 0.9906,
+     "planta_maceta": 0.993,
+     "borde_bajo": null,
+     "obstaculo": 0.9806
+    },
+    "miou": 0.9672,
+    "pixeles": {
+     "fondo": 941968,
+     "camino_libre": 1756166,
+     "planta_maceta": 894307,
+     "borde_bajo": 0,
+     "obstaculo": 93959
+    },
+    "exactitud": 0.992
+   },
+   "sala/madera": {
+    "iou": {
+     "fondo": 0.9924,
+     "camino_libre": 0.9971,
+     "planta_maceta": 0.9516,
+     "borde_bajo": 0.7291,
+     "obstaculo": 0.8347
+    },
+    "precision": {
+     "fondo": 0.9992,
+     "camino_libre": 0.9988,
+     "planta_maceta": 0.9688,
+     "borde_bajo": 0.813,
+     "obstaculo": 0.8578
+    },
+    "recall": {
+     "fondo": 0.9932,
+     "camino_libre": 0.9983,
+     "planta_maceta": 0.9817,
+     "borde_bajo": 0.8759,
+     "obstaculo": 0.9688
+    },
+    "miou": 0.901,
+    "pixeles": {
+     "fondo": 3409913,
+     "camino_libre": 5273775,
+     "planta_maceta": 389037,
+     "borde_bajo": 22694,
+     "obstaculo": 120581
+    },
+    "exactitud": 0.9951
+   },
+   "pasillo/madera": {
+    "iou": {
+     "fondo": 0.9935,
+     "camino_libre": 0.9888,
+     "planta_maceta": 0.9764,
+     "borde_bajo": 0.9224,
+     "obstaculo": 0.9742
+    },
+    "precision": {
+     "fondo": 0.9971,
+     "camino_libre": 0.9973,
+     "planta_maceta": 0.9815,
+     "borde_bajo": 0.9426,
+     "obstaculo": 0.9858
+    },
+    "recall": {
+     "fondo": 0.9963,
+     "camino_libre": 0.9914,
+     "planta_maceta": 0.9947,
+     "borde_bajo": 0.9772,
+     "obstaculo": 0.988
+    },
+    "miou": 0.971,
+    "pixeles": {
+     "fondo": 1632055,
+     "camino_libre": 1312338,
+     "planta_maceta": 321423,
+     "borde_bajo": 108681,
+     "obstaculo": 311903
+    },
+    "exactitud": 0.9932
+   },
+   "sala/baldosa": {
+    "iou": {
+     "fondo": 0.9938,
+     "camino_libre": 0.9936,
+     "planta_maceta": 0.9631,
+     "borde_bajo": 0.4755,
+     "obstaculo": 0.9277
+    },
+    "precision": {
+     "fondo": 0.9971,
+     "camino_libre": 0.9979,
+     "planta_maceta": 0.9716,
+     "borde_bajo": 0.5264,
+     "obstaculo": 0.9667
+    },
+    "recall": {
+     "fondo": 0.9967,
+     "camino_libre": 0.9957,
+     "planta_maceta": 0.991,
+     "borde_bajo": 0.8312,
+     "obstaculo": 0.9583
+    },
+    "miou": 0.8707,
+    "pixeles": {
+     "fondo": 2649804,
+     "camino_libre": 4086927,
+     "planta_maceta": 396467,
+     "borde_bajo": 7866,
+     "obstaculo": 231736
+    },
+    "exactitud": 0.9944
+   }
+  }
+ }
+}

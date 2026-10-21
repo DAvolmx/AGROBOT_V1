@@ -108,7 +108,9 @@ local_costmap:
       height: 5
       resolution: 0.05
       rolling_window: true
-      footprint: "[[0.20, 0.185], [0.20, -0.185], [-0.20, -0.185], [-0.20, 0.185]]"
+      # CORREGIDO 2026-10-20 (croquis): base_link está en el LIDAR (tf_base_to_laser x=0), que queda a 18,5 cm de la cara
+      # DELANTERA y a 30,5 cm de la TRASERA (el módulo del pivote, atrás, es el de las ruedas más separadas: 38 cm).
+      footprint: "[[0.185, 0.19], [0.185, -0.19], [-0.305, -0.19], [-0.305, 0.19]]"
       plugins: ["obstacle_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -138,7 +140,9 @@ global_costmap:
       update_frequency: 1.5
       publish_frequency: 1.0
       resolution: 0.05
-      footprint: "[[0.20, 0.185], [0.20, -0.185], [-0.20, -0.185], [-0.20, 0.185]]"
+      # CORREGIDO 2026-10-20 (croquis): base_link está en el LIDAR (tf_base_to_laser x=0), que queda a 18,5 cm de la cara
+      # DELANTERA y a 30,5 cm de la TRASERA (el módulo del pivote, atrás, es el de las ruedas más separadas: 38 cm).
+      footprint: "[[0.185, 0.19], [0.185, -0.19], [-0.305, -0.19], [-0.305, 0.19]]"
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"

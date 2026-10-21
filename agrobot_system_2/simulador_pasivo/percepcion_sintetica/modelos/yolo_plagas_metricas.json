@@ -1,0 +1,59 @@
+{
+ "tarea": "plagas",
+ "imgsz": 640,
+ "epocas": 40,
+ "base": "yolo11n.pt (COCO)",
+ "segundos_entrenamiento": 2768,
+ "val": {
+  "mAP50": 0.9433,
+  "mAP50_95": 0.6845,
+  "precision": 0.9424,
+  "recall": 0.9112,
+  "por_clase_mAP50": {
+   "pulgon": 0.8636,
+   "oruga": 0.9925,
+   "escarabajo": 0.9739
+  },
+  "ms_por_imagen": {
+   "preprocess": 1.1,
+   "inference": 14.8,
+   "loss": 0.0,
+   "postprocess": 1.8
+  }
+ },
+ "test": {
+  "mAP50": 0.9277,
+  "mAP50_95": 0.6764,
+  "precision": 0.9281,
+  "recall": 0.9017,
+  "por_clase_mAP50": {
+   "pulgon": 0.8409,
+   "oruga": 0.994,
+   "escarabajo": 0.9481
+  },
+  "ms_por_imagen": {
+   "preprocess": 1.0,
+   "inference": 14.7,
+   "loss": 0.0,
+   "postprocess": 1.8
+  }
+ },
+ "test_nuevo": {
+  "mAP50": 0.9331,
+  "mAP50_95": 0.6696,
+  "precision": 0.9099,
+  "recall": 0.9063,
+  "por_clase_mAP50": {
+   "pulgon": 0.8262,
+   "oruga": 0.9934,
+   "escarabajo": 0.9796
+  },
+  "ms_por_imagen": {
+   "preprocess": 1.1,
+   "inference": 14.8,
+   "loss": 0.0,
+   "postprocess": 1.8
+  }
+ },
+ "NO_DEMOSTRADO": "Entrenado y evaluado solo con imágenes sintéticas. Los 'insectos' son sprites sencillos: no demuestra detección de plagas reales."
+}

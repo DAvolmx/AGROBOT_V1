@@ -4,7 +4,12 @@
     "gyro_bias_x_dps": 0,
     "gyro_bias_y_dps": 0,
     "gyro_bias_z_dps": 0,
-    "imu_cabeceo_signo": 1
+    "imu_cabeceo_signo": 1,
+    "imu_gravedad_nivel": [
+      0.2077,
+      0.0005,
+      0.9515
+    ]
   },
   "hardware": {
     "camera_enabled": true,
@@ -20,23 +25,30 @@
     "clip_record_threshold": 0.77,
     "imgsz": 480,
     "infer_hz_max": 10,
+    "clases_planta": [
+      "col_planta",
+      "col_cogollo",
+      "maceta_planta"
+    ],
     "escanear_al_detectar": "siempre"
   },
   "slam": {
-    "robot_largo_cm": 40,
-    "robot_ancho_cm": 37,
-    "cono_frontal_deg": 10,
+    "robot_largo_cm": 49,
+    "robot_ancho_cm": 38,
+    "cono_frontal_deg": 30,
     "cono_lateral_deg": 60,
     "margen_parada_cm": 12,
-    "deslizamiento_cm": 40,
-    "freno_camara": true,
-    "pose_gyro_trust": 0.85
+    "deslizamiento_cm": 20,
+    "freno_camara": false,
+    "pose_gyro_trust": 0.85,
+    "lidar_adelante_cm": 18.5,
+    "lidar_atras_cm": 30.5
   },
   "autonomia": {
-    "escala_velocidad": 0.5,
-    "distancia_puntos_cm": 290,
-    "avance_libre_cm": 100,
-    "lado_libre_cm": 60,
+    "escala_velocidad": 0.13,
+    "distancia_puntos_cm": 120,
+    "avance_libre_cm": 40,
+    "lado_libre_cm": 30,
     "retroceso_libre_cm": 30,
     "escaneo_periodo_s": 180,
     "escaneo_duracion_s": 8,
@@ -45,7 +57,7 @@
     "escaneo_enciende_foco": true,
     "sendero_activo": true,
     "sendero_tolerancia_cm": 10,
-    "sendero_pared_max_cm": 150,
+    "sendero_pared_max_cm": 120,
     "sendero_vision": true,
     "sendero_vision_peso": 0.5,
     "sendero_verde_h_min": 10,
@@ -55,7 +67,7 @@
     "sendero_adaptativo": true,
     "sendero_igualar_luz": true,
     "compensar_cabeceo": true,
-    "sendero_parada_incierta_ciclos": 5,
+    "sendero_parada_incierta_ciclos": 0,
     "sendero_si_no_cabe": "aviso",
     "sendero_holgura_lateral_cm": 14,
     "politica_activa": true
@@ -73,10 +85,16 @@
     "max_omega_rps": 4.0,
     "suavidad_duty": 1.0,
     "suavidad_periodo_s": 0.3,
-    "modo_manejo": "preciso",
-    "c3_wifi_only": false
+    "modo_manejo": "interior",
+    "entorno_auto": true,
+    "solo_manual": false,
+    "pivote_en_sitio": true,
+    "c3_wifi_only": false,
+    "invertir_giro": true
   },
   "safety": {
+    "freno_lidar_autonomo": false,
+    "modo_seguro_activo": false,
     "heartbeat_stale_warn_s": 5,
     "heartbeat_stale_err_s": 20,
     "max_linear_accel_mps2": 3,

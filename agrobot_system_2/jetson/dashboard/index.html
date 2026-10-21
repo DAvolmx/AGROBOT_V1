@@ -636,6 +636,7 @@ input[type="text"], select { font-family: inherit; }
   </div>
   <div class="nav-tabs">
     <button class="nav-btn active" data-tab="tab-dashboard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></span>Dashboard</button>
+    <button class="nav-btn" data-tab="tab-asistido"><span class="ic">🎮</span>Manejo asistido</button>
     <button class="nav-btn" data-tab="tab-galeria"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="9" cy="9.5" r="1.7"/><path d="m3 17 5.5-5.5a2 2 0 0 1 2.8 0L18 18"/></svg></span>Galería de misión</button>
     <button class="nav-btn" data-tab="tab-nav"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11 20 4l-7 17-2.5-7.5L3 11Z"/></svg></span>Navegación</button>
     <button class="nav-btn" data-tab="tab-slam"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span>SLAM &amp; Telemetría</button>
@@ -769,6 +770,11 @@ input[type="text"], select { font-family: inherit; }
                   <button class="mode-btn" id="mode-interior" data-modo="interior">Interior</button>
                   <button class="mode-btn active" id="mode-exterior" data-modo="exterior">Exterior</button>
                 </div>
+                <div class="toggle-row" style="margin-top:8px;" title="Elige solo Interior/Exterior con el LIDAR y la cámara. Apagado: solo sugiere. Si pulsas un modo a mano, calla 10 minutos.">
+                  <span style="font-size:14px;">Entorno automático
+                    <span class="mono" style="color:var(--ink-soft); font-size:12.5px;">· <span id="entorno-estado">—</span></span></span>
+                  <label class="switch"><input type="checkbox" id="entorno-toggle"><div class="track"></div></label>
+                </div>
                 <div class="toggle-row" style="margin-top:8px;">
                   <span style="font-size:14px;">Maniobra de giro</span>
                   <label class="switch"><input type="checkbox" id="maniobra-toggle" checked><div class="track"></div></label>
@@ -791,13 +797,21 @@ input[type="text"], select { font-family: inherit; }
                     <span>SERVO CÁMARA</span>
                     <span class="v mono"><span id="servo-val">0</span>° <span style="color:var(--ink-soft);">· real <span id="servo-real">—</span>°</span></span>
                   </div>
-                  <input type="range" min="25" max="130" value="98" id="servo-slider">
+                  <input type="range" min="25" max="160" value="98" id="servo-slider">
+                </div>
+                <div class="slider-row" style="margin-top:10px;">
+                  <div class="label-row">
+                    <span>ZOOM CÁMARA</span>
+                    <span class="v mono"><span id="zoom-val">1.0</span>×</span>
+                  </div>
+                  <input type="range" min="1" max="4" step="0.1" value="1" id="zoom-slider">
                 </div>
                 <div class="toggle-row">
                   <span style="font-size:16px;">LED de escaneo <span class="mono" style="color:var(--ink-soft); font-size:13.5px;">· real <span id="led-real">—</span></span></span>
                   <label class="switch"><input type="checkbox" id="led-toggle"><div class="track"></div></label>
                 </div>
                 <button class="btn" id="scan-btn">Escanear planta</button>
+                <button class="btn" id="saludo-btn" title="Izquierda, derecha, mira arriba, foco x3 y barrido">👋 Saludo</button>
                 <button class="btn" id="rec-video-btn">● Grabar video</button>
                 <p class="hint" id="rec-video-hint" style="display:none;"></p>
                 <p class="hint">El barrido lo hace la Jetson moviendo el servo; al terminar vuelve a lo que marca este control.
@@ -807,6 +821,39 @@ input[type="text"], select { font-family: inherit; }
           </div>
         </div>
       </div>
+
+    <!-- ================= MANEJO ASISTIDO (junta, sin duplicar, lo que ya existe) ================= -->
+    <style>
+      .asist-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
+      .asist-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      .asist-grid .card { margin-bottom: 0 !important; }
+      #as-cam .video-wrap img { width: 100%; }
+      #as-map #map-wrap { height: 50vh; min-height: 360px; }
+      #as-radar .lidar-wrap { min-height: 300px !important; }
+      .keys-tabla { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; font-size: 14.5px; }
+      .keys-tabla kbd { font: 600 13px var(--mono, ui-monospace, monospace); padding: 2px 8px; border-radius: 6px;
+        border: 1px solid var(--line); background: var(--panel); white-space: nowrap; }
+      @media (max-width: 980px) { .asist-grid { grid-template-columns: 1fr; } }
+    </style>
+    <div class="tab" id="tab-asistido">
+      <div id="as-bar" style="margin-bottom:12px;"></div>
+      <div class="asist-grid">
+        <div class="asist-col"><div id="as-cam"></div><div id="as-ctrl"></div>
+        <div id="as-keys" class="card">
+          <h3 style="margin:0 0 10px;">Teclado</h3>
+          <div class="keys-tabla">
+            <span><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> / <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></span><span>mover (un toque = un pulso)</span>
+            <span><kbd>Espacio</kbd></span><span>parar</span>
+            <span><kbd>I</kbd> / <kbd>K</kbd></span><span>servo de la cámara arriba / abajo (3°; con <kbd>Shift</kbd> 10°)</span>
+            <span><kbd>H</kbd></span><span>servo a posición de reposo (98°)</span>
+            <span><kbd>+</kbd> / <kbd>-</kbd></span><span>zoom más / menos (0,5×) · <kbd>0</kbd> zoom 1×</span>
+            <span><kbd>L</kbd></span><span>LED de escaneo</span>
+          </div>
+          <p class="hint" style="margin-top:10px;">Servo: 25°–160°. El zoom es solo para inspeccionar con el robot quieto; vuelve a 1× al iniciar exploración o patrulla.</p>
+        </div></div>
+        <div class="asist-col"><div id="as-map"></div><div id="as-radar"></div></div>
+      </div>
+    </div>
 
     <!-- ================= GALERÍA DE MISIÓN ================= -->
     <div class="tab" id="tab-galeria">
@@ -1499,8 +1546,32 @@ input[type="text"], select { font-family: inherit; }
     });
   }
 
+  // Manejo asistido: NO duplica nada. Al abrir la pestaña "presta" a su cuadrícula las tarjetas reales del
+  // dashboard (barra de estado, cámara, radar, controles) y del mapa; al salir las devuelve a su sitio.
+  // Conservan sus ids, así que todos los manejadores y el dibujo siguen funcionando.
+  const prestadas = [];
+  function montarAsistido() {
+    if (prestadas.length) return;
+    const cam = document.querySelector("#tab-dashboard .cam-card");
+    const radar = cam ? cam.nextElementSibling : null;
+    const ctrl = document.querySelector("#tab-dashboard .cam-radar");
+    [[document.querySelector("#tab-dashboard .barra-estado"), "as-bar"], [cam, "as-cam"], [radar, "as-radar"],
+     [$("map-canvas").closest(".card"), "as-map"], [ctrl ? ctrl.nextElementSibling : null, "as-ctrl"]
+    ].forEach(([el, slot]) => {
+      if (!el) return;
+      prestadas.push({ el, parent: el.parentNode, next: el.nextSibling });
+      $(slot).appendChild(el);
+    });
+  }
+  function desmontarAsistido() {
+    while (prestadas.length) {
+      const { el, parent, next } = prestadas.pop();
+      parent.insertBefore(el, next && next.parentNode === parent ? next : null);
+    }
+  }
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      desmontarAsistido();
       document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
       document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
       btn.classList.add("active");
@@ -1509,15 +1580,24 @@ input[type="text"], select { font-family: inherit; }
       if (btn.dataset.tab === "tab-sistema") { resizeRadar(); dibujarRadarSiVisible(); }
       if (btn.dataset.tab === "tab-dashboard") { resizeRadarDash(); dibujarRadarSiVisible(); }
       if (btn.dataset.tab === "tab-nav") resizeMap();
+      if (btn.dataset.tab === "tab-asistido") {
+        montarAsistido();
+        resizeMap(); resizeRadarDash(); dibujarRadarSiVisible();
+      }
       ajustarVideo();
     });
+  });
+  // Abrir directo con  http://<jetson>:8080/#asistido  (después de `load`: el mapa y el radar ya existen).
+  window.addEventListener("load", () => {
+    if (location.hash === "#asistido") document.querySelector('.nav-btn[data-tab="tab-asistido"]').click();
   });
 
   // ---------------------------------------------------------------
   // Video
   // ---------------------------------------------------------------
   function videoVisible() {
-    return !document.hidden && $("tab-dashboard").classList.contains("active");
+    return !document.hidden && ($("tab-dashboard").classList.contains("active")
+                                || $("tab-asistido").classList.contains("active"));
   }
   function ajustarVideo() {
     const img = $("video");
@@ -1615,7 +1695,9 @@ input[type="text"], select { font-family: inherit; }
       case "exploracion_event": break;   // ya se ve en el estado
       case "lidar_scan": lastScan = msg.data; dibujarRadarSiVisible(); break;
       case "map": setMap(msg.data); break;
+      case "scan_mapa": nuevoScanMapa(msg.data); break;
       case "drive_mode": mostrarDriveMode(msg.data.modo); break;
+      case "entorno": pintarEntorno(msg.data); break;
       case "lidar_distancias": pintarDistancias(msg.data); break;
       // Llega hasta 4 veces por segundo mientras frena: se marca en el
       // panel de distancias en vez de apilar un toast por mensaje.
@@ -1814,6 +1896,11 @@ input[type="text"], select { font-family: inherit; }
   let surcosMapa = [], surcoActual = null, puntosEscaneo = [], herramientaMapa = "ver";
 
   function setMap(m) {
+    if (m.data_b64 && !m.data) {          // 1 byte/celda: -1 llega como 255
+      const bin = atob(m.data_b64), n = bin.length, d = new Int8Array(n);
+      for (let i = 0; i < n; i++) d[i] = bin.charCodeAt(i);   // Int8Array envuelve 255 -> -1
+      m.data = d; m.data_b64 = null;
+    }
     lastMap = m;
     $("map-caption").textContent = `${m.width}×${m.height} celdas · resolución ${m.resolution.toFixed(2)} m/celda`;
     mapaLienzo.width = m.width; mapaLienzo.height = m.height;
@@ -1831,6 +1918,28 @@ input[type="text"], select { font-family: inherit; }
     }
     c.putImageData(img, 0, 0);
     drawMap();
+  }
+
+  // Scan del LIDAR en coordenadas del mapa (10 Hz). Se guardan los últimos
+  // 4 para que los puntos se desvanezcan en vez de parpadear.
+  const SCANS_VIVOS = 4;
+  let scansVivos = [], poseMapa = null, poseMapaT = 0, dibujoPendiente = false;
+  function nuevoScanMapa(d) {
+    poseMapa = d.pose; poseMapaT = performance.now();
+    scansVivos.push(d.pts);
+    if (scansVivos.length > SCANS_VIVOS) scansVivos.shift();
+    pedirDibujoMapa();
+  }
+  // Varios mensajes por cuadro (pose 8 Hz + scan 10 Hz + mapa) se funden en un dibujo.
+  function pedirDibujoMapa() {
+    if (dibujoPendiente) return;
+    dibujoPendiente = true;
+    requestAnimationFrame(() => { dibujoPendiente = false; drawMap(); });
+  }
+  // La pose de slam_toolbox (marco map) manda si es fresca: la del EKF está
+  // en `odom`, que deriva respecto al mapa y descuadraba robot y scan.
+  function poseParaMapa() {
+    return poseMapa && performance.now() - poseMapaT < 1500 ? poseMapa : lastPose;
   }
 
   // Transformación mundo (m) <-> píxel del canvas, con zoom y desplazamiento.
@@ -1905,10 +2014,25 @@ input[type="text"], select { font-family: inherit; }
       });
     }
 
+    // Puntos del LIDAR en vivo: el scan más reciente opaco, los anteriores
+    // cada vez más tenues. Solo si el scan es fresco (robot sin LIDAR = nada).
+    if (performance.now() - poseMapaT < 1500) {
+      scansVivos.forEach((pts, i) => {
+        const edad = scansVivos.length - 1 - i;
+        ctx.fillStyle = `rgba(0, 190, 90, ${edad === 0 ? 0.95 : 0.45 / edad})`;
+        const lado = edad === 0 ? 3 : 2;
+        for (let k = 0; k + 1 < pts.length; k += 2) {
+          const [x, y] = aPixel(pts[k] / 100, pts[k + 1] / 100);
+          ctx.fillRect(x - lado / 2, y - lado / 2, lado, lado);
+        }
+      });
+    }
+
     // El triángulo se dibuja apuntando hacia arriba (+Y del mapa, 90°):
     // hay que girarlo (90° - rumbo) para que 0° apunte a +X.
-    const [px, py] = aPixel(lastPose.x, lastPose.y);
-    const th = (90 - lastPose.theta_deg) * Math.PI / 180;
+    const pr = poseParaMapa();
+    const [px, py] = aPixel(pr.x, pr.y);
+    const th = (90 - pr.theta_deg) * Math.PI / 180;
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(th);
@@ -2026,7 +2150,7 @@ input[type="text"], select { font-family: inherit; }
     $("map-zoom-menos").addEventListener("click", () => zoomEn(1 / 1.3, mapCanvas.width / 2, mapCanvas.height / 2));
     $("map-centrar").addEventListener("click", () => {
       if (!lastMap) return;
-      const [px, py] = mundoAPixel(lastPose.x, lastPose.y);
+      const pc = poseParaMapa(), [px, py] = mundoAPixel(pc.x, pc.y);
       vista.dx += mapCanvas.width / 2 - px; vista.dy += mapCanvas.height / 2 - py; drawMap();
     });
     $("map-terminar").addEventListener("click", terminarSurco);
@@ -2522,7 +2646,8 @@ input[type="text"], select { font-family: inherit; }
     return !document.hidden && $("tab-sistema").classList.contains("active");
   }
   function dashboardVisible() {
-    return !document.hidden && $("tab-dashboard").classList.contains("active");
+    return !document.hidden && ($("tab-dashboard").classList.contains("active")
+                                || $("tab-asistido").classList.contains("active"));
   }
 
   function drawRadar(points, canvas) {
@@ -2782,6 +2907,24 @@ input[type="text"], select { font-family: inherit; }
   }
   // Solo pinta la UI; lo llama también el WebSocket cuando el modo se
   // cambia desde el dashboard de entrenamiento.
+  function pintarEntorno(e) {
+    if (!e) return;
+    const t = $("entorno-estado"), sw = $("entorno-toggle");
+    if (sw && document.activeElement !== sw) sw.checked = !!e.activo;
+    const sug = e.sugerido ? e.sugerido : "indeciso";
+    const p = e.ema == null ? "" : ` ${e.ema >= 0 ? "+" : ""}${e.ema.toFixed(2)}`;
+    const callado = e.silencio_operador_s > 0 ? ` · manual ${Math.ceil(e.silencio_operador_s / 60)} min` : "";
+    if (t) t.textContent = `${e.activo ? "AUTO" : "sugiere"}: ${sug}${p}${callado}`;
+  }
+  $("entorno-toggle").addEventListener("change", async (ev) => {
+    try {
+      const r = await fetch("/api/entorno", { method: "POST", headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({ activo: ev.target.checked }) });
+      if (r.ok) pintarEntorno(await r.json());
+    } catch (_) { ev.target.checked = !ev.target.checked; }
+  });
+  fetch("/api/entorno").then(r => r.ok ? r.json() : null).then(pintarEntorno).catch(() => {});
+
   function mostrarDriveMode(modo) {
     driveMode = modo;
     try { localStorage.setItem("agrobot-drive-mode", modo); } catch (_) {}
@@ -2815,7 +2958,7 @@ input[type="text"], select { font-family: inherit; }
   // WebSocket, no hacía NADA sin avisar (2026-10-02). El backend
   // (`_parada_total`) para evasión, pasos robóticos, exploración, patrulla,
   // Nav2, pulsos y motores, venga por donde venga.
-  async function pararTodo(btn) {
+  async function pararTodo(btn, manejo = false) {
     if (btn) {
       btn.classList.add("active");
       setTimeout(() => btn.classList.remove("active"), 180);
@@ -2823,13 +2966,15 @@ input[type="text"], select { font-family: inherit; }
     let porWs = false;
     try {
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "emergency_stop" }));
+        ws.send(JSON.stringify({ type: "emergency_stop", tipo: manejo ? "manejo" : "emergencia" }));
         porWs = true;
       }
     } catch (_) {}
     for (let intento = 0; intento < 2; intento++) {
       try {
-        const res = await fetch("/api/emergencia", { method: "POST", keepalive: true });
+        const res = await fetch("/api/emergencia", { method: "POST", keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tipo: manejo ? "manejo" : "emergencia" }) });
         if (res.ok) return true;
       } catch (_) {}
     }
@@ -2838,7 +2983,7 @@ input[type="text"], select { font-family: inherit; }
   }
 
   async function conducir(accion, btn) {
-    if (accion === "parar") return pararTodo(btn);
+    if (accion === "parar") return pararTodo(btn, true);   // STOP de la sección de manejo: no es emergencia
     if (btn) {
       btn.classList.add("active");
       setTimeout(() => btn.classList.remove("active"), 180);
@@ -2870,8 +3015,24 @@ input[type="text"], select { font-family: inherit; }
     btn.addEventListener("contextmenu", (e) => e.preventDefault());
   });
 
-  const accionDeTecla = { ArrowUp: "adelante", ArrowDown: "atras",
-                          ArrowLeft: "izquierda", ArrowRight: "derecha" };
+  const accionDeTecla = { ArrowUp: "adelante", ArrowDown: "atras", ArrowLeft: "izquierda", ArrowRight: "derecha",
+                          w: "adelante", s: "atras", a: "izquierda", d: "derecha" };
+  // Servo / zoom / LED por teclado: mueven los mismos controles que el ratón (mismo camino al backend).
+  function moverSlider(id, delta, min, max) {
+    const sl = $(id);
+    sl.value = Math.max(min, Math.min(max, Math.round((parseFloat(sl.value) + delta) * 10) / 10));
+    sl.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function teclaCamara(e) {
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (k === "i" || k === "k") { moverSlider("servo-slider", (k === "i" ? 1 : -1) * (e.shiftKey ? 10 : 3), 25, 160); return true; }
+    if (k === "h") { $("servo-slider").value = 98; $("servo-slider").dispatchEvent(new Event("input", { bubbles: true })); return true; }
+    if (k === "+" || k === "=") { moverSlider("zoom-slider", 0.5, 1, 4); return true; }
+    if (k === "-" || k === "_") { moverSlider("zoom-slider", -0.5, 1, 4); return true; }
+    if (k === "0") { $("zoom-slider").value = 1; $("zoom-slider").dispatchEvent(new Event("input", { bubbles: true })); return true; }
+    if (k === "l" && !e.repeat) { $("led-toggle").click(); return true; }
+    return false;
+  }
   window.addEventListener("keydown", (e) => {
     const t = e.target;
     const escribiendo = t && (t.tagName === "TEXTAREA" || t.isContentEditable ||
@@ -2885,7 +3046,9 @@ input[type="text"], select { font-family: inherit; }
       pararTodo(document.querySelector(".c-stop"));
       return;
     }
-    const accion = accionDeTecla[e.key];
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (teclaCamara(e)) { e.preventDefault(); return; }
+    const accion = accionDeTecla[e.key.length === 1 ? e.key.toLowerCase() : e.key];
     if (!accion) return;
     e.preventDefault();
     // Mantener la flecha no repite: un toque de tecla = un pulso.
@@ -2905,8 +3068,31 @@ input[type="text"], select { font-family: inherit; }
     sendActuator({ servo_angle: parseInt(e.target.value, 10) });
   });
   $("led-toggle").addEventListener("change", (e) => sendActuator({ led: e.target.checked }));
+  // Zoom de la cámara (solo inspección, robot quieto): 1280x720 recortado al centro. Vuelve a 1x al iniciar autonomía.
+  let zoomTimer = null;
+  $("zoom-slider").addEventListener("input", (e) => {
+    $("zoom-val").textContent = Number(e.target.value).toFixed(1);
+    clearTimeout(zoomTimer);
+    zoomTimer = setTimeout(async () => {
+      try {
+        const r = await fetch("/api/camara/zoom", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ zoom: parseFloat(e.target.value) }) });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); toast("warning", "Zoom", j.error || "no se pudo"); }
+      } catch (_) {}
+    }, 250);
+  });
+  fetch("/api/camara/zoom").then(r => r.json()).then(j => {
+    if (j && j.zoom) { $("zoom-slider").value = j.zoom; $("zoom-val").textContent = Number(j.zoom).toFixed(1); }
+  }).catch(() => {});
   // El barrido lo hace el backend moviendo el servo (antes lo hacía el
   // firmware con duración fija). Duración y ángulos se ajustan en Parámetros.
+  $("saludo-btn").addEventListener("click", async () => {
+    const res = await fetch("/api/saludo", { method: "POST" });
+    if (!res.ok) {
+      let m = "No se pudo iniciar."; try { m = (await res.json()).error || m; } catch (e) {}
+      toast("warning", "Saludo", m);
+    }
+  });
   $("scan-btn").addEventListener("click", async () => {
     const res = await fetch("/api/patrol/scan", { method: "POST" });
     toast(res.ok ? "success" : "warning", "Barrido de cámara",

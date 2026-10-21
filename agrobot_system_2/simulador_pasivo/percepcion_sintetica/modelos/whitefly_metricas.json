@@ -1,0 +1,30 @@
+{
+ "modelo": "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_pasivo/percepcion_sintetica/modelos/yolo/whitefly/weights/best.pt",
+ "datos": {
+  "train": {
+   "mosaicos": 1981,
+   "cajas": 1921
+  },
+  "val": {
+   "mosaicos": 602,
+   "cajas": 590
+  },
+  "test": {
+   "mosaicos": 1227,
+   "cajas": 1159
+  }
+ },
+ "val": {
+  "mAP50": 0.5175,
+  "mAP50_95": 0.238,
+  "precision": 0.5435,
+  "recall": 0.5287
+ },
+ "test": {
+  "mAP50": 0.4959,
+  "mAP50_95": 0.2254,
+  "precision": 0.519,
+  "recall": 0.4832
+ },
+ "NO_DEMOSTRADO": "Entrenado y medido con yuca (otra planta y cámara). No demuestra nada sobre col ni acelga."
+}

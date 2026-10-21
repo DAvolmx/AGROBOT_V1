@@ -23,7 +23,8 @@ import time
 from ble_link import STATUS_MAGIC, STATUS_SIZE, crc8
 
 PUERTO = 5002
-CFG_REPLY_MAGIC = 0xC6     # respuesta de configuración de la C3 (ver firmware skid-steer)
+CFG_REPLY_MAGIC = 0xC6
+LIM_REPLY_MAGIC = 0xC7     # respuesta de limites de fuerza/suavidad     # respuesta de configuración de la C3 (ver firmware skid-steer)
 RED_AP = ipaddress.ip_network("192.168.12.0/24")
 IP_C3_FIJA = ipaddress.ip_address("192.168.0.50")
 # La C3 manda estado a 10 Hz. En modo de ahorro del WiFi (obligatorio con
@@ -55,7 +56,7 @@ class UdpActuatorLink(asyncio.DatagramProtocol):
         if ip not in RED_AP and ip != IP_C3_FIJA:
             self.ajenas += 1
             return
-        if len(data) == STATUS_SIZE and data[0] == CFG_REPLY_MAGIC and crc8(bytes(data[:-1])) == data[-1]:
+        if len(data) == STATUS_SIZE and data[0] in (CFG_REPLY_MAGIC, LIM_REPLY_MAGIC) and crc8(bytes(data[:-1])) == data[-1]:
             if self.ip_c3 is None:
                 self.ip_c3 = addr[0]
             if self.on_cfg is not None:

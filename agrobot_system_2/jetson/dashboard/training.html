@@ -424,6 +424,11 @@ function updatePose(p) {
 }
 
 function setMap(m) {
+  if (m.data_b64 && !m.data) {
+    const bin = atob(m.data_b64), d = new Int8Array(bin.length);
+    for (let i = 0; i < d.length; i++) d[i] = bin.charCodeAt(i);
+    m.data = d; m.data_b64 = null;
+  }
   lastMap = m;
   $("map-info").textContent = `${m.width}×${m.height} · ${m.resolution.toFixed(2)} m/celda`;
   drawMap();

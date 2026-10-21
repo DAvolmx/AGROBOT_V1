@@ -40,6 +40,7 @@ LÍMITES (importan para lo que se puede concluir):
 from __future__ import annotations
 
 import math
+import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -70,7 +71,36 @@ from robot_rustico import parametros_rusticos         # noqa: E402
 # al comparar rueda libre y frenada. Ojo: `evaluacion.py` del banco anterior usa 0,01.
 SUBSTEP = 0.005
 V_SCALE, W_SCALE = 0.55, 1.5            # = control_model.h = BleActuatorLink(v_max, omega_max)
-MID = 0.185                             # del eje delantero REAL al centro del robot
+MID = 0.185                             # del eje ANCHO FIJO al centro del robot
+# Dónde está el módulo estrecho con pivote: "trasero" (chasis actual; marco girado 180°) o
+# "delantero" (el chasis hasta el 2026-10-14; sin girar). Solo para COMPARAR orientaciones:
+# AGROBOT_PIVOTE=delantero python3 entrenar_interior_estricto.py ...
+PIVOTE = os.environ.get("AGROBOT_PIVOTE", "trasero")
+
+# GEOMETRÍA del robot según el CROQUIS del operador (2026-10-20) y su CORRECCIÓN el mismo día:
+#   · el módulo del PIVOTE va ATRÁS y es el de las ruedas MÁS SEPARADAS: 38 cm exteriores (en el modelo es el «front»).
+#   · el eje FIJO es el DELANTERO y es el ESTRECHO: 28 cm (CONFIRMADO por el operador; la medida anterior de 19 cm
+#     era de otra configuración) y lleva los motores MÁS FUERTES (en el modelo es el «rear», origen de coordenadas).
+#   · cuerpo 26 x 32 cm; batalla 37 cm; LIDAR a 24 cm del eje TRASERO (el del pivote) -> a 13 cm del eje fijo, o sea
+#     5,5 cm DELANTE del centro; y a 35-40 cm del suelo.
+# AGROBOT_GEOMETRIA=anterior reproduce los resultados previos (pivote estrecho de 19 cm, LIDAR en el centro y ve todo).
+GEOMETRIA = os.environ.get("AGROBOT_GEOMETRIA", "croquis")
+if GEOMETRIA == "anterior":
+    FIJO_EXT_M, PIVOTE_EXT_M, CUERPO_L, CUERPO_A = 0.37, 0.19, 0.35, 0.25
+    LIDAR_DESDE_EJE_M, ALTURA_LIDAR_M = MID, 0.0
+    FIJO_OPCIONES = (0.37,)
+    BIAS_OPCIONES = (1.0, 2.0)
+else:
+    FIJO_EXT_M, PIVOTE_EXT_M, CUERPO_L, CUERPO_A = 0.28, 0.38, 0.32, 0.26
+    LIDAR_DESDE_EJE_M, ALTURA_LIDAR_M = 2 * MID - 0.24, 0.375
+    FIJO_OPCIONES = (0.28,)            # CONFIRMADO por el operador el 2026-10-20: el eje fijo delantero mide 28 cm
+    # `front_drive_bias` multiplica la fuerza del módulo del PIVOTE (atrás). Los motores fuertes están en el eje fijo
+    # delantero: el pivote tiene entre un 35 y un 70 % de esa fuerza.
+    BIAS_OPCIONES = (0.35, 0.5, 0.7)
+# El LIDAR es un PLANO horizontal a ALTURA_LIDAR_M: solo ve lo que sobresale de él. Altura de las macetas con
+# planta (hipótesis): 0,45 m las hace visibles; con 0,20 m el LIDAR pasa por encima y el robot choca a ciegas.
+ALTURA_MACETA_M = float(os.environ.get("AGROBOT_ALTURA_MACETA", "0.45"))
+GROSOR_HAZ_M = 0.03
 TICK_CONDUCTOR = 0.05                   # pulse_drive.TICK_S
 TICK_JETSON = 0.05                      # CMD_SEND_HZ = 20
 TICK_FW = 0.01                          # motorTask: 10 ms
@@ -102,8 +132,10 @@ class Config:
     sendero_pared_max_cm: float = 150
     cono_frontal_deg: float = 10        # slam.cono_frontal_deg
     cono_lateral_deg: float = 60
-    robot_largo_cm: float = 40
-    robot_ancho_cm: float = 37
+    robot_largo_cm: float = 49          # slam.robot_largo_cm (croquis 2026-10-20: 18,5 cm delante + 30,5 cm detrás del LIDAR)
+    robot_ancho_cm: float = 38          # slam.robot_ancho_cm = módulo del pivote, el más ancho
+    lidar_adelante_cm: float = 18.5     # slam.lidar_adelante_cm: LIDAR -> cara delantera
+    lidar_atras_cm: float = 30.5        # slam.lidar_atras_cm: LIDAR -> cara trasera
     # Tope de avance que la Jetson deja pasar, en % de duty. 60 = el real: pulse_drive recorta
     # a 0,60*V_SCALE y manual_demo.command a .60. Cambiarlo es un "¿y si?": exigiría tocar esos
     # DOS sitios (son límites de seguridad que puso Codex), NO es un parámetro de config.
@@ -118,10 +150,45 @@ class Config:
     # Firmware flasheado: "skidsteer_v3" (original BLE+WiFi, PWM por software de 200 ms, sin
     # rampa, gira sobre su eje) o "1.2" (rampa, sin giro en el sitio, /config). Desde el
     # 2026-10-16 el robot lleva el skidsteer_v3; los fw_* solo afectan al "1.2".
-    firmware: str = "skidsteer_v3"
+    firmware: str = "maxfrente"
+    # --- firmware "suave" v4 (limites configurables desde el dashboard, = suave_model.h) ---
+    su_adel: float = 80.0
+    su_atras: float = 60.0
+    su_pivote: float = 100.0
+    su_minp: float = 50.0
+    su_acel: float = 120.0
+    su_frena: float = 300.0
+    su_tras: float = 130.0
+    # --- firmware FUSION (v3 + suave): ver firmware/agrobot_c3_fusion/fusion_model.h ---
+    fu_adel: float = 80.0
+    fu_atras: float = 60.0
+    fu_pivote: float = 100.0
+    fu_minp: float = 30.0
+    fu_acel: float = 200.0
+    fu_frena: float = 400.0
+    fu_tras: float = 130.0
+    fu_dif_del: float = 0.0
+    fu_periodo: float = 100.0
+    fu_refuerzo: float = 100.0
+    # --- firmware «MAX FRENTE» (firmware/agrobot_c3_skidsteer_maxfrente): las ruedas delanteras (R1, L1) al 100 % de PWM en
+    # el sentido que pida su lado; las traseras (pivote) a tras_factor x el duty proporcional (0 = sin ayuda trasera) ---
+    tras_factor: float = 1.0
+    # --- conducción: "pulsos" (explorador actual) o "continuo" (control_pasillo.PasilloController) ---
+    control: str = "pulsos"
+    pivote_en_sitio: bool = True       # manual_demo.reference(pivote=...): giro sin avanzar. True = como el agrobot_config.json real
+    cc_kh: float = 1.2
+    cc_kl: float = 2.0
+    cc_v: float = 0.30
+    cc_kp: float = 1.6
+    cc_kd: float = 0.6
+    cc_wmax: float = 0.7
+    cc_nominal: float = 0.35
+    cc_dstop: float = 0.30
+    cc_dslow: float = 0.80
 
     def slam_cfg(self):
         return {"robot_largo_cm": self.robot_largo_cm, "robot_ancho_cm": self.robot_ancho_cm,
+                "lidar_adelante_cm": self.lidar_adelante_cm, "lidar_atras_cm": self.lidar_atras_cm,
                 "cono_frontal_deg": self.cono_frontal_deg, "cono_lateral_deg": self.cono_lateral_deg}
 
 
@@ -245,6 +312,7 @@ class MotoresSkidSteer:
         self.hi = 0
         self.t_mon = 0.0
         self.boost = 1.0
+        self.omega_gain = 1.0          # autoridad de giro (Hip.giro_gain); 1 = la del firmware
 
     def _poner(self, i, duty, sent, t):
         if duty == 0:
@@ -256,7 +324,7 @@ class MotoresSkidSteer:
 
     def recibir(self, pv, pw, t):
         self.refreshed = t
-        di, si, dd, sd = sk_mix(pv * 0.01 * SK_V_MAX, pw * 0.01 * SK_OMEGA_MAX, self.boost)
+        di, si, dd, sd = sk_mix(pv * 0.01 * SK_V_MAX, pw * self.omega_gain * 0.01 * SK_OMEGA_MAX, self.boost)
         # orden del firmware [R1, L1, L2, R2]: R* = lado izquierdo del mix ("IZQ"), L* = derecho
         for i, (du, se) in enumerate(((di, si), (dd, sd), (dd, sd), (di, si))):
             self._poner(i, du, se, t)
@@ -287,7 +355,205 @@ class MotoresSkidSteer:
         return out
 
 
+class MotoresMaxFrente(MotoresSkidSteer):
+    """firmware/agrobot_c3_skidsteer_maxfrente: como el skid-steer v3, pero las ruedas DELANTERAS (R1 y L1: el eje fijo
+    estrecho, con los motores fuertes) van al 100 % de PWM, continuo, mientras su lado tenga mando. Las traseras
+    (módulo del pivote) llevan el duty proporcional x `tras_factor`. El giro sale de invertir el sentido de un lado."""
+
+    def recibir(self, pv, pw, t):
+        self.refreshed = t
+        di, si, dd, sd = sk_mix(pv * 0.01 * SK_V_MAX, pw * self.omega_gain * 0.01 * SK_OMEGA_MAX, self.boost)
+        # El lado más rápido va al 100 % y el otro CONSERVA la proporción (antes ambos iban al 100 % y toda curva era un
+        # giro en el sitio: el robot no avanzaba mientras corregía).
+        m = max(di, dd)
+        fi, fd = (int(round(100 * di / m)), int(round(100 * dd / m))) if m > 0 else (0, 0)
+        k = max(0.0, min(1.0, self.cfg.tras_factor))
+        ti, td = int(round(di * k)), int(round(dd * k))
+        # orden del firmware [R1, L1, L2, R2]: R1/L1 = delanteras; L2/R2 = traseras
+        for i, (du, se) in enumerate(((fi, si), (fd, sd), (td, sd), (ti, si))):
+            self._poner(i, du, se, t)
+
+
+# ======================================================================
+# Firmware "SUAVE" v4 (firmware/agrobot_c3_suave): port EXACTO de suave_model.h
+# ======================================================================
+SU_V_MAX, SU_OMEGA_MAX = 0.55, 1.5
+SU_GAP_S = 0.025
+
+
+def su_mezclar(v, w, adel, atras, pivote, minp, tras=130.0):
+    """-> [d0..d3] duty firmado: 0=R1 del, 1=R2 tras, 2=L1 del, 3=L2 tras (antes de invertir)."""
+    if not (math.isfinite(v) and math.isfinite(w)):
+        return [0.0] * 4
+    fv = max(-1.0, min(1.0, v / SU_V_MAX))
+    wn = max(-1.0, min(1.0, w / SU_OMEGA_MAX))
+    if abs(fv) < 0.02:
+        fv = 0.0
+    if abs(wn) < 0.02:
+        wn = 0.0
+    if fv == 0 and wn == 0:
+        return [0.0] * 4
+    base = min(fv * 100, adel) if fv > 0 else -min(-fv * 100, atras)
+    base_r = max(-100.0, min(100.0, base * tras / 100.0))
+    dif = wn * pivote
+    izq, der = base_r - dif, base_r + dif
+    m = max(abs(izq), abs(der))
+    if m > 100:
+        izq *= 100 / m
+        der *= 100 / m
+    d = [base, izq, base, der]
+    for i in range(4):
+        a = abs(d[i])
+        if 0 < a < minp:
+            d[i] = (1 if d[i] > 0 else -1) * minp
+    return d
+
+
+def su_rampa(cur, t, dt, minp, acel, frena):
+    if t == 0 or (cur != 0 and ((t > 0) != (cur > 0))):
+        st = frena * dt
+        return 0.0 if abs(cur) <= st else cur - (st if cur > 0 else -st)
+    if cur == 0:
+        cur = (1 if t > 0 else -1) * min(abs(t), minp)
+    if abs(t) > abs(cur):
+        return cur + max(-acel * dt, min(acel * dt, t - cur))
+    return cur + max(-frena * dt, min(frena * dt, t - cur))
+
+
+class MotoresSuave:
+    """Firmware suave: delanteras solo longitudinales, traseras con el giro, rampas.
+    Interfaz igual que los otros: recibir(pv, pw, t) y tick(t) -> [R1, L1, L2, R2] en % (orden del sim)."""
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.t = [0.0] * 4              # objetivos en indices suave 0..3
+        self.cur = [0.0] * 4
+        self.zero_at = [-1e9] * 4
+        self.refreshed = -1e9
+
+    def recibir(self, pv, pw, t):
+        self.refreshed = t
+        c = self.cfg
+        self.t = su_mezclar(pv * 0.01 * SU_V_MAX, pw * 0.01 * SU_OMEGA_MAX, c.su_adel, c.su_atras, c.su_pivote, c.su_minp, c.su_tras)
+
+    def tick(self, t):
+        c = self.cfg
+        if t - self.refreshed > DEADMAN_FW_S:            # deadman: ruedas libres al instante
+            self.cur = [0.0] * 4
+            self.t = [0.0] * 4
+        else:
+            for i in range(4):
+                tgt = self.t[i]
+                if self.cur[i] == 0 and tgt != 0 and (t - self.zero_at[i]) < SU_GAP_S:
+                    tgt = 0.0
+                prev = self.cur[i]
+                self.cur[i] = su_rampa(prev, tgt, TICK_FW, c.su_minp, c.su_acel, c.su_frena)
+                if self.cur[i] == 0 and prev != 0:
+                    self.zero_at[i] = t
+        # El firmware satura el duty a 100 % al escribir el PWM (fminf(|cur|,100)): con limites
+        # fuera de rango (pivote/minp/tras de fabrica > 100) la mezcla puede pedir 150.
+        d = [max(-100.0, min(100.0, x)) for x in self.cur]
+        return [d[0], d[2], d[3], d[1]]                    # -> [R1, L1, L2, R2]
+
+
+# ======================================================================
+# Firmware FUSION: port EXACTO de fusion_model.h (tests/test_fusion_firmware.py lo comprueba)
+# ======================================================================
+def fu_mezclar(v, w, adel, atras, pivote, minp, tras, dif_del, boost=1.0):
+    if not (math.isfinite(v) and math.isfinite(w)):
+        return [0.0] * 4
+    fv = max(-1.0, min(1.0, v / SU_V_MAX))
+    wn = max(-1.0, min(1.0, w / SU_OMEGA_MAX))
+    if abs(fv) < 0.02:
+        fv = 0.0
+    if abs(wn) < 0.02:
+        wn = 0.0
+    if fv == 0 and wn == 0:
+        return [0.0] * 4
+    base = min(fv * 100, adel) if fv > 0 else -min(-fv * 100, atras)
+    base_r = max(-100.0, min(100.0, base * tras / 100.0))
+    dif = wn * pivote
+    kd = dif_del / 100.0
+    izq, der = base_r - dif, base_r + dif
+    fi, fd = base - kd * dif, base + kd * dif
+    m = max(abs(izq), abs(der), abs(fi), abs(fd))
+    if m > 100:
+        k = 100 / m
+        izq, der, fi, fd = izq * k, der * k, fi * k, fd * k
+    d = [fi, izq, fd, der]
+    for i in range(4):
+        d[i] = max(-100.0, min(100.0, d[i] * boost))
+        if abs(d[i]) < 0.5:
+            d[i] = 0.0
+        a = abs(d[i])
+        if 0 < a < minp:
+            d[i] = (1 if d[i] > 0 else -1) * minp
+    return d
+
+
+def fu_rafaga(env, t_ms, periodo):
+    if periodo <= 0:
+        return env
+    a = abs(env)
+    if a <= 0:
+        return 0.0
+    if a >= 98:
+        return 100.0 if env > 0 else -100.0
+    fase = t_ms % int(periodo)
+    return (100.0 if env > 0 else -100.0) if fase < periodo * a / 100.0 else 0.0
+
+
+class MotoresFusion:
+    """Fusion v3 + suave. Interfaz: recibir(pv, pw, t) y tick(t) -> [R1, L1, L2, R2] en %."""
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.t = [0.0] * 4
+        self.cur = [0.0] * 4
+        self.zero_at = [-1e9] * 4
+        self.refreshed = -1e9
+        self.hist = [0.0] * 10
+        self.hi = 0
+        self.boost = 1.0
+        self.t_mon = 0.0
+
+    def recibir(self, pv, pw, t):
+        self.refreshed = t
+        c = self.cfg
+        self.t = fu_mezclar(pv * 0.01 * SU_V_MAX, pw * 0.01 * SU_OMEGA_MAX, c.fu_adel, c.fu_atras,
+                            c.fu_pivote, c.fu_minp, c.fu_tras, c.fu_dif_del, self.boost)
+
+    def tick(self, t):
+        c = self.cfg
+        if t - self.refreshed > DEADMAN_FW_S:
+            self.cur = [0.0] * 4
+            self.t = [0.0] * 4
+        else:
+            if c.fu_refuerzo > 100 and t - self.t_mon >= 0.1:        # anti-hundimiento (cada 100 ms)
+                self.t_mon = t
+                self.hist[self.hi] = sum(abs(x) for x in self.t) / 4.0
+                self.hi = (self.hi + 1) % 10
+                self.boost = c.fu_refuerzo / 100.0 if sum(self.hist) / 10.0 > 85.0 else 1.0
+            for i in range(4):
+                tgt = self.t[i]
+                if self.cur[i] == 0 and tgt != 0 and (t - self.zero_at[i]) < SU_GAP_S:
+                    tgt = 0.0
+                prev = self.cur[i]
+                self.cur[i] = su_rampa(prev, tgt, TICK_FW, c.fu_minp, c.fu_acel, c.fu_frena)
+                if self.cur[i] == 0 and prev != 0:
+                    self.zero_at[i] = t
+        t_ms = int(round(t * 1000))
+        d = [fu_rafaga(x, t_ms, c.fu_periodo) for x in self.cur]
+        return [d[0], d[2], d[3], d[1]]
+
+
 def crear_firmware(cfg: Config):
+    if cfg.firmware == "fusion":
+        return MotoresFusion(cfg)
+    if cfg.firmware == "maxfrente":
+        return MotoresMaxFrente(cfg)
+    if cfg.firmware == "suave_v4":
+        return MotoresSuave(cfg)
     return MotoresSkidSteer(cfg) if cfg.firmware == "skidsteer_v3" else _Firmware12(cfg)
 
 
@@ -329,7 +595,7 @@ class ActuadorJetson:
         self.ramp_w += dw
         try:
             if self.cfg.tope_duty == 60.0:
-                v, w = demo_reference(self.ramp_v, self.ramp_w)          # el REAL
+                v, w = demo_reference(self.ramp_v, self.ramp_w, pivote=self.cfg.pivote_en_sitio)   # el REAL
             else:
                 v, w = demo_ref_tope(self.ramp_v, self.ramp_w, self.cfg.tope_duty)
         except (ValueError, TypeError):
@@ -475,11 +741,13 @@ class MundoSim:
 
 
 def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=0.01, rango=8.0):
-    """360 rayos desde el centro. 0° = adelante, + = izquierda (como ROS)."""
+    """360 rayos desde (cx, cy) = posición del LIDAR. 0° = adelante, + = izquierda (como ROS).
+    Las paredes se ven siempre; las macetas solo si sobresalen del plano del LIDAR (ALTURA_LIDAR_M)."""
     ang = np.deg2rad(np.arange(360)) + psi_real
     dx, dy = np.cos(ang), np.sin(ang)
     dist = np.full(360, np.inf)
-    for (x, y, r) in esc.macetas:                 # círculos
+    macetas_visibles = esc.macetas if ALTURA_MACETA_M >= ALTURA_LIDAR_M - GROSOR_HAZ_M else []
+    for (x, y, r) in macetas_visibles:            # círculos
         fx, fy = cx - x, cy - y
         b = fx * dx + fy * dy
         c = fx * fx + fy * fy - r * r
@@ -507,18 +775,26 @@ class RobotModelo:
     def __init__(self, params, pose_real):
         x, y, psi = pose_real                       # CENTRO y rumbo reales
         self.p = params
-        psi_m = psi + math.pi
-        # origen del modelo = eje delantero real = centro + MID hacia delante real
-        ox, oy = x + MID * math.cos(psi), y + MID * math.sin(psi)
+        self.giro = math.pi if PIVOTE == "trasero" else 0.0
+        psi_m = psi + self.giro
+        # origen del modelo = eje ancho fijo: centro + MID hacia delante real (pivote atrás)
+        # o centro - MID (pivote delante: el eje ancho queda atrás)
+        k = 1.0 if PIVOTE == "trasero" else -1.0
+        ox, oy = x + k * MID * math.cos(psi), y + k * MID * math.sin(psi)
         self.d = DinamicaPasiva(pose=(ox, oy, psi_m), parametros=params)
-        self.geo = H.geo_de_parametros(params)
+        self.geo = replace(H.geo_de_parametros(params), cuerpo_largo=CUERPO_L, cuerpo_ancho=CUERPO_A)
 
     def centro(self):
         ox, oy, psi_m, delta = self.d.q
         return ox + MID * math.cos(psi_m), oy + MID * math.sin(psi_m)
 
+    def lidar_pos(self):
+        """Posición del LIDAR: LIDAR_DESDE_EJE_M del eje ancho hacia el módulo del pivote (no en el centro)."""
+        ox, oy, psi_m, _ = self.d.q
+        return ox + LIDAR_DESDE_EJE_M * math.cos(psi_m), oy + LIDAR_DESDE_EJE_M * math.sin(psi_m)
+
     def psi_real(self):
-        return math.atan2(math.sin(self.d.q[2] + math.pi), math.cos(self.d.q[2] + math.pi))
+        return math.atan2(math.sin(self.d.q[2] + self.giro), math.cos(self.d.q[2] + self.giro))
 
     def delta(self):
         return float(self.d.q[3])
@@ -531,11 +807,16 @@ class RobotModelo:
             # hace detachMotor() y el puente queda en alta impedancia.
             es_libre = abs(dpc) < max(dead, 1e-6)
             libre.append(es_libre)
-            vel.append(0.0 if es_libre else -(dpc / 100.0 * V_SCALE))   # avanzar real = retroceder en el modelo
+            sg = -1.0 if PIVOTE == "trasero" else 1.0   # pivote atrás: avanzar real = retroceder en el modelo
+            vel.append(0.0 if es_libre else sg * (dpc / 100.0 * V_SCALE))
         R1, L1, L2, R2 = vel
         fR1, fL1, fL2, fR2 = libre
-        self.d.step(dt, 0.0, 0.0, wheel_targets=[R1, L1, R2, L2],       # [trasL,trasR,delL,delR]
-                    libres=[fR1, fL1, fR2, fL2])
+        if PIVOTE == "trasero":
+            self.d.step(dt, 0.0, 0.0, wheel_targets=[R1, L1, R2, L2],   # [trasL,trasR,delL,delR]
+                        libres=[fR1, fL1, fR2, fL2])
+        else:   # ruedas delanteras reales (R1,L1) = módulo del pivote = delL,delR del modelo
+            self.d.step(dt, 0.0, 0.0, wheel_targets=[L2, R2, L1, R1],
+                        libres=[fL2, fR2, fL1, fR1])
 
 
 # ======================================================================
@@ -554,14 +835,34 @@ class Hip:
     # valor anterior (0,02) sale de calibrar con el modelo de firmware 1.2 y rodaba 82 cm por
     # pulso con el skid-steer v3. Incertidumbre: duty y duración exactos del pulso viejo.
     drag: float = 0.17
+    # Robot PESADO / delanteras flojas (montecarlo_firmware_pesado.py). None = el modelo por defecto.
+    masa: float | None = None          # chassis_mass en kg (la medida: ~12 kg en total)
+    eje_fijo: float | None = None      # ancho exterior del eje FIJO delantero (estrecho); None = FIJO_EXT_M
+    # Rigidez lateral de los neumáticos (N por m/s): lo que se resiste al giro de un skid-steer. El 2026-10-21 el
+    # operador dijo que el robot REAL gira bien; con 65 el simulador gira 13 °/s en el sitio (muy poco), con 15 gira ~40.
+    # Sin medida real: se sortea (verificar_giro.py da el pico de gyroZ para ajustarlo).
+    lateral: float = 65.0
+    # Autoridad de giro del robot real: el operador midió el 2026-10-21 ~10° y ~10 cm por toque de giro («como estacionar
+    # un auto»: adelante-atrás-giro). El simulador con autoridad plena giraba en el sitio (0,3 cm, 2–9°). Se multiplica el
+    # omega que llega al mezclador del firmware; el controlador aprende a pedir más.
+    giro_gain: float = 1.0
+
+
+LATERAL_OPCIONES = (30.0, 15.0, 8.0)
+GIRO_GAIN_OPCIONES = (0.45, 0.30, 0.20)
 
 
 def hip_por_semilla(semilla: int) -> Hip:
     rng = np.random.default_rng(777 + semilla)
     return Hip(mu=float(rng.choice([0.65, 0.8, 0.95])),
                dead=float(rng.choice([0.0, 25.0, 40.0])),
-               bias=float(rng.choice([1.0, 2.0])), semilla_chasis=int(semilla),
-               drag=float(rng.choice([0.13, 0.17, 0.22])))
+               bias=float(rng.choice(BIAS_OPCIONES)), semilla_chasis=int(semilla),
+               drag=float(rng.choice([0.13, 0.17, 0.22])),
+               # AL FINAL: no altera los demás sorteos de cada semilla. Con el croquis el ancho del eje fijo es
+               # dudoso (croquis 28 cm, medida anterior 19 cm): se entrena con los tres.
+               eje_fijo=float(rng.choice(FIJO_OPCIONES)),
+               lateral=float(rng.choice(LATERAL_OPCIONES)),
+               giro_gain=float(rng.choice(GIRO_GAIN_OPCIONES)))
 
 
 def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
@@ -569,7 +870,10 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     hip = hip or hip_por_semilla(semilla)
     rng = np.random.default_rng(10_000 + semilla)
     params = replace(parametros_rusticos(hip.semilla_chasis), mu=hip.mu,
-                     front_drive_bias=hip.bias, rolling_drag=hip.drag, substep=SUBSTEP)
+                     front_drive_bias=hip.bias, rolling_drag=hip.drag, substep=SUBSTEP, lateral=hip.lateral,
+                     front_outer=PIVOTE_EXT_M, rear_outer=hip.eje_fijo or FIJO_EXT_M)
+    if hip.masa is not None:
+        params = replace(params, chassis_mass=hip.masa)
     # perturbación inicial: el robot nunca arranca perfectamente centrado
     x0, y0, psi0 = esc.inicio
     y0 += rng.uniform(-0.04, 0.04)
@@ -580,8 +884,17 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     act = ActuadorJetson(cfg)
     cond = Conductor(cfg, act)
     fw = crear_firmware(cfg)
+    fw.omega_gain = hip.giro_gain
     lidar = LidarReactive()
     cola_enlace = []                               # (t_llegada, pct_v, pct_w)
+    ctrl = None
+    prox_cc = prox_scan_cc = 0.0
+    if cfg.control == "continuo":
+        from control_pasillo import PasilloController
+        ctrl = PasilloController(v_cruise=cfg.cc_v, kp=cfg.cc_kp, kd=cfg.cc_kd, w_max=cfg.cc_wmax,
+                                 nominal=cfg.cc_nominal, d_stop=cfg.cc_dstop, d_slow=cfg.cc_dslow,
+                                 kh=cfg.cc_kh, kl=cfg.cc_kl)
+    d_cc = {}
 
     t = 0.0
     dt = TICK_FW
@@ -602,11 +915,23 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     ok = False
 
     while t < esc.t_max:
+        # ---- conducción CONTINUA (control_pasillo): LIDAR a 10 Hz, mando a 20 Hz ----
+        if ctrl is not None:
+            if t + 1e-9 >= prox_scan_cc:
+                prox_scan_cc += 0.1
+                lx, ly = robot.lidar_pos()
+                lidar.ingest_scan(lidar_scan(esc, lx, ly, robot.psi_real(), rng))
+                d_cc = lidar.distancias(cfg.slam_cfg())
+            if t + 1e-9 >= prox_cc:
+                prox_cc += TICK_JETSON
+                gyro = float(robot.d.dq[2]) + float(rng.normal(0.0, 0.01))
+                v_c, w_c = ctrl.step(d_cc, gyro, TICK_JETSON)
+                act.send_command(v_c, w_c, t)
         # ---- explorador (cada 0,25 s) ----
-        if t + 1e-9 >= prox_expl:
+        if ctrl is None and t + 1e-9 >= prox_expl:
             prox_expl += TICK_EXPLORADOR
-            cx, cy = robot.centro()
-            lidar.ingest_scan(lidar_scan(esc, cx, cy, robot.psi_real(), rng))
+            lx, ly = robot.lidar_pos()
+            lidar.ingest_scan(lidar_scan(esc, lx, ly, robot.psi_real(), rng))
             d = lidar.distancias(cfg.slam_cfg())
             frente = d["adelante"] if d["adelante"] is not None else math.inf
             izq = d["izquierda"]
@@ -635,7 +960,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     avances += 1
                     sin_corregir += 1
         # ---- conductor (cada 0,05 s) ----
-        if t + 1e-9 >= prox_cond:
+        if ctrl is None and t + 1e-9 >= prox_cond:
             prox_cond += TICK_CONDUCTOR
             cond.paso(t)
         # ---- Jetson tick + trama al firmware (20 Hz) ----

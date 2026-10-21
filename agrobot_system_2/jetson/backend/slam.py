@@ -124,12 +124,15 @@ class LidarReactive:
         None = nada a la vista en ese sector.
         """
         clave = (self.last_scan_at, cfg["robot_largo_cm"], cfg["robot_ancho_cm"],
-                 cfg["cono_frontal_deg"], cfg["cono_lateral_deg"])
+                 cfg["cono_frontal_deg"], cfg["cono_lateral_deg"], cfg.get("lidar_adelante_cm"), cfg.get("lidar_atras_cm"))
         if self._cache is not None and self._cache[0] == clave:
             return self._cache[1]
 
         ml = cfg["robot_largo_cm"] / 200.0      # media carrocería, en metros
         ma = cfg["robot_ancho_cm"] / 200.0
+        # El LIDAR no está en el centro: distancia a la cara delantera y a la trasera (si no se dan, simétrico).
+        ml_f = cfg["lidar_adelante_cm"] / 100.0 if cfg.get("lidar_adelante_cm") else ml
+        ml_b = cfg["lidar_atras_cm"] / 100.0 if cfg.get("lidar_atras_cm") else ml
         semi_frontal = cfg["cono_frontal_deg"] / 2.0
         semi_lateral = cfg["cono_lateral_deg"] / 2.0
         adelante = atras = izquierda = derecha = math.inf
@@ -143,7 +146,8 @@ class LidarReactive:
             # daban "0 cm libres" y bloqueaban adelante/atrás sin obstáculo.
             rad = math.radians(p["angle_deg"])
             lateral = abs(d * math.sin(rad))
-            if (abs(d * math.cos(rad)) <= ml + HUELLA_TOLERANCIA_M
+            proy = d * math.cos(rad)
+            if (abs(proy) <= (ml_f if proy >= 0 else ml_b) + HUELLA_TOLERANCIA_M
                     and lateral <= ma + HUELLA_TOLERANCIA_M):
                 continue
             a = _wrap180(p["angle_deg"])
@@ -155,10 +159,10 @@ class LidarReactive:
             en_camino = lateral <= ma + CORREDOR_HOLGURA_M
             if abs_a <= semi_frontal:
                 if en_camino:
-                    adelante = min(adelante, d - ml)
+                    adelante = min(adelante, d - ml_f)
             elif abs_a >= 180.0 - semi_frontal:
                 if en_camino:
-                    atras = min(atras, d - ml)
+                    atras = min(atras, d - ml_b)
             elif abs(a - 90.0) <= semi_lateral:
                 izquierda = min(izquierda, d - ma)
             elif abs(a + 90.0) <= semi_lateral:

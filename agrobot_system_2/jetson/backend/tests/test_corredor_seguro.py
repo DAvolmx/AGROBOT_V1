@@ -18,30 +18,32 @@ import sendero
 
 # --- 1. Envolvente -------------------------------------------------------
 
-def test_envolvente_la_manda_el_eje_delantero():
-    # Pivote movido atrás el 2026-10-15: el eje ancho es el delantero.
-    assert geo.ANCHO_ENVOLVENTE_M == geo.ANCHO_DELANTERO_M == 0.37
-    assert geo.ANCHO_TRASERO_M == 0.19
+def test_envolvente_la_manda_el_modulo_trasero_del_pivote():
+    # Corregido el 2026-10-20: el pivote va ATRÁS en las ruedas MÁS separadas (38 cm); el eje fijo delantero es estrecho.
+    assert geo.ANCHO_ENVOLVENTE_M == geo.ANCHO_TRASERO_M == 0.38
+    assert geo.ANCHO_DELANTERO_M == 0.28
+    assert geo.ANCHO_TRASERO_M > geo.ANCHO_DELANTERO_M
 
 
 def test_no_cabe_por_donde_pasa_solo_el_morro():
-    # 25 cm: pasa el módulo estrecho (19) y NO el eje ancho (37).
-    assert not geo.cabe(0.25)
+    # 30 cm: pasa el eje delantero estrecho (28) y NO el módulo trasero ancho (38).
+    assert not geo.cabe(0.30)
     # Justo la envolvente, sin holgura para el seguimiento: tampoco.
-    assert not geo.cabe(0.37)
-    # Con la holgura medida (19 cm/lado) hace falta un pasillo de 75 cm.
+    assert not geo.cabe(0.38)
+    # Con la holgura medida (14 cm/lado) hace falta un pasillo de 66 cm o más.
     assert not geo.cabe(0.49)
-    assert geo.cabe(0.65)
+    assert not geo.cabe(0.65)
+    assert geo.cabe(0.67)
     assert geo.cabe(0.75)
     assert geo.cabe(0.90)
-    # Una holgura explícita más suelta sí deja pasar 49 cm.
-    assert geo.cabe(0.49, holgura_m=0.06)
+    # Una holgura explícita más suelta sí deja pasar 50 cm.
+    assert geo.cabe(0.50, holgura_m=0.06)
 
 
 def test_margen_cambia_de_signo_en_la_envolvente():
-    assert geo.margen(0.37) == 0.0
-    assert geo.margen(0.25) < 0
-    assert round(geo.margen(0.49), 3) == 0.06
+    assert geo.margen(0.38) == 0.0
+    assert geo.margen(0.30) < 0
+    assert round(geo.margen(0.50), 3) == 0.06      # por lado
 
 
 def test_la_holgura_sale_del_pico_de_desvio_no_del_rmse():

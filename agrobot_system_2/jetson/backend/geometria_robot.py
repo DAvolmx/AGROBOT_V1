@@ -25,14 +25,25 @@ PENDIENTE de medir, no lo inventes aquí:
 """
 
 ENTRE_EJES_M = 0.37
-# GEOMETRÍA INVERTIDA el 2026-10-15 (el operador movió el pivote atrás):
+#: Distancias del LIDAR a las CARAS del robot (borde de las ruedas), según el croquis del 2026-10-20.
+LIDAR_A_CARA_DELANTERA_M = 0.185     # 0,37 - 0,24 + media rueda (~5 cm)
+LIDAR_A_CARA_TRASERA_M = 0.305       # 0,24 + media rueda (~6,5 cm)
+LARGO_TOTAL_M = LIDAR_A_CARA_DELANTERA_M + LIDAR_A_CARA_TRASERA_M
+# (histórico) GEOMETRÍA INVERTIDA el 2026-10-15 (el operador movió el pivote atrás):
 # ahora el eje ANCHO (37 cm) es el DELANTERO y fijo, y el módulo ESTRECHO
 # (19 cm) con el pivote pasivo (±20°) va DETRÁS. Hasta el 2026-10-14 era al
 # revés. La envolvente no cambia (manda el más ancho, 37 cm), pero ahora es
 # el eje DELANTERO el que entra primero en un hueco, y lo que barre al girar
 # es el módulo trasero.
-ANCHO_DELANTERO_M = 0.37
-ANCHO_TRASERO_M = 0.19
+#
+# CORREGIDO el 2026-10-20 (el operador, con un croquis): el módulo del PIVOTE va ATRÁS y es el de las ruedas MÁS
+# SEPARADAS (38 cm); el eje FIJO es el DELANTERO y es el ESTRECHO (28 cm, CONFIRMADO por el operador el mismo día;
+# la medida anterior de 19 cm ya no vale) y lleva los motores MÁS FUERTES (todo el PWM va ahí: firmware «maxfrente»). Por tanto:
+#   · lo que entra primero en un hueco es el eje delantero ESTRECHO, pero lo que tiene que caber en el corredor es
+#     el módulo trasero ANCHO (38 cm), y es ese el que barre al girar con el pivote;
+#   · el LIDAR (a 24 cm del eje trasero) queda 13 cm detrás del eje delantero (5,5 cm delante del centro).
+ANCHO_DELANTERO_M = 0.28
+ANCHO_TRASERO_M = 0.38
 
 #: Lo más ancho del robot: lo que tiene que caber en el corredor.
 ANCHO_ENVOLVENTE_M = max(ANCHO_DELANTERO_M, ANCHO_TRASERO_M)

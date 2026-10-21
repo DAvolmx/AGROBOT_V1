@@ -81,6 +81,8 @@ def main():
     ap.add_argument("--reusar", action="store_true", help="no volver a exportar los mosaicos si ya existen")
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--nombre", default="whitefly", help="nombre de la corrida (no pisa las anteriores)")
+    ap.add_argument("--patience", type=int, default=10, help="épocas sin mejorar antes de parar; subirlo = exigir más")
     a = ap.parse_args()
     t0 = time.perf_counter()
     cont = {s: [0, 0] for s in ("train", "val", "test")}
@@ -107,9 +109,9 @@ def main():
     base = AQUI.parents[1] / "jetson" / "backend" / "models" / a.base
     m = YOLO(str(base if base.exists() else a.base))
     m.train(data=str(SAL / "datos.yaml"), imgsz=T, epochs=a.epocas, batch=a.batch, device=0, workers=a.workers,
-            project=str(AQUI / "modelos" / "yolo"), name="whitefly", exist_ok=True, patience=10, plots=False,
+            project=str(AQUI / "modelos" / "yolo"), name=a.nombre, exist_ok=True, patience=a.patience, plots=False,
             degrees=0, flipud=0.5, fliplr=0.5, hsv_s=0.5, hsv_v=0.4, scale=0.3, mosaic=1.0, verbose=False, seed=0, amp=True)
-    mejor = AQUI / "modelos" / "yolo" / "whitefly" / "weights" / "best.pt"
+    mejor = AQUI / "modelos" / "yolo" / a.nombre / "weights" / "best.pt"
     net = YOLO(str(mejor))
     res = {"modelo": str(mejor), "datos": {k: {"mosaicos": v[0], "cajas": v[1]} for k, v in cont.items()}}
     for split in ("val", "test"):
@@ -118,7 +120,7 @@ def main():
                       "precision": round(float(r.box.mp), 4), "recall": round(float(r.box.mr), 4)}
         print(split, res[split], flush=True)
     res["NO_DEMOSTRADO"] = "Entrenado y medido con yuca (otra planta y cámara). No demuestra nada sobre col ni acelga."
-    (AQUI / "modelos" / "whitefly_metricas.json").write_text(json.dumps(res, indent=1, ensure_ascii=False))
+    (AQUI / "modelos" / f"{a.nombre}_metricas.json").write_text(json.dumps(res, indent=1, ensure_ascii=False))
     print("guardado", f"{time.perf_counter()-t0:.0f} s")
 
 

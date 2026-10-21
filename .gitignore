@@ -63,3 +63,4 @@ agrobot_system_2/simulador_pasivo/percepcion_sintetica/modelos/*intento*
 
 # Drivers de terceros compilados localmente (no versionar)
 agrobot_system_2/drivers/
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/yolo_col/

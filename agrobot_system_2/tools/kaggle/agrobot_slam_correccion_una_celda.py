@@ -243,6 +243,45 @@ for etq, col in (("base", "#c0392b"), ("corregida", "#27ae60")):
 ax.set_xlabel("distancia recorrida [m]"); ax.set_ylabel("error de posición [cm]"); ax.set_title("deriva a lo largo del recorrido"); ax.legend(); ax.grid(alpha=.3)
 fig.tight_layout(); fig.savefig(SALIDA / "06_deriva.png", dpi=110); plt.show()
 
+# ---------------- DATOS REALES (opcional: real.npz junto a dataset.npz) ----------------
+RUTA_REAL = RUTA.with_name("real.npz")
+if RUTA_REAL.exists():
+    r_ = np.load(RUTA_REAL, allow_pickle=False)
+    XR = np.nan_to_num(r_["features"].astype(np.float32), nan=0.0, posinf=8.0, neginf=0.0)
+    assert XR.shape[1] == D_ESPERADO, "real.npz: D distinto"
+    SID, REST, REFR = r_["sesion_id"], r_["est_pose"].astype(np.float64), r_["ref_pose"].astype(np.float64)
+    print("\nREAL:", json.loads(str(r_["meta"])).get("aviso"))
+    act = slice((K - 1) * NB, K * NB)
+    tabla("Desfase de dominio: fotograma actual, sim (train) vs real", pd.DataFrame({
+        "feature": NOMBRES, "sim_media": X[m_tr][:, act].mean(0).round(4), "real_media": XR[:, act].mean(0).round(4),
+        "sim_desv": X[m_tr][:, act].std(0).round(4), "real_desv": XR[:, act].std(0).round(4)}))
+    PR = predecir(XR)
+    tabla("Corrección predicha sobre datos reales (|media| y máx, debe ser pequeña)", pd.DataFrame({
+        "componente": ["dx [m]", "dy [m]", "dθ [rad]"], "|media|": np.abs(PR).mean(0).round(5), "máx": np.abs(PR).max(0).round(5),
+        "|media| en sim (test)": np.abs(Pt_ := predecir(X[m_test])).mean(0).round(5) if m_test.any() else np.nan}))
+    filas_r = []
+    for sid in np.unique(SID):
+        mm = SID == sid
+        if mm.sum() < 6: continue
+        eb = REST[mm]; incs = np.array([relativa(eb[i - 1], eb[i]) for i in range(1, len(eb))])
+        ec = [eb[0].copy()]
+        for inc, c in zip(incs, PR[mm][1:]): ec.append(componer(ec[-1], inc + c))
+        ec = np.array(ec); largo = lambda P: float(np.hypot(*np.diff(P[:, :2], axis=0).T).sum())
+        filas_r.append({"sesión": str(r_["sesiones"][sid]), "fotogramas": int(mm.sum()), "largo_ref_m": round(largo(REFR[mm]), 2),
+                        "largo_base_m": round(largo(eb), 2), "largo_corr_m": round(largo(ec), 2)})
+    if filas_r:
+        dfr = pd.DataFrame(filas_r)
+        dfr["|base-ref|"] = (dfr.largo_base_m - dfr.largo_ref_m).abs().round(2); dfr["|corr-ref|"] = (dfr.largo_corr_m - dfr.largo_ref_m).abs().round(2)
+        tabla("Consistencia con la pose grabada por el robot (REFERENCIA, no verdad terreno)", dfr)
+    fig, axs = plt.subplots(1, 4, figsize=(18, 3.6))
+    for ax, nom in zip(axs, ("v_cmd", "gyro_z", "icp_residual", "dmin_front")):
+        j = NOMBRES.index(nom)
+        ax.hist(X[m_tr][:, (K - 1) * NB + j], bins=50, alpha=.5, density=True, label="sim"); ax.hist(XR[:, (K - 1) * NB + j], bins=50, alpha=.5, density=True, label="real")
+        ax.set_title(nom); ax.legend(); ax.grid(alpha=.3)
+    fig.tight_layout(); fig.savefig(SALIDA / "07_sim_vs_real.png", dpi=110); plt.show()
+else:
+    print("\n(sin real.npz: se omite la comparación con datos reales)")
+
 modelo.cpu().eval()
 ej = torch.zeros(1, D_ESPERADO)
 torch.jit.trace(modelo, ej).save(str(SALIDA / "modelo_correccion.pt"))
@@ -296,7 +335,7 @@ print("""
 LO QUE SE PUDO DEMOSTRAR: el pipeline completo (dataset -> entrenamiento -> exportación -> inferencia NumPy) corre, es reproducible por semilla y se
 mide en escenarios NO vistos contra la línea base sin corrección.
 LO QUE NO: funcionamiento en el robot real (física del simulador = hipótesis sin calibrar); cierre de lazo (escenarios de ida); tiempo en ARM (solo estimado);
-exteriores, LIDAR real con reflejos/vidrio/polvo.
+exteriores, LIDAR real con reflejos/vidrio/polvo; con datos reales solo se comparan distribuciones (no hay verdad terreno).
 HIPÓTESIS: sesgo de giroscopio 0,2-1 °/s (signo aleatorio) y ruido 0,3 °/s; σ LIDAR 1-3 cm por episodio; odometría base = ICP punto a punto con estimación inicial
 (v comandado, giroscopio), no rf2o ni slam_toolbox reales; ventana K=5; se corrige el incremento, no la pose absoluta.
 SIGUIENTE PASO: grabar un rosbag real (scan + imu + cmd_vel + pose de referencia) y medir la línea base real. Archivos en""", SALIDA)

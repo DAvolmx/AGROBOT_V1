@@ -42,7 +42,9 @@
     "freno_camara": false,
     "pose_gyro_trust": 0.85,
     "lidar_adelante_cm": 18.5,
-    "lidar_atras_cm": 30.5
+    "lidar_atras_cm": 30.5,
+    "correccion_ml_activa": false,
+    "correccion_ml_pesos": "models/slam_correccion/pesos_mlp.npz"
   },
   "autonomia": {
     "escala_velocidad": 0.13,

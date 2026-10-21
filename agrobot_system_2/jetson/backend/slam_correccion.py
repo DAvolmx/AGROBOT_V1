@@ -75,3 +75,13 @@ class CorreccionSlam:
 
     def corregir_incremento(self, inc_est, **kw) -> np.ndarray:
         return np.asarray(inc_est, float) + self.actualizar(prev_inc=kw.pop("prev_inc", inc_est), **kw)
+
+
+def desde_config(slam_cfg: dict, base: str | Path | None = None):
+    """CorreccionSlam si `slam.correccion_ml_activa` y existe el archivo de pesos; si no, None (el robot sigue con su estimación)."""
+    if not slam_cfg.get("correccion_ml_activa", False):
+        return None
+    ruta = Path(slam_cfg.get("correccion_ml_pesos", "models/slam_correccion/pesos_mlp.npz"))
+    if not ruta.is_absolute():
+        ruta = Path(base or Path(__file__).resolve().parent) / ruta
+    return CorreccionSlam(ruta) if ruta.is_file() else None

@@ -76,3 +76,18 @@ def test_rapida(tmp_path):
     for _ in range(500):
         c.actualizar(0.2, 0.1, 0.0, 0.02, _scan(), (0.02, 0, 0), True, 0.25)
     assert (time.perf_counter() - t0) / 500 < 0.005     # < 5 ms por fotograma (el límite del documento es 50 ms)
+
+
+def test_desde_config_apagado_y_con_pesos(tmp_path):
+    assert SC.desde_config({"correccion_ml_activa": False}) is None
+    ruta, _ = _pesos(tmp_path)
+    assert SC.desde_config({"correccion_ml_activa": True, "correccion_ml_pesos": str(ruta)}) is not None
+    assert SC.desde_config({"correccion_ml_activa": True, "correccion_ml_pesos": str(tmp_path / "no_existe.npz")}) is None
+
+
+def test_pesos_reales_de_kaggle_cargan():
+    from pathlib import Path
+    ruta = Path(__file__).resolve().parents[1] / "models" / "slam_correccion" / "pesos_mlp.npz"
+    c = SC.CorreccionSlam(ruta)
+    corr = c.actualizar(0.2, 0.0, 0.0, 0.01, _scan(), (0.05, 0.0, 0.0), True, 0.25)
+    assert corr.shape == (3,) and np.all(np.isfinite(corr)) and np.all(np.abs(corr) <= SC.LIMITE_CORR + 1e-12)

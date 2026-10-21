@@ -77,6 +77,10 @@ DEFAULTS = {
         # 30 cm hasta tocar, no hasta el centro del robot. El `footprint` de
         # nav2_params.yaml es aparte y va en metros: si cambia esto, cambiarlo.
         "robot_largo_cm": 49,
+        # Corrección ML de la odometría por scans (slam_correccion.py, MLP entrenado en Kaggle 2026-10-21). APAGADA: en escenarios
+        # simulados NO vistos mejoró el giro pero empeoró la posición (ATE 15,0 -> 17,1 cm). Solo para pruebas en sombra.
+        "correccion_ml_activa": False,
+        "correccion_ml_pesos": "models/slam_correccion/pesos_mlp.npz",
         # El LIDAR NO está en el centro (croquis 2026-10-20): a 24 cm del eje trasero. Distancia del LIDAR a la cara
         # delantera y a la trasera, para restar la carrocería correcta a cada lado (ver slam.distancias).
         "lidar_adelante_cm": 18.5,

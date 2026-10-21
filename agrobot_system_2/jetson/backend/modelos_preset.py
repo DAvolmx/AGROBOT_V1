@@ -13,6 +13,11 @@ PRESETS = {
     "col": {"archivo": "agrobot_col_yolo11n.pt",
             "titulo": "Col (planta y cogollo)",
             "nota": "Detecta col y cogollo (mAP50 0,71/0,77, otras fotos); el daño de hoja casi no (0,09). NO detecta mosca blanca."},
+    "plagasx": {"archivo": "agrobot_plagasx_det.pt",
+                "titulo": "Coles: enfermedades (PLAGASX)",
+                "nota": "YOLOv8s entrenado en Kaggle (2026-10-21) con coles propias + datasets externos de coliflor/papa: sana, amarillamiento, "
+                        "manchas café, daño de insecto, mildiu y malformación (pudrición no tiene ejemplos). Las cajas son de IMAGEN COMPLETA: "
+                        "dice QUÉ enfermedad ve, no DÓNDE está la lesión. Clasificador en agrobot_plagasx_cls.pt (93 % en su test; sin validar en campo)."},
     "exterior": {"archivo": "ip102_pest_yolo11s.pt",
                  "titulo": "Exterior (plagas)",
                  "nota": "Modelo de plagas previo (IP102)."},

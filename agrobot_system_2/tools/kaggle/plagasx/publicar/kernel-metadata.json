@@ -1,0 +1,24 @@
+{
+ "id": "davidgomez32/plagasx",
+ "title": "PLAGASX",
+ "code_file": "plagasx.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_tpu": false,
+ "enable_internet": true,
+ "keywords": [
+  "gpu"
+ ],
+ "dataset_sources": [
+  "davidgomez32/coles-plagas-enfermedades-agrobot",
+  "davidgomez32/navegacion",
+  "madhukk23/balanced-cauliflower-dataset-200-each",
+  "shuvokumarbasak2030/cauliflower-disease-multi-transformation-dataset",
+  "drtawfikrrahman/deep-learning-model-for-potato-pest-detection"
+ ],
+ "kernel_sources": [],
+ "competition_sources": [],
+ "model_sources": []
+}

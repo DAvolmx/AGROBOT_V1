@@ -37,6 +37,7 @@ except ImportError:
 from protocol import SERVO_HOME_DEG, clamp_servo
 from ble_link import BleActuatorLink
 import imu_nivel
+import anticolision
 import entorno_auto
 from enlace_c3 import EnlaceC3
 import udp_actuator_link
@@ -549,6 +550,9 @@ async def calibrar_imu_nivel_handler(request: web.Request):
 # —rampa, tope por LIDAR, odometria, calibracion del servo— y solo cambia el
 # transporte por debajo: en vez de un datagrama al 192.168.12.50 escribe en
 # un puerto serie. Ver uart_link.py para por que se dejaron el WiFi y el BLE.
+anticolision_global = anticolision.Anticolision()
+
+
 class ActuatorController:
     def __init__(self, link):
         self.link = link
@@ -684,6 +688,23 @@ class ActuatorController:
                     self._ultimo_aviso_t = ahora
                     _schedule(state.broadcast({"type": "obstacle_warning", "data": aviso}))
                 v_ref = v_seg
+
+        # ANTICOLISIÓN CON RETROCESO (2026-10-21): si va a tocar algo delante, cancela el avance y retrocede un poco.
+        # Vale en manual y en autónomo (es el mismo punto de salida). Apagable: safety.anticolision_activa.
+        try:
+            v_ac, w_ac, ev_ac, reinicia = anticolision_global.filtrar(
+                v_ref, omega_ref, lidar_reactive.distancias(state.config["slam"]), lidar_reactive.edad_scan_s(), state.config.get("safety", {}))
+            if reinicia:
+                self._ramp_v, self._ramp_omega = v_ac, 0.0
+            v_ref, omega_ref = v_ac, w_ac
+            if ev_ac is not None:
+                print(f"[anticolision] {ev_ac}", flush=True)
+                if ev_ac["tipo"] in ("retroceso", "alto_sin_espacio"):
+                    txt = (f"Obstáculo a {ev_ac['delante_m'] * 100:.0f} cm: retrocedo" if ev_ac["tipo"] == "retroceso"
+                           else f"Obstáculo a {ev_ac['delante_m'] * 100:.0f} cm y sin espacio detrás: me detengo")
+                    _schedule(state.broadcast({"type": "toast", "data": {"kind": "warn", "title": "Anticolisión", "message": txt}}))
+        except Exception as exc:                       # nunca dejar sin órdenes al robot por un fallo de esta capa
+            print(f"[anticolision] fallo: {type(exc).__name__}: {exc}", flush=True)
 
         # PROTECCIÓN FINAL COMÚN (supervisor): único punto por el que pasa TODO
         # lo que mueve el robot (manual, Nav2, patrulla, exploración), así que

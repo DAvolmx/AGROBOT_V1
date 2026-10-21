@@ -244,6 +244,17 @@ DEFAULTS = {
         # no avanza si hay algo a menos de margen+deslizamiento (slam.*) ni sin datos frescos del LIDAR.
         # El manejo manual no se toca. Apagarlo solo para pruebas.
         "freno_lidar_autonomo": True,
+        # ANTICOLISIÓN CON RETROCESO (anticolision.py, 2026-10-21): si el robot VA A TOCAR algo delante (hueco < disparo_m) cancela
+        # el avance y retrocede retroceso_m si detrás hay sitio. Independiente del freno de arriba. Solo ve lo que ve el LIDAR
+        # (plano a 37,5 cm): no detecta cajas, bolsas, mantas ni macetas bajas.
+        "anticolision_activa": True,
+        "anticolision_disparo_m": 0.12,
+        "anticolision_retroceso_m": 0.15,
+        "anticolision_v_retroceso": 0.15,
+        "anticolision_margen_atras_m": 0.20,
+        "anticolision_parar_atras_m": 0.08,
+        "anticolision_soltar_s": 0.3,
+        "anticolision_scan_max_s": 1.0,
         # MODO SEGURO (FDIR, modo_seguro.py): al entrar detiene la autonomía y queda enclavado hasta
         # rearmar. APAGADO por defecto desde 2026-10-19 (pedido del operador): la inclinación del IMU
         # (28-77°) lo disparaba durante las pruebas de exploración/SLAM. Se activa desde el dashboard.

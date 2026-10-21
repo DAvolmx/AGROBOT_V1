@@ -31,6 +31,9 @@ void iniciarWatchdogLoop();
 struct CmdFrame;
 
 #define ENLACE_WIFI 1
+// 2026-10-21: BLE APAGADO. El backend corre con wifi_only=True (nunca conecta por BLE) y la placa seguía anunciándose: BLE y WiFi comparten
+// la ÚNICA radio 2.4 GHz del C3 y con el WiFi sin ahorro de energía se pelean el aire (pings de 3-10 s, caídas cada ~3 s). Poner 1 para volver.
+#define ENLACE_BLE 0
 #if ENLACE_WIFI
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -842,6 +845,7 @@ void setup() {
   servoEscribir(SERVO_PARK_ANGLE);
   currentServoAngle = SERVO_PARK_ANGLE;
 
+#if ENLACE_BLE
   BLEDevice::init("AGROBOT-C3");
   BLEDevice::setPower(ESP_PWR_LVL_P9);
   pServer = BLEDevice::createServer();
@@ -867,6 +871,9 @@ void setup() {
   pAdv->setMaxPreferred(0x12);
   BLEDevice::startAdvertising();
   Serial.println("BLE activo");
+#else
+  Serial.println("BLE apagado (solo WiFi)");
+#endif
 
 #if ENLACE_WIFI
   WiFi.setHostname("agrobot-c3");
@@ -898,12 +905,15 @@ unsigned long ultimoEstadoBle = 0;
 const unsigned long ESTADO_PERIODO_BLE_MS = 100;
 
 void loop() {
+#if ENLACE_BLE
   procesarBLE();
+#endif
 #if ENLACE_WIFI
   procesarWifi();
   gestionarWifi();
 #endif
 
+#if ENLACE_BLE
   static unsigned long ultimoRearme = 0;
   if (!bleConnected && (reabrirAnuncio || millis() - ultimoRearme > 5000)) {
     reabrirAnuncio = false;
@@ -912,6 +922,7 @@ void loop() {
     pServer->startAdvertising();
   }
   bleWasConnected = bleConnected;
+#endif
 
   if (!inFailsafe && millis() - lastCmdMillis > CMD_TIMEOUT_MS) {
     enterFailsafe("sin comando");

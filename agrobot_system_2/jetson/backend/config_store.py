@@ -280,6 +280,7 @@ DEFAULTS = {
 }
 
 DEFAULTS["control"].setdefault("c3_wifi_only", False)
+DEFAULTS["control"].setdefault("c3_usb", True)       # cable USB a la C3 como vía principal (2026-10-21)
 
 _lock = Lock()
 

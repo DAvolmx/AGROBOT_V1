@@ -29,6 +29,7 @@
 
 void iniciarWatchdogLoop();
 struct CmdFrame;
+struct StatusFrame;
 
 #define ENLACE_WIFI 1
 // 2026-10-21: BLE APAGADO. El backend corre con wifi_only=True (nunca conecta por BLE) y la placa seguía anunciándose: BLE y WiFi comparten
@@ -101,11 +102,15 @@ float boostActualIzq = 1.0f, boostActualDer = 1.0f;
 // ===== SEGURIDAD =====
 // 2026-10-21: 500 -> 1200 ms. En la prueba en el suelo la C3 cayó a failsafe 150 veces en 22 min (mediana 0,3 s, p90 3,3 s) por huecos
 // del WiFi; con 500 ms cada hueco paraba los motores. A 0,25 m/s, 1,2 s de inercia son ~30 cm si el enlace muere de verdad: valorarlo.
-const unsigned long CMD_TIMEOUT_MS = 1200;
+const unsigned long CMD_TIMEOUT_MS = 1200;        // mando por WiFi
+const unsigned long CMD_TIMEOUT_USB_MS = 400;     // mando por el cable USB (enlace fiable: se vuelve a la seguridad original)
 unsigned long lastCmdMillis = 0;
 
+// 2026-10-21: solo vale una trama MÁS NUEVA (aritmética modular de 16 bits). Antes bastaba que fuera DISTINTA, y con dos canales
+// (WiFi lento + cable USB) una trama vieja que llegaba tarde por WiFi deshacía una orden más reciente. Las copias duplicadas
+// (misma secuencia) y las atrasadas se ignoran. Tras un failsafe se acepta cualquiera (backend reiniciado).
 #define SECUENCIA_VALIDA(seq_nuevo, seq_anterior) \
-  (((uint16_t)(seq_nuevo - seq_anterior)) != 0)
+  (((int16_t)((uint16_t)(seq_nuevo - seq_anterior))) > 0)
 
 // ===== SERVO + LED =====
 const int SERVO_LEDC_CANAL   = 0;
@@ -213,9 +218,10 @@ const uint8_t CMD_MAGIC = 0xA5, STATUS_MAGIC = 0x5A;
 #define ST_RECIEN    0x10
 #define ST_VIA_WIFI  0x20
 #define ST_WIFI_OK   0x40
-#define ST_BLE_OK    0x80
+#define ST_BLE_OK    0x80   // con BLE apagado este bit significa «cable USB activo» (ST_USB_OK)
+#define ST_USB_OK    0x80
 const unsigned long ARRANQUE_RECIENTE_MS = 15000;
-const uint8_t VIA_BLE = 1, VIA_WIFI = 2;
+const uint8_t VIA_BLE = 1, VIA_WIFI = 2, VIA_USB = 3;
 
 static uint8_t crc8(const uint8_t *datos, size_t n) {
   uint8_t crc = 0x00;
@@ -246,7 +252,7 @@ float vAplicada = 0.0f, omegaAplicada = 0.0f;
 uint8_t lastServo = 0;
 bool lastLed = false;
 uint16_t lastSeq = 0;
-unsigned long tramasMalas = 0, tramasBle = 0, tramasWifi = 0, tramasViejas = 0;
+unsigned long tramasMalas = 0, tramasBle = 0, tramasWifi = 0, tramasViejas = 0, tramasUsb = 0;
 uint8_t viaUltima = 0;
 bool inFailsafe = false;
 
@@ -580,7 +586,7 @@ bool aplicarComando(const CmdFrame &c, uint8_t via) {
   lastCmdMillis = ahora;
   lastSeq   = c.seq;
   viaUltima = via;
-  if (via == VIA_WIFI) tramasWifi++; else tramasBle++;
+  if (via == VIA_WIFI) tramasWifi++; else if (via == VIA_USB) tramasUsb++; else tramasBle++;
 
   lastV     = (constrain((int)c.v_pct,     -100, 100) / 100.0f) * V_MAX;
   lastOmega = (constrain((int)c.omega_pct, -100, 100) / 100.0f) * OMEGA_MAX;
@@ -741,15 +747,22 @@ void gestionarWifi() {
 }
 #endif
 
-void enviarEstado() {
-  bool porBle  = bleConnected && pStatusChar != nullptr;
-#if ENLACE_WIFI
-  bool porWifi = wifiListo && udpAbierto;
-#else
-  bool porWifi = false;
-#endif
+// ===== CABLE USB (CDC) Jetson <-> C3: mismas tramas binarias de 8 bytes que el WiFi (CmdFrame / StatusFrame) =====
+// Es el canal fiable: no depende del aire. Cada trama válida se contesta AL INSTANTE con un estado (eco de la secuencia), así
+// la Jetson puede medir la latencia de ida y vuelta. La salida de texto de la placa se redujo al arranque; el resto del flujo
+// es binario y se resincroniza por el byte de inicio + CRC.
+unsigned long ultimoCmdUsb = 0;
+uint8_t usbBuf[sizeof(CmdFrame)];
+uint8_t usbN = 0;
+bool usbActivo() { return ultimoCmdUsb != 0 && millis() - ultimoCmdUsb < 1500; }
 
-  StatusFrame st;
+void armarEstado(StatusFrame &st) {
+  bool porWifi =
+#if ENLACE_WIFI
+      wifiListo && udpAbierto;
+#else
+      false;
+#endif
   st.magic     = STATUS_MAGIC;
   st.v_pct     = (int8_t)constrain((int)lroundf(lastV     / V_MAX     * 100.0f), -100, 100);
   st.omega_pct = (int8_t)constrain((int)lroundf(lastOmega / OMEGA_MAX * 100.0f), -100, 100);
@@ -762,14 +775,63 @@ void enviarEstado() {
   if (millis() < ARRANQUE_RECIENTE_MS)     st.flags |= ST_RECIEN;
   if (viaUltima == VIA_WIFI)               st.flags |= ST_VIA_WIFI;
   if (porWifi)                             st.flags |= ST_WIFI_OK;
-  if (bleConnected)                        st.flags |= ST_BLE_OK;
+  if (usbActivo())                         st.flags |= ST_USB_OK;
   st.seq_echo = lastSeq;
   st.crc = crc8((uint8_t *)&st, sizeof(st) - 1);
+}
 
+void enviarEstadoUsb() {
+  StatusFrame st;
+  armarEstado(st);
+  Serial.write((const uint8_t *)&st, sizeof(st));
+}
+
+void procesarUsb() {
+  int presupuesto = 96;
+  while (presupuesto-- > 0 && Serial.available() > 0) {
+    uint8_t b = (uint8_t)Serial.read();
+    if (usbN == 0 && b != CMD_MAGIC) continue;           // basura o texto: se espera el byte de inicio
+    usbBuf[usbN++] = b;
+    if (usbN < sizeof(CmdFrame)) continue;
+    CmdFrame c;
+    memcpy(&c, usbBuf, sizeof(c));
+    if (crc8(usbBuf, sizeof(c) - 1) == c.crc) {
+      usbN = 0;
+      ultimoCmdUsb = millis();
+      aplicarComando(c, VIA_USB);
+      enviarEstadoUsb();                                  // eco inmediato (latencia de ida y vuelta medible)
+    } else {
+      tramasMalas++;
+      // resincroniza: descarta el primer byte y busca otro inicio dentro de lo que quedó
+      uint8_t resto = 0;
+      for (uint8_t i = 1; i < sizeof(CmdFrame); i++) {
+        if (usbBuf[i] == CMD_MAGIC) { memmove(usbBuf, usbBuf + i, sizeof(CmdFrame) - i); resto = sizeof(CmdFrame) - i; break; }
+      }
+      usbN = resto;
+    }
+  }
+}
+
+void enviarEstado() {
+  bool porBle  = false;
+#if ENLACE_BLE
+  porBle = bleConnected && pStatusChar != nullptr;
+#endif
+#if ENLACE_WIFI
+  bool porWifi = wifiListo && udpAbierto;
+#else
+  bool porWifi = false;
+#endif
+
+  StatusFrame st;
+  armarEstado(st);
+
+#if ENLACE_BLE
   if (porBle) {
     pStatusChar->setValue((uint8_t *)&st, sizeof(st));
     pStatusChar->notify();
   }
+#endif
 #if ENLACE_WIFI
   if (porWifi) {
     udpC3.beginPacket(ipJetson, JETSON_UDP_PUERTO);
@@ -777,6 +839,7 @@ void enviarEstado() {
     udpC3.endPacket();
   }
 #endif
+  if (usbActivo()) enviarEstadoUsb();                    // latido del estado por el cable aunque no lleguen órdenes
 }
 
 #define TEST_MOTORES 0   // 1 = al encender mueve cada rueda 300 ms (solo con ruedas en el aire)
@@ -825,6 +888,7 @@ void setup() {
   motivoReinicio = esp_reset_reason();
 
   Serial.begin(115200);
+  Serial.setTxTimeoutMs(0);                       // si la Jetson no lee el USB, escribir no debe frenar el lazo
   unsigned long t0Serial = millis();
   while (!Serial && millis() - t0Serial < 1500) delay(10);
   delay(200);
@@ -905,6 +969,7 @@ unsigned long ultimoEstadoBle = 0;
 const unsigned long ESTADO_PERIODO_BLE_MS = 100;
 
 void loop() {
+  procesarUsb();
 #if ENLACE_BLE
   procesarBLE();
 #endif
@@ -924,7 +989,8 @@ void loop() {
   bleWasConnected = bleConnected;
 #endif
 
-  if (!inFailsafe && millis() - lastCmdMillis > CMD_TIMEOUT_MS) {
+  const unsigned long timeoutActual = (viaUltima == VIA_USB) ? CMD_TIMEOUT_USB_MS : CMD_TIMEOUT_MS;
+  if (!inFailsafe && millis() - lastCmdMillis > timeoutActual) {
     enterFailsafe("sin comando");
   }
 
@@ -938,17 +1004,7 @@ void loop() {
   updateAntiHundimiento();
   updateServo();
 
-  // Log cada 500ms
-  static unsigned long ultimaTraza = 0;
-  if (millis() - ultimaTraza >= 500) {
-    ultimaTraza = millis();
-    Serial.printf("[skid-steer] v=%.2f w=%.2f fs=%d boost=%.2f/%.2f | "
-                  "L:%+d/%3d D:%+d/%3d\n",
-                  lastV, lastOmega, (int)inFailsafe,
-                  boostActualIzq, boostActualDer,
-                  ruedaL1.sentido, ruedaL1.dutyPedido,
-                  ruedaR1.sentido, ruedaR1.dutyPedido);
-  }
+  // (la traza de texto cada 500 ms se quitó: el puerto serie lleva ahora tramas binarias hacia la Jetson)
 
   if (millis() - ultimoEstadoBle >= ESTADO_PERIODO_BLE_MS) {
     ultimoEstadoBle = millis();

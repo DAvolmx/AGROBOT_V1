@@ -110,12 +110,18 @@ class UartActuatorLink:
 
     def __init__(self, v_max: float, omega_max: float,
                  port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD,
-                 on_status=None):
+                 on_status=None, esclavo: bool = False):
         self.v_max = v_max
         self.omega_max = omega_max
         self.port = port
         self.baud = baud
         self._on_status = on_status
+        # esclavo=True: NO tiene bucle de envío propio; EnlaceC3 le pasa las MISMAS tramas (misma secuencia) que van por el WiFi
+        # mediante enviar(). Así la C3 deduplica por secuencia y gana siempre la trama más nueva, venga por el cable o por el aire.
+        self.esclavo = esclavo
+        self._ultimo_estado = 0.0
+        self.recibidas = 0
+        self._ultimo_error = None
 
         self._reader = None
         self._writer = None
@@ -138,6 +144,21 @@ class UartActuatorLink:
     @property
     def connected(self) -> bool:
         return self._connected
+
+    @property
+    def vivo(self) -> bool:
+        """Puerto abierto Y la C3 contestando (estado en el último segundo)."""
+        return self._connected and time.monotonic() - self._ultimo_estado < 1.0
+
+    def enviar(self, trama: bytes) -> bool:
+        """Escribe una trama ya armada (esclavo). No espera: si el cable no está, no pasa nada."""
+        if not self._connected or self._writer is None:
+            return False
+        try:
+            self._writer.write(trama)
+        except Exception:
+            return False
+        return True
 
     def next_seq(self) -> int:
         self._seq = (self._seq + 1) & 0xFFFF
@@ -215,13 +236,22 @@ class UartActuatorLink:
         while not self._stop.is_set():
             try:
                 self._reader, self._writer = await serial_asyncio.open_serial_connection(
-                    url=self.port, baudrate=self.baud)
+                    url=self.port, baudrate=self.baud, dsrdtr=False, rtscts=False)
+                try:                                  # DTR/RTS en reposo: en el USB-JTAG del C3 podrían provocar un reset
+                    ser = self._writer.transport.serial
+                    ser.dtr = False
+                    ser.rts = False
+                except Exception:
+                    pass
                 self._connected = True
+                self._ultimo_error = None
                 print(f"[serie] abierto {self.port} a {self.baud} baudios", flush=True)
-                await asyncio.gather(self._send_loop(), self._read_loop())
+                tareas = [self._read_loop()] + ([] if self.esclavo else [self._send_loop()])
+                await asyncio.gather(*tareas)
             except Exception as exc:
-                if not self._stop.is_set():
+                if not self._stop.is_set() and str(exc) != self._ultimo_error:     # un aviso por cambio, no uno cada 2 s
                     print(f"[serie] {self.port}: {exc}", flush=True)
+                    self._ultimo_error = str(exc)
                 await self._close()
                 await asyncio.sleep(RECONNECT_DELAY_S)
 
@@ -271,5 +301,7 @@ class UartActuatorLink:
             "seq_echo": seq_echo,
             "_received_at": time.time(),
         }
+        self._ultimo_estado = time.monotonic()
+        self.recibidas += 1
         if self._on_status is not None:
             self._on_status(status)

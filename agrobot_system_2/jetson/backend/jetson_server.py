@@ -3368,7 +3368,13 @@ async def start_background(app: web.Application):
     wifi_c3 = await udp_actuator_link.abrir(lambda _trama: None)
     if wifi_c3 is not None:
         wifi_c3.on_cfg = c3_pines.on_cfg
-    enlace_c3 = EnlaceC3(ble_link, wifi_c3, wifi_only=True)
+    uart_c3 = None
+    if ctrl.get("c3_usb", True):
+        # Cable USB a la C3 (CDC del chip): vía fiable, ~1 ms de ida y vuelta. Se busca por by-id (el ttyACMn cambia).
+        puerto_c3 = next(iter(sorted(Path("/dev/serial/by-id").glob("usb-Espressif_USB_JTAG_serial*"))), None)
+        import uart_link
+        uart_c3 = uart_link.UartActuatorLink(v_max=0.55, omega_max=1.5, port=str(puerto_c3 or "/dev/ttyACM0"), esclavo=True)
+    enlace_c3 = EnlaceC3(ble_link, wifi_c3, wifi_only=True, uart=uart_c3)
     actuator_proto = ActuatorController(enlace_c3)
     enlace_c3._on_status = actuator_proto.on_status
     enlace_c3.start()

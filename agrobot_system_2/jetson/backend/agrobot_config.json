@@ -48,7 +48,7 @@
   },
   "autonomia": {
     "escala_velocidad": 0.13,
-    "distancia_puntos_cm": 120,
+    "distancia_puntos_cm": 20,
     "avance_libre_cm": 40,
     "lado_libre_cm": 30,
     "retroceso_libre_cm": 30,
@@ -87,7 +87,7 @@
     "max_omega_rps": 4.0,
     "suavidad_duty": 1.0,
     "suavidad_periodo_s": 0.3,
-    "modo_manejo": "interior",
+    "modo_manejo": "preciso",
     "entorno_auto": true,
     "invertir_giro": true,
     "nav2_v_max_mps": 0.25,
@@ -98,11 +98,6 @@
   },
   "safety": {
     "freno_lidar_autonomo": false,
-    "modo_seguro_activo": false,
-    "heartbeat_stale_warn_s": 5,
-    "heartbeat_stale_err_s": 20,
-    "max_linear_accel_mps2": 3,
-    "max_angular_accel_rps2": 8,
     "anticolision_activa": true,
     "anticolision_disparo_m": 0.12,
     "anticolision_retroceso_m": 0.15,
@@ -110,7 +105,12 @@
     "anticolision_margen_atras_m": 0.2,
     "anticolision_parar_atras_m": 0.08,
     "anticolision_soltar_s": 0.3,
-    "anticolision_scan_max_s": 1.0
+    "anticolision_scan_max_s": 1.0,
+    "modo_seguro_activo": false,
+    "heartbeat_stale_warn_s": 5,
+    "heartbeat_stale_err_s": 20,
+    "max_linear_accel_mps2": 3,
+    "max_angular_accel_rps2": 8
   },
   "navigation": {
     "mode": "localization",

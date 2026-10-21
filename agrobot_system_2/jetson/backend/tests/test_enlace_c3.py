@@ -192,3 +192,37 @@ def test_cada_trama_wifi_sale_duplicada_con_la_misma_secuencia():
     salidas = asyncio.run(prueba())
     assert len(salidas) == enlace_c3.DUPLICADOS_WIFI
     assert len(set(salidas)) == 1
+
+
+def test_el_cable_usb_recibe_la_misma_trama_y_cuenta_como_conectado():
+    """2026-10-21: el cable USB es la tercera vía: misma trama (misma secuencia) que el WiFi, y `connected` si está vivo."""
+    class UartFalso:
+        connected = True
+        vivo = True
+        recibidas = 0
+        _on_status = None
+
+        def __init__(self):
+            self.salidas = []
+
+        def enviar(self, trama):
+            self.salidas.append(bytes(trama))
+            return True
+
+    class WifiFalso:
+        ip_c3 = "192.168.12.171"
+        conectado = False
+
+        def __init__(self):
+            self.salidas = []
+
+        def enviar(self, trama):
+            self.salidas.append(bytes(trama))
+            return True
+
+    ble = BleActuatorLink(0.55, 1.5)
+    uart, wifi = UartFalso(), WifiFalso()
+    e = EnlaceC3(ble, wifi, wifi_only=True, uart=uart)
+    assert e.connected                                  # solo el cable está vivo
+    e._enviar_wifi()
+    assert len(uart.salidas) == 1 and uart.salidas[0] == wifi.salidas[0]

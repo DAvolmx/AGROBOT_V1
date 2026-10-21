@@ -52,8 +52,10 @@ INVERTIR_GIRO = False
 
 
 class EnlaceC3:
-    def __init__(self, ble: BleActuatorLink, wifi: UdpActuatorLink | None = None, *, wifi_only: bool = False):
+    def __init__(self, ble: BleActuatorLink, wifi: UdpActuatorLink | None = None, *, wifi_only: bool = False, uart=None):
         self.wifi_only = wifi_only
+        self.uart = uart                       # cable USB (UartActuatorLink esclavo): vía fiable, sin aire de por medio
+        self._t_estado_usb = 0.0
         # El estado del foco se manda INVERTIDO (el foco es de lógica normal y el firmware escribe el pin
         # como activo en bajo). 2026-10-16: el LED volvió a verse al revés con el firmware suave; se corrige
         # aquí, en software, sin tocar el firmware. Para volver atrás: positive_led = True.
@@ -67,6 +69,8 @@ class EnlaceC3:
         self.cambios_de_via = 0
         self._vias_antes: tuple[bool, bool] | None = None
         ble._on_status = self._estado
+        if uart is not None:
+            uart._on_status = self._estado_usb
         if wifi is not None:
             wifi._on_trama = self._trama_wifi
             # Con el WiFi vivo, el BLE reintenta con calma (ver ble_link).
@@ -75,7 +79,8 @@ class EnlaceC3:
     # ----- lo que usa jetson_server (misma API que BleActuatorLink) -----
     @property
     def connected(self) -> bool:
-        return self.ble.connected or (self.wifi is not None and self.wifi.conectado)
+        return (self.ble.connected or (self.wifi is not None and self.wifi.conectado)
+                or (self.uart is not None and self.uart.vivo))
 
     def send_command(self, v: float, omega: float, scan_cmd: int = 0):
         self.ble.send_command(v, -omega if INVERTIR_GIRO else omega, scan_cmd)
@@ -93,7 +98,9 @@ class EnlaceC3:
     def start(self):
         if not self.wifi_only:
             self.ble.start()
-        if self.wifi is not None:
+        if self.uart is not None:
+            self.uart.start()
+        if self.wifi is not None or self.uart is not None:
             self._tarea = asyncio.create_task(self._bucle_wifi())
 
     async def stop(self):
@@ -103,6 +110,8 @@ class EnlaceC3:
                 await self._tarea
             except (asyncio.CancelledError, Exception):
                 pass
+        if self.uart is not None:
+            await self.uart.stop()
         await self.ble.stop()
 
     def resumen(self) -> dict:
@@ -110,6 +119,8 @@ class EnlaceC3:
         r["ble_disabled"] = self.wifi_only
         r["ble"] = self.ble.connected
         r["wifi"] = self.wifi.resumen() if self.wifi is not None else None
+        r["usb"] = ({"abierto": self.uart.connected, "vivo": self.uart.vivo, "recibidas": self.uart.recibidas}
+                    if self.uart is not None else None)
         r["conectado"] = self.connected
         r["via_estado"] = self._via
         r["cambios_de_via"] = self.cambios_de_via
@@ -117,19 +128,38 @@ class EnlaceC3:
 
     # ----- internos -----
     def _enviar_wifi(self):
-        if self.wifi is None or self.wifi.ip_c3 is None:
+        """Saca UNA trama por todas las vías vivas: el cable USB (si está) y el WiFi (con copias duplicadas)."""
+        usb_ok = self.uart is not None and self.uart.connected
+        wifi_ok = self.wifi is not None and self.wifi.ip_c3 is not None
+        if not usb_ok and not wifi_ok:
             return
         trama = self.ble.pack()
-        if self.wifi.enviar(trama):
-            # El barrido de cámara es de un solo disparo: si salió por aquí,
-            # que no vuelva a salir en la próxima trama del BLE.
-            self.ble._scan_once = False
+        salio = False
+        if usb_ok:
+            salio = self.uart.enviar(trama) or salio
+        if wifi_ok and self.wifi.enviar(trama):
+            salio = True
             try:
                 bucle = asyncio.get_running_loop()
             except RuntimeError:
-                return                      # sin bucle (pruebas síncronas): solo la copia inmediata
-            for k in range(1, DUPLICADOS_WIFI):
-                bucle.call_later(SEPARACION_COPIAS_S * k, self.wifi.enviar, trama)
+                bucle = None                    # sin bucle (pruebas síncronas): solo la copia inmediata
+            if bucle is not None:
+                for k in range(1, DUPLICADOS_WIFI):
+                    bucle.call_later(SEPARACION_COPIAS_S * k, self.wifi.enviar, trama)
+        if salio:
+            # El barrido de cámara es de un solo disparo: si salió por aquí,
+            # que no vuelva a salir en la próxima trama del BLE.
+            self.ble._scan_once = False
+
+    def _estado_usb(self, status: dict):
+        """Estado que llega por el cable. Si el cable está vivo, es el que manda (el del WiFi llega tarde)."""
+        self._t_estado_usb = time.monotonic()
+        if INVERTIR_GIRO and "omega_cmd" in status:
+            status["omega_cmd"] = -status["omega_cmd"]
+        status["via_estado"] = "usb"
+        status["vias"] = {"ble": self.ble.connected, "wifi": self.wifi is not None and self.wifi.conectado, "usb": True}
+        if self._on_status is not None:
+            self._on_status(status)
 
     async def _bucle_wifi(self):
         while True:
@@ -145,7 +175,7 @@ class EnlaceC3:
 
     def _vigilar_vias(self):
         """Avisa en el log cuando una vía cae o vuelve."""
-        vias = (self.ble.connected, self.wifi is not None and self.wifi.conectado)
+        vias = (self.ble.connected or (self.uart is not None and self.uart.vivo), self.wifi is not None and self.wifi.conectado)
         if vias != self._vias_antes and self._vias_antes is not None:
             self.cambios_de_via += 1
             nombres = {(True, True): "BLE + WiFi", (True, False): "solo BLE",
@@ -155,6 +185,8 @@ class EnlaceC3:
 
     def _estado(self, status: dict):
         """Estado ya decodificado por BleActuatorLink._handle_status."""
+        if time.monotonic() - self._t_estado_usb < 0.3:
+            return          # el cable está vivo: su estado basta (el del WiFi llega con segundos de retraso)
         if self._via == "ble":
             self._t_estado_ble = time.monotonic()
         elif time.monotonic() - self._t_estado_ble < ESTADO_BLE_VIEJO_S:

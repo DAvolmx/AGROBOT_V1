@@ -96,7 +96,9 @@ int idxHistorial = 0;
 float boostActualIzq = 1.0f, boostActualDer = 1.0f;
 
 // ===== SEGURIDAD =====
-const unsigned long CMD_TIMEOUT_MS = 500;
+// 2026-10-21: 500 -> 1200 ms. En la prueba en el suelo la C3 cayó a failsafe 150 veces en 22 min (mediana 0,3 s, p90 3,3 s) por huecos
+// del WiFi; con 500 ms cada hueco paraba los motores. A 0,25 m/s, 1,2 s de inercia son ~30 cm si el enlace muere de verdad: valorarlo.
+const unsigned long CMD_TIMEOUT_MS = 1200;
 unsigned long lastCmdMillis = 0;
 
 #define SECUENCIA_VALIDA(seq_nuevo, seq_anterior) \
@@ -256,7 +258,11 @@ const wifi_power_t WIFI_POTENCIAS[] = {WIFI_POWER_8_5dBm, WIFI_POWER_13dBm,
                                        WIFI_POWER_17dBm, WIFI_POWER_19_5dBm};
 const uint8_t WIFI_N_POTENCIAS = sizeof(WIFI_POTENCIAS) / sizeof(WIFI_POTENCIAS[0]);
 const uint8_t WIFI_INTENTOS_POR_POTENCIA = 3;
-uint8_t wifiPotenciaIdx = 0, wifiIntentos = 0;
+// 2026-10-21: arrancaba en el índice 0 (8,5 dBm) y ahí se quedaba asociada: el AP la veía a -86/-89 dBm. Se arranca en 17 dBm (índice 2).
+// Si la placa se reinicia al conectar (batería baja), bajar a 1 (13 dBm).
+const uint8_t WIFI_POTENCIA_INICIAL_IDX = 2;
+const bool    WIFI_SIN_AHORRO = true;   // sin modem-sleep: menos latencia y menos tramas perdidas (probar: con BLE activo puede no aplicarse)
+uint8_t wifiPotenciaIdx = WIFI_POTENCIA_INICIAL_IDX, wifiIntentos = 0;
 WiFiUDP udpC3;
 bool wifiListo = false, udpAbierto = false;
 IPAddress ipJetson;
@@ -727,6 +733,7 @@ void gestionarWifi() {
     WiFi.disconnect();
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     WiFi.setTxPower(WIFI_POTENCIAS[wifiPotenciaIdx]);
+    if (WIFI_SIN_AHORRO) WiFi.setSleep(false);
   }
 }
 #endif
@@ -866,7 +873,8 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  WiFi.setTxPower(WIFI_POTENCIAS[0]);
+  WiFi.setTxPower(WIFI_POTENCIAS[wifiPotenciaIdx]);
+  if (WIFI_SIN_AHORRO) WiFi.setSleep(false);
   Serial.println("WiFi asociando...");
 #endif
 

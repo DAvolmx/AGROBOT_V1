@@ -164,3 +164,31 @@ def test_ignora_tramas_de_fuera_del_ap():
     malo[2] ^= 0xFF
     link.datagram_received(bytes(malo), ("192.168.12.37", 5002))
     assert link.errores == 1
+
+
+def test_cada_trama_wifi_sale_duplicada_con_la_misma_secuencia():
+    """2026-10-21: DUPLICADOS_WIFI copias de la MISMA trama (misma secuencia), para sobrevivir a una pérdida suelta."""
+    import enlace_c3
+
+    class Falso:
+        ip_c3 = "192.168.12.171"
+        conectado = True
+
+        def __init__(self):
+            self.salidas = []
+
+        def enviar(self, trama):
+            self.salidas.append(bytes(trama))
+            return True
+
+    async def prueba():
+        ble = BleActuatorLink(0.55, 1.5)
+        wifi = Falso()
+        e = EnlaceC3(ble, wifi)
+        e._enviar_wifi()
+        await asyncio.sleep(enlace_c3.SEPARACION_COPIAS_S * enlace_c3.DUPLICADOS_WIFI + 0.05)
+        return wifi.salidas
+
+    salidas = asyncio.run(prueba())
+    assert len(salidas) == enlace_c3.DUPLICADOS_WIFI
+    assert len(set(salidas)) == 1

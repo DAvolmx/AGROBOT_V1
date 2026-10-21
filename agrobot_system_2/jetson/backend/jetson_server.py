@@ -66,7 +66,7 @@ import evasion as evasion_mod
 from cabeceo import CabeceoIMU
 from politica import Politica
 from deslizamiento import MonitorDeslizamiento
-from modo_seguro import ModoSeguro, SEGURO, PRECAUCION
+from modo_seguro import ModoSeguro, NORMAL, SEGURO, PRECAUCION
 from supervisor_movimiento import SupervisorMovimiento
 from manual_demo import command as demo_command, reference as demo_reference
 from c3_setup import C3Setup

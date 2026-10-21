@@ -33,6 +33,12 @@ from udp_actuator_link import UdpActuatorLink
 # Sin estado por BLE durante esto, el del WiFi pasa a ser el que se reenvía.
 ESTADO_BLE_VIEJO_S = 0.3
 
+# 2026-10-21: con el AP a -86/-89 dBm de la C3 se pierden tramas sueltas. Cada trama (con su MISMO número de secuencia) sale
+# DUPLICADOS_WIFI veces, separadas SEPARACION_COPIAS_S: la C3 aplica la primera que llegue e ignora las demás (misma secuencia),
+# así que una copia perdida no cuesta nada. No arregla huecos largos (eso es señal), pero sí los de 1-2 tramas.
+DUPLICADOS_WIFI = 2
+SEPARACION_COPIAS_S = 0.012
+
 # El robot gira AL REVÉS de lo que pide la C3: "izquierda" (omega > 0, como en
 # ROS) lo giraba a la derecha (2026-10-02, visto por el usuario y medido por
 # EKF/LIDAR, tras reconectar los drivers). Avanzar va bien, así que son los
@@ -118,6 +124,12 @@ class EnlaceC3:
             # El barrido de cámara es de un solo disparo: si salió por aquí,
             # que no vuelva a salir en la próxima trama del BLE.
             self.ble._scan_once = False
+            try:
+                bucle = asyncio.get_running_loop()
+            except RuntimeError:
+                return                      # sin bucle (pruebas síncronas): solo la copia inmediata
+            for k in range(1, DUPLICADOS_WIFI):
+                bucle.call_later(SEPARACION_COPIAS_S * k, self.wifi.enviar, trama)
 
     async def _bucle_wifi(self):
         while True:

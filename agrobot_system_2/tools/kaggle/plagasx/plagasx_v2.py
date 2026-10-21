@@ -143,35 +143,45 @@ tabla_det = pd.DataFrame({"clase": [CLASES[int(i)] for i in mdet.box.ap_class_in
 print("\nDETECTOR (test) · mAP50 global:", round(float(mdet.box.map50), 3), "· mAP50-95:", round(float(mdet.box.map), 3), "(cajas de imagen completa: orientativo)")
 display(tabla_det)
 
-# ---------------- 5) CLASIFICADOR (YOLO-cls): la métrica que vale ----------------
-CLS = RES / "cls"
-for sp in ("train", "val", "test"):
-    for c in CLASES: (CLS / sp / c).mkdir(parents=True, exist_ok=True)
-for sp, org, k, a in registro:
-    if k < 0: continue
-    shutil.copy(SALIDA / "images" / sp / f"{a}.jpg", CLS / sp / CLASES[k] / f"{a}.jpg")
-for sp in ("val", "test"):                                   # clases vacías no admitidas: se quitan
-    for c in CLASES:
-        if not any((CLS / "train" / c).iterdir()): shutil.rmtree(CLS / "train" / c, ignore_errors=True)
-        if (CLS / sp / c).exists() and not any((CLS / sp / c).iterdir()): shutil.rmtree(CLS / sp / c, ignore_errors=True)
-clf = YOLO("yolov8s-cls.pt")
-clf.train(data=str(CLS), epochs=40, imgsz=224, batch=32, patience=10, device=0, project=str(RES / "runs"), name="cls", exist_ok=True, verbose=False)
-mcls = clf.val(data=str(CLS), split="test", project=str(RES / "runs"), name="cls_test", exist_ok=True)
-print("\nCLASIFICADOR (test) · top1:", round(float(mcls.top1), 3), "· top5:", round(float(mcls.top5), 3))
-nombres = [clf.names[i] for i in sorted(clf.names)]
-filas = []
-for c in nombres:
-    fs = list((CLS / "test" / c).glob("*.jpg")) if (CLS / "test" / c).exists() else []
-    if not fs: continue
-    pr = [clf.predict(str(f), verbose=False)[0].probs.top1 for f in fs]
-    filas.append({"clase": c, "imágenes_test": len(fs), "aciertos": sum(clf.names[p] == c for p in pr), "exactitud": round(sum(clf.names[p] == c for p in pr) / len(fs), 3)})
-tabla_cls = pd.DataFrame(filas); display(tabla_cls)
-fig, ax = plt.subplots(figsize=(8, 3.8)); ax.bar(tabla_cls.clase, tabla_cls.exactitud, color="#2a9d8f"); ax.set_ylim(0, 1)
-ax.set_title("exactitud por clase (test)"); ax.tick_params(axis="x", rotation=30); ax.grid(alpha=.3); fig.tight_layout(); fig.savefig(RES / "02_exactitud_clase.png", dpi=110); plt.show()
-for nombre, m in (("det", det), ("cls", clf)):
-    shutil.copy(RES / "runs" / nombre / "weights" / "best.pt", RES / f"coles_{nombre}_best.pt")
+shutil.copy(RES / "runs" / "det" / "weights" / "best.pt", RES / "coles_det_best.pt")      # el detector ya está a salvo
+import traceback
+try:
+    # ---------------- 5) CLASIFICADOR (YOLO-cls): la métrica que vale ----------------
+    CLS = RES / "cls"
+    for sp in ("train", "val", "test"):
+        for c in CLASES: (CLS / sp / c).mkdir(parents=True, exist_ok=True)
+    for sp, org, k, a in registro:
+        if k < 0: continue
+        shutil.copy(SALIDA / "images" / sp / f"{a}.jpg", CLS / sp / CLASES[k] / f"{a}.jpg")
+    for c in CLASES:                                             # clases vacías no admitidas por YOLO-cls: se quitan de las 3 particiones
+        if not any((CLS / "train" / c).iterdir()):
+            for sp in ("train", "val", "test"): shutil.rmtree(CLS / sp / c, ignore_errors=True)
+            print("clase sin imágenes de entrenamiento, se omite en el clasificador:", c)
+            continue
+        for sp in ("val", "test"):
+            if (CLS / sp / c).exists() and not any((CLS / sp / c).iterdir()): shutil.rmtree(CLS / sp / c, ignore_errors=True)
+    clf = YOLO("yolov8s-cls.pt")
+    clf.train(data=str(CLS), epochs=40, imgsz=224, batch=32, patience=10, device=0, project=str(RES / "runs"), name="cls", exist_ok=True, verbose=False)
+    mcls = clf.val(data=str(CLS), split="test", project=str(RES / "runs"), name="cls_test", exist_ok=True)
+    print("\nCLASIFICADOR (test) · top1:", round(float(mcls.top1), 3), "· top5:", round(float(mcls.top5), 3))
+    nombres = [clf.names[i] for i in sorted(clf.names)]
+    filas = []
+    for c in nombres:
+        fs = list((CLS / "test" / c).glob("*.jpg")) if (CLS / "test" / c).exists() else []
+        if not fs: continue
+        pr = [clf.predict(str(f), verbose=False)[0].probs.top1 for f in fs]
+        filas.append({"clase": c, "imágenes_test": len(fs), "aciertos": sum(clf.names[p] == c for p in pr), "exactitud": round(sum(clf.names[p] == c for p in pr) / len(fs), 3)})
+    tabla_cls = pd.DataFrame(filas); display(tabla_cls)
+    fig, ax = plt.subplots(figsize=(8, 3.8)); ax.bar(tabla_cls.clase, tabla_cls.exactitud, color="#2a9d8f"); ax.set_ylim(0, 1)
+    ax.set_title("exactitud por clase (test)"); ax.tick_params(axis="x", rotation=30); ax.grid(alpha=.3); fig.tight_layout(); fig.savefig(RES / "02_exactitud_clase.png", dpi=110); plt.show()
+except Exception:
+    (RES / "error_clasificador.txt").write_text(traceback.format_exc())
+    print("ERROR EN EL CLASIFICADOR:\n", traceback.format_exc())
+    clf = None
+if clf is not None:
+    shutil.copy(RES / "runs" / "cls" / "weights" / "best.pt", RES / "coles_cls_best.pt")
 (RES / "resumen.json").write_text(json.dumps({"imagenes": df.groupby(["split", "origen"]).size().to_dict().__repr__(), "det_map50_test": float(mdet.box.map50),
-                                              "cls_top1_test": float(mcls.top1), "por_clase": filas}, ensure_ascii=False, indent=1))
+                                              "cls_top1_test": (float(mcls.top1) if clf is not None else None), "por_clase": (filas if clf is not None else [])}, ensure_ascii=False, indent=1))
 print("\nHECHO. Archivos en", RES, "(coles_det_best.pt, coles_cls_best.pt, resumen.json, gráficas)")
 print("""LÍMITES: tus etiquetas son cajas automáticas por color (cubren ~50 % de la imagen) y los externos son de imagen completa: el DETECTOR no
 aprende lesiones, solo la planta. Para detectar daños reales hacen falta cajas hechas a mano sobre las lesiones (empieza por las 348 imágenes

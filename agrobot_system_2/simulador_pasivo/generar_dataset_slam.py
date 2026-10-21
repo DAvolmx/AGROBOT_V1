@@ -44,7 +44,7 @@ NOMBRES = ["v_cmd", "w_cmd", "gyro_z", "icp_residual", "dmin_front", "dmin_izq",
 R_MIN, R_MAX = 0.18, 8.0
 FALLOS_GENERALES = ("ninguno", "barro", "rueda_muerta", "motor_debil", "suelo_resbaloso", "lidar_cortes", "lidar_fantasmas",
                     "enlace_cortes")
-IMU_RUIDO_RPS = math.radians(0.3)
+IMU_RUIDO_RPS = math.radians(0.7)        # MEDIDO en las sesiones reales (reposo, 966 mil muestras): σ ≈ 0,68 °/s; el sesgo medio fue ≈ 0,01 °/s
 
 
 class Grabador:
@@ -215,7 +215,7 @@ def _job(a):
         E.GRABADOR = None
     rng = np.random.default_rng(900_000 + seed * 31 + len(esc_n) * 7 + len(fallo))
     sigma = float(rng.choice([0.01, 0.02, 0.03]))
-    sesgo = float(rng.choice([-1, 1]) * math.radians(rng.uniform(0.2, 1.0)))
+    sesgo = float(rng.choice([-1, 1]) * math.radians(rng.uniform(0.0, 0.3)))   # real: media ~0; se deja una deriva pequeña
     d = procesar(rec, rng, sigma, sesgo)
     if d is None:
         return None
@@ -258,7 +258,7 @@ def main():
                episodio_id=ids.astype(np.int32), nombres_features=np.array(NOMBRES), K=np.array(K),
                meta=np.array(json.dumps({"fecha": time.strftime("%Y-%m-%d %H:%M"), "config": cfg.nombre, "geometria": S.GEOMETRIA,
                                          "episodios": len(res), "sigma_lidar_opciones_m": [0.01, 0.02, 0.03],
-                                         "sesgo_imu_dps": [0.2, 1.0], "ruido_imu_dps": 0.3,
+                                         "sesgo_imu_dps": [0.0, 0.3], "ruido_imu_dps": 0.7,
                                          "hipotesis": "física del simulador sin calibrar; sesgo IMU y σ LiDAR sorteados; "
                                                       "odometría estimada = ICP punto a punto con estimación inicial (cmd, gyro)"})))
     SALIDA.mkdir(parents=True, exist_ok=True)

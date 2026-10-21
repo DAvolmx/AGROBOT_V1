@@ -28,9 +28,15 @@ torch.backends.cudnn.deterministic = True
 DEVICE = "cuda" if (torch.cuda.is_available() and not os.environ.get("AGROBOT_CPU")) else "cpu"
 SALIDA = Path(os.environ.get("AGROBOT_SALIDA", "/kaggle/working")); SALIDA.mkdir(parents=True, exist_ok=True)
 RUTA = Path(os.environ.get("AGROBOT_NPZ", "/kaggle/input/agrobot-slam-correction/dataset.npz"))
+if not RUTA.exists():                                  # Kaggle monta los datasets en rutas distintas según la versión: se busca
+    hallados = sorted(Path("/kaggle/input").rglob("dataset.npz")) if Path("/kaggle/input").exists() else []
+    if hallados:
+        RUTA = hallados[0]
 if not RUTA.exists():
-    raise FileNotFoundError(f"Falta el dataset: se esperaba {RUTA}. Genera dataset.npz con el simulador "
-                            "(generar_dataset_slam.py) y súbelo como Dataset privado de Kaggle con el slug 'agrobot-slam-correction'.")
+    contenido = [str(p) for p in Path("/kaggle/input").rglob("*")][:40] if Path("/kaggle/input").exists() else []
+    raise FileNotFoundError(f"Falta el dataset: se esperaba {RUTA}. Genera dataset.npz con el simulador (generar_dataset_slam.py) y "
+                            f"súbelo como Dataset privado de Kaggle ('agrobot-slam-correction') y añádelo con 'Add Input'. "
+                            f"Contenido de /kaggle/input: {contenido}")
 print("dispositivo:", DEVICE, "· dataset:", RUTA)
 
 d = np.load(RUTA, allow_pickle=False)
@@ -60,7 +66,10 @@ for n, c in zip(NOMBRES, corr):
 TODOS = sorted(set(ESC))
 VAL_ESC = os.environ.get("AGROBOT_VAL_ESC", "curva_pasillo,hileras_cuadricula").split(",")
 faltan = [e for e in VAL_ESC if e not in TODOS]
-assert not faltan, f"escenarios de validación ausentes en el dataset: {faltan} (hay {TODOS})"
+if faltan:                                            # dataset pequeño/parcial: se eligen escenarios de prueba entre los que hay
+    VAL_ESC = TODOS[-min(2, len(TODOS) - 1):]
+    print(f"AVISO: faltan {faltan} en el dataset (hay {TODOS}); la prueba usará {VAL_ESC}")
+assert len(TODOS) >= 2, "el dataset necesita al menos 2 escenarios (uno de train y uno de test)"
 TRAIN_ESC = [e for e in TODOS if e not in VAL_ESC]
 sem_train = sorted(set(SEM[np.isin(ESC, TRAIN_ESC)]))
 sem_dev = sem_train[-2:] if len(sem_train) > 2 else sem_train[-1:]
@@ -135,7 +144,7 @@ def relativa(pj, pk):
 
 def predecir(Xe):
     with torch.no_grad():
-        p = modelo(tt(nx(Xe))).cpu().numpy()
+        p = modelo(torch.tensor(nx(Xe), device=next(modelo.parameters()).device)).cpu().numpy()
     return p * sd_y + mu_y
 
 def ate(est, real):

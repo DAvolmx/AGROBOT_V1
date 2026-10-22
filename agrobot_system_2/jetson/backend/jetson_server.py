@@ -4221,6 +4221,8 @@ def create_app() -> web.Application:
         "detections": state.detections[-20:], "configuration": state.config,
         "mission_active": state.mission_active,
     }, lambda: camera.ultimo_frame() if camera else None)
+    from etiquetado import install as install_etiquetado      # cajas de plaga a mano sobre fotos propias (/etiquetar.html)
+    install_etiquetado(app, CAPTURES_DIR)
     app.router.add_static("/captures", CAPTURES_DIR, show_index=False)
 
     # --- Training dashboard endpoints ---

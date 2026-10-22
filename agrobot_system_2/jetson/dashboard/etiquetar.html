@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Etiquetar plagas · AGROBOT</title>
+<style>
+:root {
+  --bg: #e6f2e9; --panel: #ffffff; --panel-2: #f1f9f2; --line: #cfe3d2; --line-fuerte: #a8ccae;
+  --ink: #0d1f14; --ink-soft: #4e6a58; --accent: #00bd4f; --accent-ink: #067a35; --accent-soft: #ccfadd;
+  --crit: #ff2d3f; --crit-ink: #c4141f; --radius: 14px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 17px; margin: 0; }
+header .sp { flex: 1; }
+select, button { font: inherit; }
+button { border: 1px solid var(--line-fuerte); background: var(--panel); color: var(--ink); border-radius: 10px; padding: 7px 12px; cursor: pointer; }
+button:hover { background: var(--panel-2); }
+button.prim { background: var(--accent-ink); color: #fff; border-color: var(--accent-ink); }
+button.peligro { color: var(--crit-ink); }
+button:disabled { opacity: .45; cursor: default; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; padding: 14px 16px; }
+@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+#lienzo-caja { overflow: auto; max-height: calc(100vh - 170px); border-radius: 10px; background: #1b2a20; touch-action: none; }
+canvas { display: block; width: 100%; cursor: crosshair; touch-action: none; }
+.barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.clases { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.clase { display: flex; align-items: center; gap: 6px; text-align: left; padding: 6px 8px; font-size: 13px; }
+.clase .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.clase.activa { outline: 2px solid var(--ink); }
+.clase kbd { margin-left: auto; color: var(--ink-soft); font-size: 11px; }
+h2 { font-size: 14px; margin: 14px 0 6px; color: var(--ink-soft); }
+ul { list-style: none; margin: 0; padding: 0; }
+li.caja { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+li.caja.sel { font-weight: 600; }
+li.caja button { margin-left: auto; padding: 2px 8px; }
+#estado { color: var(--ink-soft); font-size: 13px; }
+#tiras { display: flex; gap: 4px; overflow-x: auto; padding: 6px 2px; }
+#tiras img { height: 54px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; flex: none; }
+#tiras img.actual { border-color: var(--accent-ink); }
+#tiras img.hecha { opacity: .55; }
+.ayuda { font-size: 12px; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Etiquetar plagas</h1>
+  <label>Fotos <select id="fuente"><option value="usuario">Mis fotos</option><option value="capturas">Capturas del robot</option><option value="campo">Recolección de campo</option></select></label>
+  <label><input type="checkbox" id="solo-pend"> Solo sin revisar</label>
+  <span class="sp"></span>
+  <span id="resumen" class="ayuda"></span>
+  <a href="/api/etiquetado/exportar"><button>Exportar zip</button></a>
+</header>
+<main>
+  <section class="panel">
+    <div id="lienzo-caja"><canvas id="lienzo"></canvas></div>
+    <div class="barra">
+      <button id="ant">← Anterior</button>
+      <button id="sig" class="prim">Guardar y siguiente →</button>
+      <button id="sana">Sin plaga (guardar vacía)</button>
+      <span class="sp"></span>
+      <button id="zoom-menos">−</button><span id="zoom-txt">100 %</span><button id="zoom-mas">+</button>
+    </div>
+    <div id="estado"></div>
+    <div id="tiras"></div>
+  </section>
+  <aside class="panel">
+    <h2 style="margin-top:0">Clase (tecla)</h2>
+    <div class="clases" id="clases"></div>
+    <h2>Cajas en esta foto</h2>
+    <ul id="lista"></ul>
+    <p class="ayuda">Arrastra sobre la foto para dibujar una caja ajustada a la plaga o al daño (una colonia de pulgón = una caja; hojas comidas = una caja por zona).
+      Toca una caja para seleccionarla; <b>Supr</b> la borra. Con el zoom puedes marcar pulgones pequeños.
+      «col_sana» es para la planta entera cuando no tiene daño.</p>
+  </aside>
+</main>
+<script>
+const COLORES = ["#2e9e4f","#e0b400","#8a5a2b","#ff2d3f","#7d5fff","#ff7a00","#5a3d2b","#00a3ee","#d63fd0","#00b8a4","#222"];
+const TECLAS = ["1","2","3","4","5","6","7","8","9","0","-"];
+let clases = [], fotos = [], idx = 0, cajas = [], clase = 3, sel = -1, img = new Image(), zoom = 1, sucio = false;
+const cv = document.getElementById("lienzo"), ctx = cv.getContext("2d");
+const $ = (id) => document.getElementById(id);
+
+async function api(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+
+async function cargarLista() {
+  const d = await api("/api/etiquetado/lista?fuente=" + $("fuente").value);
+  clases = d.clases;
+  fotos = $("solo-pend").checked ? d.fotos.filter(f => !f.revisada) : d.fotos;
+  pintarClases(); pintarTiras(); idx = 0;
+  if (fotos.length) await abrir(0); else { $("estado").textContent = "No hay fotos en esta fuente."; ctx.clearRect(0,0,cv.width,cv.height); }
+  resumen();
+}
+function pintarClases() {
+  $("clases").innerHTML = "";
+  clases.forEach((n, i) => {
+    const b = document.createElement("button"); b.className = "clase" + (i === clase ? " activa" : "");
+    b.innerHTML = `<span class="sw" style="background:${COLORES[i]}"></span>${n.replace("col_","")}<kbd>${TECLAS[i]}</kbd>`;
+    b.onclick = () => elegirClase(i); $("clases").appendChild(b);
+  });
+}
+function elegirClase(i) {
+  clase = i;
+  if (sel >= 0) { cajas[sel].c = i; sucio = true; }
+  pintarClases(); dibujar(); pintarLista();
+}
+function pintarTiras() {
+  $("tiras").innerHTML = "";
+  fotos.forEach((f, i) => {
+    const t = document.createElement("img"); t.loading = "lazy"; t.src = "/api/etiquetado/img/" + f.id; t.title = f.nombre;
+    t.className = (i === idx ? "actual " : "") + (f.revisada ? "hecha" : ""); t.onclick = () => irA(i); $("tiras").appendChild(t);
+  });
+}
+async function abrir(i) {
+  idx = i; sel = -1; sucio = false;
+  const f = fotos[i];
+  const d = await api("/api/etiquetado/etiquetas/" + f.id);
+  cajas = d.cajas;
+  await new Promise((ok, mal) => { img.onload = ok; img.onerror = mal; img.src = "/api/etiquetado/img/" + f.id; });
+  cv.width = img.naturalWidth; cv.height = img.naturalHeight; aplicarZoom();
+  $("estado").textContent = `${i + 1} / ${fotos.length} · ${f.nombre}` + (d.revisada ? (d.sin_plaga ? " · revisada: sin plaga" : " · revisada") : "");
+  [...$("tiras").children].forEach((t, k) => t.classList.toggle("actual", k === i));
+  const tira = $("tiras").children[i]; if (tira) tira.scrollIntoView({block: "nearest", inline: "center"});
+  dibujar(); pintarLista();
+}
+function aplicarZoom() { cv.style.width = (100 * zoom) + "%"; $("zoom-txt").textContent = Math.round(100 * zoom) + " %"; }
+function dibujar(tmp) {
+  ctx.drawImage(img, 0, 0);
+  const lw = Math.max(2, cv.width / 400);
+  cajas.concat(tmp ? [tmp] : []).forEach((b, i) => {
+    const x = (b.x - b.w / 2) * cv.width, y = (b.y - b.h / 2) * cv.height;
+    ctx.lineWidth = i === sel ? lw * 2 : lw; ctx.strokeStyle = COLORES[b.c];
+    ctx.strokeRect(x, y, b.w * cv.width, b.h * cv.height);
+    ctx.fillStyle = COLORES[b.c]; ctx.font = `${Math.max(14, cv.width / 60)}px system-ui`;
+    ctx.fillText(clases[b.c].replace("col_", ""), x + 3, Math.max(14, y - 4));
+  });
+}
+function pintarLista() {
+  $("lista").innerHTML = cajas.length ? "" : '<li class="ayuda">Ninguna todavía.</li>';
+  cajas.forEach((b, i) => {
+    const li = document.createElement("li"); li.className = "caja" + (i === sel ? " sel" : "");
+    li.innerHTML = `<span class="sw" style="width:10px;height:10px;border-radius:3px;background:${COLORES[b.c]}"></span>${clases[b.c].replace("col_","")}`;
+    const del = document.createElement("button"); del.textContent = "Borrar"; del.className = "peligro";
+    del.onclick = () => { cajas.splice(i, 1); sel = -1; sucio = true; dibujar(); pintarLista(); };
+    li.onclick = (e) => { if (e.target !== del) { sel = i; dibujar(); pintarLista(); } };
+    li.appendChild(del); $("lista").appendChild(li);
+  });
+}
+function punto(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+}
+let ini = null;
+cv.addEventListener("pointerdown", (e) => { cv.setPointerCapture(e.pointerId); ini = punto(e); });
+cv.addEventListener("pointermove", (e) => {
+  if (!ini) return; const p = punto(e);
+  dibujar({ c: clase, x: (ini.x + p.x) / 2, y: (ini.y + p.y) / 2, w: Math.abs(p.x - ini.x), h: Math.abs(p.y - ini.y) });
+});
+cv.addEventListener("pointerup", (e) => {
+  if (!ini) return; const p = punto(e); const w = Math.abs(p.x - ini.x), h = Math.abs(p.y - ini.y);
+  if (w > 0.008 && h > 0.008) { cajas.push({ c: clase, x: (ini.x + p.x) / 2, y: (ini.y + p.y) / 2, w, h }); sel = cajas.length - 1; sucio = true; }
+  else {                                                 // toque corto: seleccionar la caja más pequeña que contiene el punto
+    sel = -1; let area = 9;
+    cajas.forEach((b, i) => { if (Math.abs(p.x - b.x) <= b.w / 2 && Math.abs(p.y - b.y) <= b.h / 2 && b.w * b.h < area) { sel = i; area = b.w * b.h; } });
+  }
+  ini = null; dibujar(); pintarLista();
+});
+async function guardar(sinPlaga) {
+  const f = fotos[idx]; if (!f) return;
+  const d = await api("/api/etiquetado/etiquetas/" + f.id, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cajas, sin_plaga: !!sinPlaga }) });
+  f.revisada = true; f.n_cajas = d.n_cajas; sucio = false;
+  if ($("tiras").children[idx]) $("tiras").children[idx].classList.add("hecha"); resumen();
+}
+async function irA(i) { if (sucio) await guardar(false); if (i >= 0 && i < fotos.length) await abrir(i); }
+$("sig").onclick = async () => { await guardar(false); if (idx + 1 < fotos.length) await abrir(idx + 1); else $("estado").textContent = "¡Última foto guardada!"; };
+$("ant").onclick = () => irA(idx - 1);
+$("sana").onclick = async () => { cajas = []; await guardar(true); if (idx + 1 < fotos.length) await abrir(idx + 1); };
+$("zoom-mas").onclick = () => { zoom = Math.min(4, zoom + 0.5); aplicarZoom(); };
+$("zoom-menos").onclick = () => { zoom = Math.max(1, zoom - 0.5); aplicarZoom(); };
+$("fuente").onchange = cargarLista; $("solo-pend").onchange = cargarLista;
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+  const k = TECLAS.indexOf(e.key); if (k >= 0 && k < clases.length) { elegirClase(k); return; }
+  if ((e.key === "Delete" || e.key === "Backspace") && sel >= 0) { cajas.splice(sel, 1); sel = -1; sucio = true; dibujar(); pintarLista(); e.preventDefault(); }
+  if (e.key === "ArrowRight" || e.key === "Enter") $("sig").click();
+  if (e.key === "ArrowLeft") $("ant").click();
+});
+window.addEventListener("beforeunload", (e) => { if (sucio) { e.preventDefault(); e.returnValue = ""; } });
+async function resumen() {
+  try { const r = await api("/api/etiquetado/resumen");
+    const tot = Object.values(r.cajas_por_clase).reduce((a, b) => a + b, 0);
+    $("resumen").textContent = `${r.revisadas} fotos revisadas · ${tot} cajas · ${r.cajas_por_clase.col_pulgon} de pulgón`; } catch (e) {}
+}
+cargarLista().catch(e => $("estado").textContent = "Error: " + e.message);
+</script>
+</body>
+</html>

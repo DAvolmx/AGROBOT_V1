@@ -58,9 +58,8 @@ PERFILES = {
         "distancia_puntos_cm": 120,
         # Paredes cerca: en una sala los dos lados cuentan siempre.
         "sendero_pared_max_cm": 120,
-        # Las macetas son obstáculos ALTOS: el LIDAR (a 18 cm) sí las ve, así
-        # que el cono frontal puede ser más ancho sin frenar de más.
-        "cono_frontal_deg": 30,
+        # 2026-10-22: 20° (antes 30) — el óptimo del entrenamiento calibrado (pe1_11) usa 20 y con él baja de 79 a 54 contactos.
+        "cono_frontal_deg": 20,
         # 2026-10-22 (prueba real): en interiores el color del suelo y las paredes (beige/madera, H 10-45) cae en el rango de «paja»
         # y la cámara confundía el sendero. Dentro, el sendero sale solo del LIDAR.
         "sendero_vision": False,

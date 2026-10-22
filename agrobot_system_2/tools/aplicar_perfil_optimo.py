@@ -18,11 +18,11 @@ from pathlib import Path
 URL = "http://localhost:8080"
 PREVIO = Path.home() / ".agrobot" / "perfil_previo.json"
 PERFIL = {
-    "control": {"max_omega_rps": 2.0, "suavidad_duty": 0.35, "suavidad_periodo_s": 0.5},
+    "control": {"max_omega_rps": 2.0, "suavidad_duty": 0.35, "suavidad_periodo_s": 0.2},
     "safety": {"max_angular_accel_rps2": 12},
     "autonomia": {"sendero_tolerancia_cm": 5, "sendero_pared_max_cm": 200, "rumbo_zona_muerta_deg": 6.0, "rumbo_aprende": 0.15,
                   "man_histeresis_cm": 12.0, "man_pausa_s": 0.0, "rumbo_pulso_escala": 0.3},
-    "slam": {"cono_lateral_deg": 45},
+    "slam": {"cono_lateral_deg": 45, "cono_frontal_deg": 20},
 }
 
 

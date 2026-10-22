@@ -1,4 +1,4 @@
-# AGROBOT · PLAGASX v2 — coles: plagas y enfermedades. Combina: (1) tu dataset de coles, (2) tres datasets externos de coliflor/papa,
+# AGROBOT · PLAGASX v5 (negativos de interior + cajas reales de daño de hoja y mosca blanca) — base v2 — coles: plagas y enfermedades. Combina: (1) tu dataset de coles, (2) tres datasets externos de coliflor/papa,
 # (3) tu dataset de SENDEROS ('navegacion') como imágenes de fondo (plantas y caminos SIN enfermedad: reducen falsos positivos).
 # Entrena (a) un DETECTOR YOLO y (b) un CLASIFICADOR YOLO-cls. Las etiquetas de los datasets externos son de imagen completa, así que las
 # métricas que valen son las del CLASIFICADOR; el detector sirve para localizar la planta. Todo se imprime con tablas y gráficas.
@@ -23,7 +23,7 @@ random.seed(42); np.random.seed(42)
 if not DRY:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "ultralytics"], check=False)
 
-CLASES = ["col_sana", "col_amarillamiento", "col_manchas_cafe", "col_dano_insecto", "col_mildiu_velloso", "col_malformacion", "col_pudricion"]
+CLASES = ["col_sana", "col_amarillamiento", "col_manchas_cafe", "col_dano_insecto", "col_mildiu_velloso", "col_malformacion", "col_pudricion", "col_mosca_blanca"]
 # nombre de carpeta externo (normalizado: minúsculas y solo letras/números) -> clase
 MAPA = {"healthy": 0, "nodisease": 0, "blackrot": 2, "alternarialeafspot": 2, "alternaria": 2, "bacterialspot": 2, "bacterialspotrot": 2,
         "ringspot": 2, "leafspot": 2, "downymildew": 4, "softrot": 6, "clubroot": 5,
@@ -41,6 +41,8 @@ mi = buscar_dir(lambda p: (p / "images").is_dir() and (p / "labels").is_dir() an
      or buscar_dir(lambda p: (p / "images").is_dir() and (p / "labels").is_dir() and "coles" in str(p).lower())
 nav = buscar_dir(lambda p: p.is_dir() and (p / "images").is_dir() and any(p.joinpath("images").glob("camino-*.jpg")))
 neg = buscar_dir(lambda p: p.is_dir() and "negativos" in p.name.lower() and (p / "images").is_dir())
+cajas = buscar_dir(lambda p: p.is_dir() and "cajas-plagas" in p.name.lower() and (p / "images" / "train").is_dir())
+print("cajas reales (daño de hoja + mosca blanca):", cajas)
 print("tu dataset de coles :", mi); print("navegación          :", nav); print("negativos de fondo  :", neg)
 print("contenido de", ENTRADA, ":", [p.name for p in ENTRADA.iterdir()][:20] if ENTRADA.exists() else "no existe")
 
@@ -123,6 +125,20 @@ if nav is not None:
         registro.append((sp, "fondo", -1, f"fondo_{j:04d}"))
 print("imágenes de fondo (senderos):", sum(1 for r in registro if r[1] == "fondo"))
 
+# ---------------- 3b) CAJAS REALES (v5, 2026-10-22): hojas de col dañadas/comidas (clase 3) y mosca blanca (clase 7) ----------------
+# Cajas dibujadas a mano sobre la imagen (no de imagen completa): mejoran la localización. Las de mosca blanca son fotos de YUCA (fondo
+# distinto a la col); las de daño, de col blanca (CC-BY-4.0, Arko007/white-cabbage-leaf-damage). Etiqueta vacía = hoja sin daño.
+if cajas is not None:
+    for sp in ("train", "val", "test"):
+        for f in sorted((cajas / "images" / sp).glob("*.jpg")):
+            lab = cajas / "labels" / sp / (f.stem + ".txt")
+            img = cv2.imread(str(f))
+            if img is None: continue
+            filas = [l.split() for l in lab.read_text().splitlines() if len(l.split()) >= 5] if lab.exists() else []
+            guardar(img, sp, f"caj_{f.stem}", [(int(c[0]), c[1], c[2], c[3], c[4]) for c in filas])
+            registro.append((sp, "cajas", -2, f"caj_{f.stem}"))
+print("imágenes con cajas reales:", sum(1 for r in registro if r[1] == "cajas"))
+
 # ---------------- 4) NEGATIVOS DUROS DE INTERIOR (2026-10-22): fondos SIN planta que el detector marcó como plaga ----------------
 # Pufs, puerta, parlante, zapatos y paredes que PLAGASX confundió con col_dano_insecto/col_malformacion al 77-95 % en la prueba real.
 # Se usan TODOS y sin filtro de nitidez: lo borroso y oscuro de la cámara del robot es justo lo que debe aprender a ignorar.
@@ -137,7 +153,7 @@ if neg is not None:
 print("negativos duros de interior:", sum(1 for r in registro if r[1] == "fondo_interior"))
 
 df = pd.DataFrame(registro, columns=["split", "origen", "clase", "archivo"])
-df["clase_nombre"] = df.clase.map(lambda c: "fondo" if c < 0 else CLASES[c])
+df["clase_nombre"] = df.clase.map(lambda c: "cajas" if c == -2 else ("fondo" if c < 0 else CLASES[c]))
 display(pd.crosstab(df.clase_nombre, [df.split, df.origen], margins=True))
 (SALIDA / "dataset.yaml").write_text(f"path: {SALIDA}\ntrain: images/train\nval: images/val\ntest: images/test\nnc: {len(CLASES)}\nnames:\n" +
                                      "".join(f"  {i}: {n}\n" for i, n in enumerate(CLASES)))
@@ -150,11 +166,11 @@ if DRY: raise SystemExit("PLAGAS_DRY: dataset armado, sin entrenar")
 # ---------------- 4) DETECTOR (YOLO) ----------------
 from ultralytics import YOLO
 det = YOLO("yolov8s.pt")
-det.train(data=str(SALIDA / "dataset.yaml"), epochs=100, imgsz=640, batch=16, patience=20, device=0, project=str(RES / "runs"), name="det",
+det.train(data=str(SALIDA / "dataset.yaml"), epochs=80, imgsz=800, batch=12, patience=15, close_mosaic=15, device=0, project=str(RES / "runs"), name="det",
           hsv_h=.015, hsv_s=.7, hsv_v=.4, flipud=.3, fliplr=.5, mosaic=1.0, mixup=.1, exist_ok=True, verbose=False)
 mdet = det.val(data=str(SALIDA / "dataset.yaml"), split="test", project=str(RES / "runs"), name="det_test", exist_ok=True)
 tabla_det = pd.DataFrame({"clase": [CLASES[int(i)] for i in mdet.box.ap_class_index], "mAP50": mdet.box.ap50.round(3), "mAP50-95": mdet.box.ap.round(3)})
-print("\nDETECTOR (test) · mAP50 global:", round(float(mdet.box.map50), 3), "· mAP50-95:", round(float(mdet.box.map), 3), "(cajas de imagen completa: orientativo)")
+print("\nDETECTOR (test) · mAP50 global:", round(float(mdet.box.map50), 3), "· mAP50-95:", round(float(mdet.box.map), 3), "(parte de las cajas son de imagen completa: orientativo; las clases 3 y 7 usan cajas reales)")
 display(tabla_det)
 
 shutil.copy(RES / "runs" / "det" / "weights" / "best.pt", RES / "coles_det_best.pt")      # el detector ya está a salvo

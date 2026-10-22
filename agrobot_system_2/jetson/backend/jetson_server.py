@@ -168,7 +168,7 @@ pose_estimator = PoseEstimator()
 cabeceo_imu = CabeceoIMU()
 lidar_reactive = LidarReactive()
 # Suelo libre por cámara: lo bajo que el LIDAR no ve (cobija, pesa: 2026-10-02).
-suelo_libre = SueloLibre()
+suelo_libre = SueloLibre(cfg={"metodo": "apariencia"})   # 2026-10-22: sin los «0 m» falsos del histograma en baldosa
 lidar_reactive.hueco_camara = lambda: suelo_libre.hueco_delante(
     state.config["slam"]["robot_ancho_cm"] / 100.0)
 # Barrido de tilt + freno proactivo por envolvente de vuelco (ver barrido_tilt.py).

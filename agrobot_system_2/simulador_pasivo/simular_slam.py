@@ -91,6 +91,9 @@ def medir(npz: Path) -> dict:
         r.update(celdas_ocupadas=int(ocup.sum()), celdas_libres=int(libre.sum()),
                  ocupadas_por_libre=round(float(ocup.sum()) / max(1, libre.sum()), 4),
                  manchas_sueltas=int(((st[1:, cv2.CC_STAT_AREA] <= 2)).sum()) if n > 1 else 0)
+    if len(P) > 2:                                       # cierre: si el recorrido vuelve a la marca de salida, esto es la deriva acumulada
+        r["fin_vs_inicio_cm"] = round(float(np.hypot(P[-1, 1] - P[0, 1], P[-1, 2] - P[0, 2])) * 100, 1)
+        r["fin_vs_inicio_deg"] = round(float(np.degrees((P[-1, 3] - P[0, 3] + np.pi) % (2 * np.pi) - np.pi)), 1)
     if len(P) and len(E):
         r["ekf_vs_slam_final_m"] = round(float(np.hypot(P[-1, 1] - E[-1, 1], P[-1, 2] - E[-1, 2])), 2)
     return r

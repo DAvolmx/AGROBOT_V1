@@ -64,7 +64,9 @@ def medir_chasis(variables_jsonl, cada=3, d_min=0.10, d_max=0.40, frac_min=0.5, 
             except ValueError:
                 continue
             sc = d.get("lidar_scan")
-            if not sc:
+            a = d.get("actuator_status") or {}
+            # solo con el robot MOVIÉNDOSE: parado, una pared cercana también devuelve siempre la misma distancia y parecería chasis
+            if not sc or (abs(a.get("v_cmd") or 0) + abs(a.get("omega_cmd") or 0)) < 0.05:
                 continue
             n += 1
             for r in sc:

@@ -81,6 +81,10 @@ class SueloLibre:
         # paso 1, 2026-10-02) se aprendía como "suelo" y desaparecía.
         self._mem_hs = None
         self._mem_v = None
+        # 2026-10-22: «apariencia» = el suelo es lo conectado a la franja de delante que se le parece en color Y textura
+        # (sendero_apariencia). Con la cámara inclinada (servo 64) daba el hueco bien donde el histograma decía «0 m» el 47 % del tiempo.
+        self.metodo = self.cfg.get("metodo", "histograma")
+        self._mem_ap = None
 
     # ------------------------------------------------------------ geometría
     @staticmethod
@@ -144,6 +148,14 @@ class SueloLibre:
         validas = np.isfinite(dist_fila) & (dist_fila > 0) & (dist_fila < DISTANCIA_MAX_M)
 
         suelo = _suelo_por_histograma(cv2, hsv, hist, hist_v)
+        if self.metodo == "apariencia":
+            import sendero_apariencia
+            if self._mem_ap is None:
+                self._mem_ap = sendero_apariencia.MemoriaApariencia()
+            m_ap, _ = sendero_apariencia.mascara_camino(cv2, cv2.resize(frame, (320, 240), interpolation=cv2.INTER_AREA), self._mem_ap,
+                                                        float(self.cfg.get("umbral", 2.6)), float(self.cfg.get("textura", 1.2)))
+            suelo = cv2.resize(m_ap, (ANCHO, ALTO), interpolation=cv2.INTER_NEAREST) > 0
+            extrana = False                       # la referencia se reaprende cada fotograma con memoria propia
         memoria_reaprendida = False
         if extrana and validas.any() and float(suelo[validas].mean()) < MEMORIA_INVALIDA:
             self._mem_hs, self._mem_v = ref_hs.copy(), ref_v.copy()

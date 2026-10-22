@@ -188,6 +188,16 @@ def generate_launch_description():
             # haz recortado. NaN significa "medida invalida" y no es lo mismo.
             "filter1.params.lower_replacement_value": float("-inf"),
             "filter1.params.upper_replacement_value": float("inf"),
+            # 2026-10-22: el LIDAR ve su PROPIO chasis en todos los scans (soporte de cámara a -35°/17-21 cm, trasera a 28 cm). Esos puntos
+            # viajan con el robot: rf2o cree que no se mueve y el mapa se llena de fantasmas. La caja (base_link) los quita; en la
+            # reproducción con datos reales (simulador_pasivo/simular_slam.py) bajó un 32 % las manchas sueltas del mapa.
+            "filter2.name": "chasis",
+            "filter2.type": "laser_filters/LaserScanBoxFilter",
+            "filter2.params.box_frame": "base_link",
+            "filter2.params.invert": False,
+            "filter2.params.min_x": -0.34, "filter2.params.max_x": 0.22,
+            "filter2.params.min_y": -0.23, "filter2.params.max_y": 0.23,
+            "filter2.params.min_z": -1.0, "filter2.params.max_z": 1.0,
         }],
         remappings=[("scan", "/scan"), ("scan_filtered", "/scan_odom")],
     )
@@ -209,9 +219,19 @@ def generate_launch_description():
             "filter1.params.upper_threshold": 8.0,
             "filter1.params.lower_replacement_value": float("-inf"),
             "filter1.params.upper_replacement_value": float("inf"),
-            "filter2.name": "mediana_espacial",
-            "filter2.type": "laser_filters/LaserScanMedianSpatialFilter",
-            "filter2.params.window_size": 3,
+            # 2026-10-22: el LIDAR ve su PROPIO chasis en todos los scans (soporte de cámara a -35°/17-21 cm, trasera a 28 cm). Esos puntos
+            # viajan con el robot: rf2o cree que no se mueve y el mapa se llena de fantasmas. La caja (base_link) los quita; en la
+            # reproducción con datos reales (simulador_pasivo/simular_slam.py) bajó un 32 % las manchas sueltas del mapa.
+            "filter2.name": "chasis",
+            "filter2.type": "laser_filters/LaserScanBoxFilter",
+            "filter2.params.box_frame": "base_link",
+            "filter2.params.invert": False,
+            "filter2.params.min_x": -0.34, "filter2.params.max_x": 0.22,
+            "filter2.params.min_y": -0.23, "filter2.params.max_y": 0.23,
+            "filter2.params.min_z": -1.0, "filter2.params.max_z": 1.0,
+            "filter3.name": "mediana_espacial",
+            "filter3.type": "laser_filters/LaserScanMedianSpatialFilter",
+            "filter3.params.window_size": 3,
         }],
         remappings=[("scan", "/scan"), ("scan_filtered", "/scan_slam")],
     )

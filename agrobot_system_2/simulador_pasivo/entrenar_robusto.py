@@ -54,6 +54,11 @@ AMPLIO = {
     "max_omega_rps": [2.0, 3.0, 4.0],
     "accel_ang": [4.0, 8.0, 12.0],
     "accel_lin": [1.5, 3.0, 5.0],
+    # 2026-10-22, de la búsqueda en arXiv: punto objetivo sobre el centro del pasillo (2106.15029) y corrección frenando un lado (2609.38715).
+    # En la primera prueba no mejoraron al perfil aplicado (arco: 62-68 % y 36-92 contactos frente a 80 % y 20): quedan para que la evolución decida.
+    "rumbo_mirada_m": [0.0, 0.0, 0.4, 0.6],
+    "rumbo_modo": ["pulso", "pulso", "arco"],
+    "rumbo_arco_k": [1.5, 3.0],
 }
 PEOR_HW = {"dead": 40.0, "mu": 0.65, "drag": 0.10}
 

@@ -87,6 +87,43 @@ def angulo_pared(pts_xy, x_min=-0.5, x_max=1.2, y_max=1.6, n_min=8, r2_min=0.85)
     return -math.atan(m), sig
 
 
+def _recta(pts_xy, x_min=-0.5, x_max=1.2, y_max=1.6, n_min=8, r2_min=0.85):
+    """Ajuste y = m x + c de una pared: (m, c) o None."""
+    p = [(x, y) for x, y in pts_xy if x_min <= x <= x_max and abs(y) <= y_max]
+    n = len(p)
+    if n < n_min:
+        return None
+    mx = sum(x for x, _ in p) / n
+    my = sum(y for _, y in p) / n
+    sxx = sum((x - mx) ** 2 for x, _ in p)
+    if sxx < 0.04:
+        return None
+    m = sum((x - mx) * (y - my) for x, y in p) / sxx
+    syy = sum((y - my) ** 2 for _, y in p)
+    res = sum((y - (my + m * (x - mx))) ** 2 for x, y in p)
+    if syy > 1e-6 and 1.0 - res / syy < r2_min:
+        return None
+    return m, my - m * mx
+
+
+def desvio_lateral(pts_izq, pts_der, **kw):
+    """Desplazamiento del robot respecto al CENTRO del pasillo (m, + = el centro queda a la izquierda del robot), con las dos paredes
+    ajustadas como rectas (más robusto que restar las distancias mínimas de los sectores). None si no se ven las dos paredes.
+    Idea de arXiv 2106.15029 (seguimiento de hileras con LIDAR: ángulo + desplazamiento respecto a la hilera)."""
+    a, b = _recta(pts_izq, **kw), _recta(pts_der, **kw)
+    if a is None or b is None or a[1] <= 0 or b[1] >= 0:
+        return None
+    return (a[1] + b[1]) / 2.0
+
+
+def error_con_mirada(e_rumbo: float, desvio_m, mirada_m: float) -> float:
+    """Error de rumbo respecto a un punto objetivo `mirada_m` por delante, sobre la línea central (persecución pura): si el robot está a
+    la derecha del centro (desvío > 0) conviene apuntar algo a la izquierda, y viceversa."""
+    if desvio_m is None or mirada_m <= 0:
+        return e_rumbo
+    return _ang(e_rumbo - math.atan2(desvio_m, mirada_m))
+
+
 def angulo_paredes(pts_izq, pts_der, **kw):
     """Combina la pared izquierda y la derecha (media ponderada por varianza). None si ninguna sirve."""
     a = [r for r in (angulo_pared(pts_izq, **kw), angulo_pared(pts_der, **kw)) if r is not None]

@@ -205,6 +205,10 @@ class Config:
     rumbo_zm_deg: float = 0.0           # zona muerta del error de rumbo; 0 = apagado
     rumbo_paredes: bool = True          # corrige el giroscopio con el ángulo de las paredes cuando se ven
     rumbo_pulso_escala: float = 1.0     # duración del pulso de corrección de rumbo respecto al giro normal (<1 = giros más finos)
+    rumbo_mirada_m: float = 0.0         # >0: apunta a un punto a esa distancia sobre el centro del pasillo (ángulo + desvío lateral, arXiv 2106.15029)
+    rumbo_modo: str = "pulso"           # "pulso" = pulso de giro aparte; "arco" = el propio pulso recto lleva un omega de corrección (frena un lado, arXiv 2609.38715)
+    rumbo_arco_k: float = 1.5           # omega de corrección por radián de error (modo arco)
+    rumbo_arco_max: float = 0.4         # tope de ese omega (rad/s)
     rumbo_aprende: float = 0.3          # rapidez con que aprende hacia qué lado cae el robot en cada pulso recto
 
     def slam_cfg(self):
@@ -689,12 +693,14 @@ class Conductor:
     def activo(self) -> bool:
         return self._gen is not None
 
-    def ordenar(self, accion, t, maniobra=True, esc_v=1.0, esc_dur=1.0) -> bool:
+    def ordenar(self, accion, t, maniobra=True, esc_v=1.0, esc_dur=1.0, w_extra=0.0) -> bool:
         v_max = self.cfg.max_v_mps * self.cfg.escala_velocidad * esc_v
         w_max = self.cfg.max_omega_rps * self.cfg.escala_velocidad
         segs = self._real.segmentos(accion, v_max, w_max, maniobra)
         if esc_dur != 1.0:
             segs = [(v, w, d * esc_dur) for (v, w, d) in segs]
+        if w_extra and accion == "adelante":
+            segs = [(v, w + w_extra, d) for (v, w, d) in segs]
         if self.cfg.tope_duty != 60.0:            # ¿y si? subir el tope de avance
             vf = pulse_drive.MODOS[self.cfg.modo]["vel_factor"]
             tope_v = self.cfg.tope_duty / 100.0 * V_SCALE
@@ -967,6 +973,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     sesgo_gyro = float(rng.normal(0.0, math.radians(CAL["imu_gyro_sesgo_dps"]) / 2)) if rf else 0.0
     sigma_gyro = math.radians(CAL["imu_gyro_sigma_dps"])
     pulso_recto_pend, rumbo_corr = False, 0
+    desvio_ult = None
     prog_ref, prog_t = (x0, y0), 0.0
     correcciones = corr_ejec = bloqueos = avances = 0
     contactos, prev_choque = 0, False
@@ -1010,6 +1017,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 ref = RF.angulo_paredes(pi, pd, y_max=1.6)
                 if ref is not None:
                     rf.actualizar(*ref)
+                desvio_ult = RF.desvio_lateral(pi, pd, y_max=1.6) if cfg.rumbo_mirada_m > 0 else None
             frente = d["adelante"] if d["adelante"] is not None else math.inf
             izq = d["izquierda"]
             der = d["derecha"]
@@ -1058,7 +1066,8 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     corr_rumbo.fin_pulso_recto(rf.e)
                     pulso_recto_pend = False
                 if rf is not None and not cond.activo:
-                    corr = corr_rumbo.decidir(rf.e)              # primero el rumbo fusionado; el centrado lateral solo si el rumbo está bien
+                    e_eff = RF.error_con_mirada(rf.e, desvio_ult, cfg.rumbo_mirada_m)
+                    corr = corr_rumbo.decidir(e_eff) if cfg.rumbo_modo == "pulso" else None   # primero el rumbo; el centrado lateral después
                     if corr:
                         rumbo_corr += 1
                         correcciones += 1
@@ -1085,7 +1094,11 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     sin_corregir = 0
                 else:
                     esc_v = cfg.man_desacel_factor if (cfg.man_desacel_cm > 0 and frente < cfg.man_desacel_cm / 100.0) else 1.0
-                    if cond.ordenar("adelante", t, esc_v=esc_v) and rf is not None:
+                    w_arco = 0.0
+                    if rf is not None and cfg.rumbo_modo == "arco":
+                        e_eff = RF.error_con_mirada(rf.e, desvio_ult, cfg.rumbo_mirada_m)
+                        w_arco = max(-cfg.rumbo_arco_max, min(cfg.rumbo_arco_max, -cfg.rumbo_arco_k * e_eff))
+                    if cond.ordenar("adelante", t, esc_v=esc_v, w_extra=w_arco) and rf is not None:
                         corr_rumbo.inicio_pulso_recto(rf.e)
                         pulso_recto_pend = True
                     avances += 1

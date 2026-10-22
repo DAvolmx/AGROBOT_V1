@@ -66,3 +66,17 @@ def test_corrector_aprende_el_sesgo_y_anticipa():
         c.fin_pulso_recto(e)
     assert abs(math.degrees(c.sesgo) - 1.5) < 0.2
     assert c.decidir(math.radians(1.8)) == "derecha"      # 1,8 + 1,5 > 3: corrige antes de pasarse
+
+
+def test_desvio_lateral_con_dos_paredes():
+    xs = [i * 0.1 for i in range(-4, 11)]
+    izq = [(x, 0.40) for x in xs]                         # pared izquierda a 40 cm, derecha a 20 cm: el centro está 10 cm a la izquierda
+    der = [(x, -0.20) for x in xs]
+    assert abs(R.desvio_lateral(izq, der) - 0.10) < 1e-9
+    assert R.desvio_lateral(izq, []) is None
+
+
+def test_error_con_mirada_apunta_al_centro():
+    e = R.error_con_mirada(0.0, 0.10, 0.6)                 # rumbo perfecto pero desplazado a la derecha: debe pedir girar a la izquierda
+    assert e < 0
+    assert R.CorrectorRumbo(zona_muerta_deg=3).decidir(e) == "izquierda"

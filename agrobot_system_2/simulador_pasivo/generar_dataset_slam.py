@@ -33,6 +33,7 @@ from pathlib import Path
 import numpy as np
 
 import sim_logica_actual as S
+from calibracion_real import CAL
 import episodio_fallas as E
 import pruebas_geometria as PG
 
@@ -44,7 +45,7 @@ NOMBRES = ["v_cmd", "w_cmd", "gyro_z", "icp_residual", "dmin_front", "dmin_izq",
 R_MIN, R_MAX = 0.18, 8.0
 FALLOS_GENERALES = ("ninguno", "barro", "rueda_muerta", "motor_debil", "suelo_resbaloso", "lidar_cortes", "lidar_fantasmas",
                     "enlace_cortes")
-IMU_RUIDO_RPS = math.radians(0.7)        # MEDIDO en las sesiones reales (reposo, 966 mil muestras): σ ≈ 0,68 °/s; el sesgo medio fue ≈ 0,01 °/s
+IMU_RUIDO_RPS = math.radians(max(0.3, CAL['imu_gyro_sigma_dps'] * 2.0))        # MEDIDO en las sesiones reales (reposo, 966 mil muestras): σ ≈ 0,68 °/s; el sesgo medio fue ≈ 0,01 °/s
 
 
 class Grabador:
@@ -214,7 +215,7 @@ def _job(a):
     finally:
         E.GRABADOR = None
     rng = np.random.default_rng(900_000 + seed * 31 + len(esc_n) * 7 + len(fallo))
-    sigma = float(rng.choice([0.01, 0.02, 0.03]))
+    sigma = float(rng.choice([0.004, 0.01, 0.02]))     # σ total del LIDAR por episodio (el del robot parado es ~2 mm: se entrena con peor)
     sesgo = float(rng.choice([-1, 1]) * math.radians(rng.uniform(0.0, 0.3)))   # real: media ~0; se deja una deriva pequeña
     d = procesar(rec, rng, sigma, sesgo)
     if d is None:

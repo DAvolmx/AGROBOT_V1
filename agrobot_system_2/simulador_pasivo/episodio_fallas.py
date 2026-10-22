@@ -292,6 +292,8 @@ def episodio_fallas(esc, cfg, semilla: int, fallo: str = "ninguno", lecciones: A
     cond = S.Conductor(cfg, act)
     fw = S.crear_firmware(cfg)
     fw.omega_gain = hip.giro_gain
+    if hasattr(fw, "rng"):
+        fw.rng = np.random.default_rng(20_000 + semilla)
     lidar = S.LidarReactive()
     cola_enlace = []
     ctrl = None

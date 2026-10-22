@@ -5,7 +5,11 @@ set -eu
 NPZ="$1"; KG="${2:-kaggle}"
 AQUI="$(cd "$(dirname "$0")" && pwd)"
 cp "$NPZ" "$AQUI/dataset/dataset.npz"; [ -n "${3:-}" ] && [ -f "$3" ] && cp "$3" "$AQUI/dataset/real.npz"
-"$KG" datasets create -p "$AQUI/dataset" 2>&1 || "$KG" datasets version -p "$AQUI/dataset" -m "nuevo dataset" 2>&1
+if "$KG" datasets status davidgomez32/agrobot-slam-correction >/dev/null 2>&1; then
+  "$KG" datasets version -p "$AQUI/dataset" -m "dataset recalibrado con datos reales del robot" 2>&1
+else
+  "$KG" datasets create -p "$AQUI/dataset" 2>&1
+fi
 echo "esperando a que Kaggle procese el dataset…"
 for i in $(seq 1 60); do
   s=$("$KG" datasets status davidgomez32/agrobot-slam-correction 2>&1 || true)

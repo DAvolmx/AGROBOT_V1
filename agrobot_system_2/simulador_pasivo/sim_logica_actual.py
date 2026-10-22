@@ -56,6 +56,7 @@ sys.path.insert(0, str(BACKEND))
 sys.path.insert(0, str(AQUI))
 
 import pulse_drive                                    # noqa: E402  (REAL)
+from calibracion_real import CAL                       # noqa: E402  (datos reales del robot parado y de los pulsos)
 from manual_demo import reference as demo_reference   # noqa: E402  (REAL)
 from ble_link import _pct                             # noqa: E402  (REAL)
 from slam import LidarReactive                        # noqa: E402  (REAL)
@@ -313,6 +314,35 @@ class MotoresSkidSteer:
         self.t_mon = 0.0
         self.boost = 1.0
         self.omega_gain = 1.0          # autoridad de giro (Hip.giro_gain); 1 = la del firmware
+        # Variabilidad POR PULSO medida en el robot real (calibracion_real): giros «muertos», dispersión del giro y deriva en recta.
+        self.rng = np.random.default_rng(0)
+        self._en_pulso = False
+        self._k_giro = 1.0
+        self._off_pct = 0.0
+
+    def _perturbar(self, pv, pw):
+        """Devuelve el `pw` efectivo: al EMPEZAR cada pulso se sortea cuánto responde el giro y cuánta deriva lateral aparece."""
+        mueve = abs(pv) > 0.5 or abs(pw) > 0.5
+        if mueve and not self._en_pulso:
+            r = self.rng
+            self._k_giro = 0.0 if r.random() < CAL["giro_p_muerto"] else min(2.2, float(np.exp(r.normal(CAL.get("giro_mu", 0.0), CAL["giro_sigma"]))))
+            sd = CAL["deriva_sd_grande"] if r.random() < CAL["deriva_p_grande"] else CAL["deriva_sd_chica"]
+            self._off_pct = float(r.normal(0.0, sd))
+        self._en_pulso = mueve
+        if not mueve:
+            return pw
+        return pw + (self._off_pct if abs(pw) < 0.5 else 0.0)
+
+    def _escala_giro(self, di, si, dd, sd):
+        """Escala el DIFERENCIAL entre lados por k (giros muertos / flojos): se hace tras el mezclador porque la mezcla satura y escalar omega
+        antes casi no cambia el giro resultante."""
+        k = self._k_giro if self._en_pulso else 1.0
+        if k == 1.0:
+            return di, si, dd, sd
+        Di, Dd = si * di, sd * dd
+        m, d = (Di + Dd) / 2.0, (Dd - Di) / 2.0
+        Di2, Dd2 = m - k * d, m + k * d
+        return (int(round(abs(Di2))), 1 if Di2 >= 0 else -1, int(round(abs(Dd2))), 1 if Dd2 >= 0 else -1)
 
     def _poner(self, i, duty, sent, t):
         if duty == 0:
@@ -324,7 +354,8 @@ class MotoresSkidSteer:
 
     def recibir(self, pv, pw, t):
         self.refreshed = t
-        di, si, dd, sd = sk_mix(pv * 0.01 * SK_V_MAX, pw * self.omega_gain * 0.01 * SK_OMEGA_MAX, self.boost)
+        pw = self._perturbar(pv, pw)
+        di, si, dd, sd = self._escala_giro(*sk_mix(pv * 0.01 * SK_V_MAX, pw * self.omega_gain * 0.01 * SK_OMEGA_MAX, self.boost))
         # orden del firmware [R1, L1, L2, R2]: R* = lado izquierdo del mix ("IZQ"), L* = derecho
         for i, (du, se) in enumerate(((di, si), (dd, sd), (dd, sd), (di, si))):
             self._poner(i, du, se, t)
@@ -362,7 +393,8 @@ class MotoresMaxFrente(MotoresSkidSteer):
 
     def recibir(self, pv, pw, t):
         self.refreshed = t
-        di, si, dd, sd = sk_mix(pv * 0.01 * SK_V_MAX, pw * self.omega_gain * 0.01 * SK_OMEGA_MAX, self.boost)
+        pw = self._perturbar(pv, pw)
+        di, si, dd, sd = self._escala_giro(*sk_mix(pv * 0.01 * SK_V_MAX, pw * self.omega_gain * 0.01 * SK_OMEGA_MAX, self.boost))
         # El lado más rápido va al 100 % y el otro CONSERVA la proporción (antes ambos iban al 100 % y toda curva era un
         # giro en el sitio: el robot no avanzaba mientras corregía).
         m = max(di, dd)
@@ -740,7 +772,7 @@ class MundoSim:
         return m
 
 
-def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=0.01, rango=8.0):
+def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=None, rango=8.0):
     """360 rayos desde (cx, cy) = posición del LIDAR. 0° = adelante, + = izquierda (como ROS).
     Las paredes se ven siempre; las macetas solo si sobresalen del plano del LIDAR (ALTURA_LIDAR_M)."""
     ang = np.deg2rad(np.arange(360)) + psi_real
@@ -764,7 +796,12 @@ def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=0.01, rango=8.0):
             uu = ((x0 - cx) * dy - (y0 - cy) * dx) / den
         ok = (np.abs(den) > 1e-9) & (tt > 0.02) & (uu >= 0) & (uu <= 1)
         dist = np.minimum(dist, np.where(ok, tt, np.inf))
-    dist = np.where(dist <= rango, dist + rng.normal(0, ruido, 360), np.inf)
+    if ruido is None:                      # σ(r) = a + b·r medida con el robot PARADO, por el factor de marcha (hipótesis), y rayos perdidos
+        sigma = (CAL["lidar_sigma_a"] + CAL["lidar_sigma_b"] * np.where(np.isfinite(dist), dist, 0.0)) * CAL["lidar_factor_marcha"]
+        ruido = sigma
+        if CAL["lidar_dropout"] > 0:
+            dist = np.where(rng.random(360) < CAL["lidar_dropout"], np.inf, dist)
+    dist = np.where(dist <= rango, dist + rng.normal(0, 1.0, 360) * ruido, np.inf)
     return [{"angle_deg": float(a), "distance_m": float(d)}
             for a, d in zip(range(360), dist) if np.isfinite(d) and d > 0.05]
 
@@ -885,6 +922,8 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     cond = Conductor(cfg, act)
     fw = crear_firmware(cfg)
     fw.omega_gain = hip.giro_gain
+    if hasattr(fw, "rng"):
+        fw.rng = np.random.default_rng(20_000 + semilla)           # variabilidad por pulso reproducible por semilla
     lidar = LidarReactive()
     cola_enlace = []                               # (t_llegada, pct_v, pct_w)
     ctrl = None

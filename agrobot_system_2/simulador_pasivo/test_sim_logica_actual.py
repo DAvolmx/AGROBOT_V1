@@ -1,3 +1,5 @@
+import os
+os.environ.setdefault("AGROBOT_CAL", "off")          # la física de estas pruebas es la determinista, sin la variabilidad medida en el robot real
 """Validación del simulador de la lógica actual (sim_logica_actual.py).
 
 No prueban el robot: prueban que el SIMULADOR hace lo que dice que hace. Cada uno cubre un

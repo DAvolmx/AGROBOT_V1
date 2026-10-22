@@ -37,7 +37,7 @@ DEFECTOS = {
     "camara_yaw_offset_deg": 0.0,                       # si la cámara no mira recto respecto al eje del robot (+ = mira a la derecha)
     "tol_rumbo_deg": 6.0,
     "tol_tilt_deg": 4.0,
-    "ganancia_tilt": 0.7,
+    "ganancia_tilt": 0.5,
     "paso_servo_max_deg": 4.0,
     "servo_min_deg": 60,
     "servo_max_deg": 125,
@@ -237,7 +237,7 @@ class VisionActiva:
         if abs(nuevo - actual) < 0.5:
             return False
         self._set_servo(nuevo)
-        self._esperar(0.5)
+        self._esperar(0.8)          # el servo tarda (≈90 °/s) y la imagen va con retraso: esperar evita el rebote
         return True
 
     def _mover(self, accion: str, c):

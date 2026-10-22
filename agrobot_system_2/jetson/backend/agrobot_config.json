@@ -133,7 +133,7 @@
     "camara_yaw_offset_deg": 0.0,
     "tol_rumbo_deg": 6.0,
     "tol_tilt_deg": 4.0,
-    "ganancia_tilt": 0.7,
+    "ganancia_tilt": 0.5,
     "paso_servo_max_deg": 4.0,
     "servo_min_deg": 60,
     "servo_max_deg": 125,
@@ -156,7 +156,7 @@
     "perder_objetivo_s": 4.0,
     "tiempo_max_s": 600.0,
     "scan_max_s": 1.0,
-    "sin_mover": false,
-    "max_area_frac": 0.85
+    "max_area_frac": 0.85,
+    "sin_mover": false
   }
 }

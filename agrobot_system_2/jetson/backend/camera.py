@@ -342,6 +342,27 @@ class CameraWorker:
         self._loop.call_soon_threadsafe(repartir)
 
     # ---------------- hilo de inferencia ---------------------------------
+    def _modelo_maceta(self, cfg):
+        """Carga perezosa del detector de macetas (detection.modelo_maceta, en models/). None si no está o falló."""
+        nombre = cfg.get("modelo_maceta", "agrobot_maceta_det.pt")
+        if not nombre or getattr(self, "_maceta_mod", None) is False:
+            return None
+        if getattr(self, "_maceta_mod", None) is None or getattr(self, "_maceta_nombre", None) != nombre:
+            from pathlib import Path
+            ruta = Path(__file__).resolve().parent / "models" / nombre
+            if not ruta.exists():
+                self._maceta_mod = False
+                return None
+            try:
+                from ultralytics import YOLO
+                self._maceta_mod, self._maceta_nombre = YOLO(str(ruta)), nombre
+                print(f"[camara] detector de macetas cargado: {nombre}", flush=True)
+            except Exception as exc:
+                print(f"[camara] no se pudo cargar {nombre}: {exc}", flush=True)
+                self._maceta_mod = False
+                return None
+        return self._maceta_mod
+
     def _bucle_inferencia(self):
         while not self._stop.is_set():
             modelo = self.modelo
@@ -409,6 +430,21 @@ class CameraWorker:
                 cajas.append({"class": nombre, "confidence": conf,
                               "xyxy": (x1, y1, x2, y2)})
                 nuevas.append((nombre, conf))
+
+            # Segundo modelo: DETECTOR DE MACETAS (2026-10-22, Kaggle agrobot-macetas: 20/20 cuadros de la cámara del robot con la col en
+            # maceta y 0/30 sin maceta). Sus cajas se suman a las del modelo activo con la clase «maceta» (para la visión activa y la misión).
+            mod_mac = self._modelo_maceta(cfg)
+            if mod_mac is not None:
+                try:
+                    kw = {} if self._device is None else {"device": self._device}
+                    rm = mod_mac(frame, imgsz=int(cfg.get("maceta_imgsz", 480)), conf=float(cfg.get("maceta_conf", 0.40)), verbose=False, **kw)[0]
+                    for box in rm.boxes:
+                        x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
+                        cajas.append({"class": "maceta", "confidence": float(box.conf[0]), "xyxy": (x1, y1, x2, y2)})
+                        nuevas.append(("maceta", float(box.conf[0])))
+                except Exception as exc:
+                    print(f"[camara] detector de macetas desactivado: {exc}", flush=True)
+                    self._maceta_mod = False
 
             with self._lock:
                 self._cajas = cajas

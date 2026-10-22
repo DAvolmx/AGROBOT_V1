@@ -1,0 +1,173 @@
+"""MISIÓN «PLANTAS EN MACETA» para la demo (2026-10-22): explora y mapea; al ver una maceta enciende el LED, se acerca sin chocar,
+la escanea desde varias vistas mientras GRABA video, guarda todo y sigue explorando. No repite plantas ya vistas (memoria en el mapa).
+
+  EXPLORANDO       el explorador reactivo (LIDAR + cámara para obstáculos bajos + rumbo fusionado) recorre la sala; el SLAM mapea.
+  INSPECCIONANDO   se para el explorador y la visión activa (clase «maceta») centra, se acerca a ~45 cm, analiza y escanea las vistas.
+  FIN              tras `max_plantas` o `tiempo_max_s`.
+LED: encendido mientras se ve una maceta (o durante la inspección). Video: de principio a fin de cada inspección.
+Lógica pura con dependencias inyectadas (paso() síncrono, reloj inyectable): la usa el robot y el simulador (simular_demo.py) igual.
+"""
+from __future__ import annotations
+
+import asyncio
+import math
+import time
+
+DEFECTOS = {
+    "max_plantas": 3,
+    "tiempo_max_s": 900.0,
+    "conf_min": 0.45,
+    "persistencia": 3,                 # cuadros seguidos viendo la maceta antes de ir a por ella
+    "distancia_max_m": 2.5,            # solo se va a por macetas a menos de esto (por cámara)
+    "radio_ya_vista_m": 0.9,           # una maceta a menos de esto de una ya inspeccionada es la misma
+    "pausa_tras_planta_s": 6.0,        # tras inspeccionar, se ignoran detecciones un rato (la que acaba de ver sigue en imagen)
+    "led_mantener_s": 1.5,
+}
+EXPLORANDO, INSPECCIONANDO, FIN, INACTIVA = "explorando", "inspeccionando", "fin", "inactiva"
+
+
+class MisionPlantas:
+    def __init__(self, *, explorador, vision, get_macetas, get_pose, led, grabar, get_config=lambda: {}, on_event=None,
+                 reloj=time.monotonic):
+        self.expl = explorador             # iniciar() -> (ok, msg), detener(), .activo
+        self.vision = vision               # iniciar() -> (ok, msg), cancelar(m), arrancar_tarea(), .estado, .ultimo_resultado
+        self._macetas = get_macetas        # () -> [{conf, yaw_deg (+ = derecha), dist_m|None}] del último cuadro, o []
+        self._pose = get_pose              # () -> {x, y, theta_deg} | None
+        self._led = led                    # (bool)
+        self._grabar = grabar              # (bool) -> inicia / detiene el video
+        self._cfg = get_config
+        self._ev = on_event or (lambda e: None)
+        self.reloj = reloj
+        self.estado = INACTIVA
+        self.plantas: list[dict] = []
+        self._racha = 0
+        self._led_on = None
+        self._t_visto = -1e9
+        self._t_ignorar = -1e9
+        self._t0 = 0.0
+        self._tarea = None
+        self.motivo_fin = None
+
+    def cfg(self):
+        c = dict(DEFECTOS)
+        c.update(self._cfg() or {})
+        return c
+
+    # ---------------- ciclo de vida
+    def iniciar(self):
+        if self.estado not in (INACTIVA, FIN):
+            return False, "ya está en marcha"
+        self.plantas, self._racha, self.motivo_fin = [], 0, None
+        self._t0 = self.reloj()
+        ok, msg = self.expl.iniciar()
+        if not ok and not getattr(self.expl, "activo", False):
+            return False, f"no arrancó la exploración: {msg}"
+        self.estado = EXPLORANDO
+        self._ev({"tipo": "mision_inicio"})
+        return True, "ok"
+
+    def detener(self, motivo="detenida"):
+        if self.estado == INACTIVA:
+            return
+        try:
+            if self.vision.estado != "inactiva":
+                self.vision.cancelar("misión detenida")
+            self.expl.detener()
+            self._grabar(False)
+        finally:
+            self._poner_led(False)
+            self.estado = FIN
+            self.motivo_fin = motivo
+            self._ev({"tipo": "mision_fin", "motivo": motivo, "plantas": len(self.plantas)})
+
+    def _poner_led(self, on: bool):
+        if on != self._led_on:
+            self._led_on = on
+            self._led(on)
+
+    # ---------------- decisión
+    def _posicion_estimada(self, m):
+        p = self._pose()
+        if not p or m.get("dist_m") is None:
+            return None
+        rumbo = math.radians(p["theta_deg"] - m["yaw_deg"])          # yaw + = a la derecha
+        d = float(m["dist_m"]) + 0.15                               # hasta el centro de la maceta
+        return (p["x"] + d * math.cos(rumbo), p["y"] + d * math.sin(rumbo))
+
+    def _ya_vista(self, pos, c):
+        return pos is not None and any(math.hypot(pos[0] - q["x"], pos[1] - q["y"]) < c["radio_ya_vista_m"]
+                                       for q in self.plantas if q.get("x") is not None)
+
+    def paso(self):
+        if self.estado in (INACTIVA, FIN):
+            return
+        c = self.cfg()
+        ahora = self.reloj()
+        if ahora - self._t0 > c["tiempo_max_s"]:
+            self.detener("tiempo máximo")
+            return
+        macetas = [m for m in (self._macetas() or []) if m.get("conf", 0) >= c["conf_min"]]
+        if macetas:
+            self._t_visto = ahora
+        self._poner_led(self.estado == INSPECCIONANDO or ahora - self._t_visto < c["led_mantener_s"])
+
+        if self.estado == EXPLORANDO:
+            if not getattr(self.expl, "activo", True):                  # el explorador se paró solo (p. ej. sin LIDAR): reintentar
+                self.expl.iniciar()
+            candidatas = [m for m in macetas if (m.get("dist_m") is None or m["dist_m"] <= c["distancia_max_m"])]
+            nuevas = [m for m in candidatas if not self._ya_vista(self._posicion_estimada(m), c)]
+            self._racha = self._racha + 1 if (nuevas and ahora >= self._t_ignorar) else 0
+            if self._racha >= c["persistencia"]:
+                m = max(nuevas, key=lambda q: q["conf"])
+                self.expl.detener()
+                ok, msg = self.vision.iniciar()
+                if not ok:
+                    self._ev({"tipo": "aviso", "msg": f"visión activa no arrancó: {msg}"})
+                    self.expl.iniciar()
+                    self._racha = 0
+                    return
+                if hasattr(self.vision, "arrancar_tarea"):
+                    self.vision.arrancar_tarea()
+                self._grabar(True)
+                self._objetivo = {"estimada": self._posicion_estimada(m), "t": ahora, "conf": m["conf"]}
+                self.estado = INSPECCIONANDO
+                self._ev({"tipo": "planta_detectada", "conf": m["conf"], "dist_m": m.get("dist_m"), "yaw_deg": m["yaw_deg"],
+                          "n": len(self.plantas) + 1})
+            return
+
+        if self.estado == INSPECCIONANDO and self.vision.estado == "inactiva":
+            self._grabar(False)
+            res = getattr(self.vision, "ultimo_resultado", None) or {}
+            p = self._pose()
+            pos = self._objetivo.get("estimada")
+            if p and res.get("hueco_m") is not None:                     # tras acercarse, la posición desde el robot es más fiable
+                d = float(res["hueco_m"]) + 0.30
+                r = math.radians(p["theta_deg"])
+                pos = (p["x"] + d * math.cos(r), p["y"] + d * math.sin(r))
+            self.plantas.append({"n": len(self.plantas) + 1, "x": None if pos is None else round(pos[0], 2),
+                                 "y": None if pos is None else round(pos[1], 2), "clase": res.get("clase"),
+                                 "vistas": len(res.get("vistas", [])), "motivo_fin_vision": getattr(self.vision, "motivo_fin", None)})
+            self._ev({"tipo": "planta_inspeccionada", **self.plantas[-1]})
+            if len(self.plantas) >= c["max_plantas"]:
+                self.detener(f"{len(self.plantas)} plantas inspeccionadas")
+                return
+            self._t_ignorar = ahora + c["pausa_tras_planta_s"]
+            self._racha = 0
+            self.expl.iniciar()
+            self.estado = EXPLORANDO
+
+    async def _bucle(self):
+        while self.estado not in (INACTIVA, FIN):
+            try:
+                self.paso()
+            except Exception as exc:
+                self.detener(f"error: {type(exc).__name__}: {exc}")
+                break
+            await asyncio.sleep(0.25)
+
+    def arrancar_tarea(self):
+        self._tarea = asyncio.create_task(self._bucle())
+
+    def estado_dict(self):
+        return {"estado": self.estado, "plantas": self.plantas, "motivo_fin": self.motivo_fin,
+                "vision": getattr(self.vision, "estado", None)}

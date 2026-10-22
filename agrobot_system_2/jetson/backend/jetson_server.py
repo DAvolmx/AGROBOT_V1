@@ -61,6 +61,7 @@ from navigation_logger import NavigationLogger, analizar_sesion
 from aprendizaje import Aprendizaje
 from paso_robotico import PasoRobotico
 from suelo_libre import SueloLibre
+import suelo_libre as suelo_mod
 from barrido_tilt import (BarridoTilt, FrenoProactivo, EstimadorAltura,
                           inclinacion_por_servo, SERVO_LEJOS_DEG, SERVO_CERCA_DEG)
 from grabador import Grabador, TELEMETRIA_HZ
@@ -1687,6 +1688,7 @@ def _parada_total(origen: str, remote: bool = True, emergencia: bool = True) -> 
     sirve también desde el callback UDP del LoRa."""
     hecho = []
     pasos = [
+        ("mision_plantas", lambda: mision_plantas is not None and mision_plantas.detener("parada")),
         ("vision_activa", lambda: vision_activa is not None and vision_activa.cancelar("parada")),
         ("evasion", _detener_evasion),
         ("paso_robotico", lambda: paso_robotico is not None and paso_robotico.detener()),
@@ -1725,7 +1727,8 @@ async def emergencia_handler(request: web.Request):
     if tipo == "soltar":
         # 2026-10-22: el dashboard perdió el foco (otra pestaña, el video, una captura, pantalla bloqueada). Antes eso era PARADA DE
         # EMERGENCIA y apagaba el modo autónomo a cada rato. Ahora solo se suelta el manejo MANUAL; la autonomía sigue.
-        if _autonomia_activa() or (vision_activa is not None and getattr(vision_activa, "activa", False)):
+        if _autonomia_activa() or (vision_activa is not None and vision_activa.estado != "inactiva") \
+                or (mision_plantas is not None and mision_plantas.estado in ("explorando", "inspeccionando")):
             return web.json_response({"ok": True, "detenido": [], "nota": "autonomía activa: sigue"})
         hecho = []
         for nombre, fn in (("pulsos", lambda: conductor is not None and conductor.parar()),
@@ -1768,6 +1771,98 @@ def _gyro_dps():
     return float(env["gyroZ"])
 
 
+_mision_vision_override: dict = {}
+mision_plantas = None
+
+
+def _dist_caja_m(xyxy, ancho, alto):
+    """Distancia (m) desde la cara delantera hasta la BASE de la caja, por la geometría de la cámara (suelo plano). None si la base
+    queda por encima del horizonte. Sirve para macetas bajas que el LIDAR (a 37,5 cm) no ve."""
+    try:
+        x1, y1, x2, y2 = xyxy
+        u = (x1 + x2) / 2.0 * suelo_mod.ANCHO / float(ancho)
+        v = min(y2, alto - 1) * suelo_mod.ALTO / float(alto)
+        x, y = suelo_libre.a_suelo(u, v, _geometria_camara())
+        d = float(math.hypot(float(x), float(y))) - state.config["slam"]["robot_largo_cm"] / 200.0
+        return round(d, 2) if math.isfinite(d) and d > 0 else None
+    except Exception:
+        return None
+
+
+def _poner_led(on: bool):
+    state.led_on = bool(on)
+    if actuator_proto is not None:
+        actuator_proto.send_actuator_update()
+    _schedule(state.broadcast({"type": "actuator_setpoint", "data": {"servo_angle": state.servo_angle, "led": state.led_on}}))
+
+
+def _grabar_video(on: bool):
+    """Inicia/detiene la grabación (la misma del botón del dashboard) desde código síncrono."""
+    global video_recording, _video_task, _video_file
+    if on and not video_recording and camera is not None:
+        _video_file = f"agrobot_planta_{time.strftime('%Y%m%d_%H%M%S')}.mp4"
+        video_recording = True
+        _video_task = asyncio.get_event_loop().create_task(_bucle_grabar_video(_video_file))
+        print(f"[VIDEO] misión: grabando {_video_file}", flush=True)
+    elif not on and video_recording:
+        video_recording = False          # el bucle cierra el archivo solo
+
+
+def _macetas_ahora():
+    if camera is None:
+        return []
+    f = camera.ultimo_frame()
+    if f is None:
+        return []
+    with camera._lock:
+        lista, ts = list(camera._cajas), camera._cajas_ts
+    if ts is None or time.time() - ts > 1.0:
+        return []
+    h, w = f[0].shape[:2]
+    hf = vision_activa_mod.hfov_con_zoom(state.config["odometria_webcam"]["camara_hfov_deg"], getattr(camera, "zoom", 1.0))
+    out = []
+    for b in lista:
+        if b.get("class") != "maceta":
+            continue
+        yaw, _ = vision_activa_mod.angulos_de_caja(b["xyxy"], w, h, hf, state.config.get("vision_activa", {}).get("camara_yaw_offset_deg", 0.0))
+        out.append({"conf": float(b["confidence"]), "yaw_deg": yaw, "dist_m": _dist_caja_m(b["xyxy"], w, h)})
+    return out
+
+
+def _crear_mision_plantas():
+    global mision_plantas
+    import mision_plantas as mp
+
+    def evento(e):
+        print(f"[mision_plantas] {e}", flush=True)
+        _schedule(state.broadcast({"type": "mision_plantas", "data": e}))
+        titulos = {"planta_detectada": "Planta detectada", "planta_inspeccionada": "Planta escaneada", "mision_fin": "Misión terminada"}
+        if e.get("tipo") in titulos:
+            _schedule(state.broadcast({"type": "toast", "data": {"kind": "success", "title": titulos[e["tipo"]],
+                                                                  "message": ", ".join(f"{k}: {v}" for k, v in e.items() if k != "tipo")}}))
+
+    mision_plantas = mp.MisionPlantas(explorador=explorador, vision=vision_activa, get_macetas=_macetas_ahora,
+                                      get_pose=ros_bridge.pose_en_mapa, led=_poner_led, grabar=_grabar_video,
+                                      get_config=lambda: state.config.get("mision_plantas", {}), on_event=evento)
+
+
+async def mision_plantas_handler(request: web.Request):
+    """GET/POST /api/mision_plantas {"activa": true|false} — la misión de la demo: explorar, mapear y escanear plantas en maceta."""
+    if request.method == "GET":
+        return web.json_response(mision_plantas.estado_dict() if mision_plantas else {"estado": "no disponible"})
+    body = await request.json()
+    if body.get("activa"):
+        _mision_vision_override.update({"clases_objetivo": ["maceta"], "max_objetivos": 1, "conf_min": 0.40,
+                                        "angulos_barrido_deg": [state.servo_angle, 82, 98, state.servo_angle]})
+        ok, msg = mision_plantas.iniciar()
+        if ok:
+            mision_plantas.arrancar_tarea()
+        return web.json_response({"ok": ok, "msg": msg, **mision_plantas.estado_dict()}, status=200 if ok else 409)
+    mision_plantas.detener("operador")
+    _mision_vision_override.clear()
+    return web.json_response({"ok": True, **mision_plantas.estado_dict()})
+
+
 def _crear_vision_activa():
     """Visión activa (vision_activa.py): mueve el servo y pulsa el conductor para centrar, acercarse y analizar un objetivo."""
     global vision_activa
@@ -1782,6 +1877,7 @@ def _crear_vision_activa():
             lista, ts = list(camera._cajas), camera._cajas_ts
         h, w = f[0].shape[:2]
         hf = vision_activa_mod.hfov_con_zoom(state.config["odometria_webcam"]["camara_hfov_deg"], getattr(camera, "zoom", 1.0))
+        lista = [{**b, "dist_m": _dist_caja_m(b["xyxy"], w, h)} for b in lista]
         return lista, ts, w, h, hf
 
     def poner_servo(a):
@@ -1826,7 +1922,7 @@ def _crear_vision_activa():
         get_cajas=cajas, get_servo=lambda: state.servo_angle, set_servo=poner_servo, conducir=conducir,
         ocupado=lambda: conductor.activo, parar=lambda: conductor.parar(),
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]), edad_scan=lidar_reactive.edad_scan_s,
-        get_config=lambda: state.config.get("vision_activa", {}), on_event=evento, capturar=capturar, clasificar=clasificar, girar=lambda g: conductor.girar_grados(g, _gyro_dps),
+        get_config=lambda: {**state.config.get("vision_activa", {}), **_mision_vision_override}, on_event=evento, capturar=capturar, clasificar=clasificar, girar=lambda g: conductor.girar_grados(g, _gyro_dps),
         get_pose=ros_bridge.pose_en_mapa, enlace_ok=lambda: enlace_c3 is not None and enlace_c3.connected,
         autonomia_activa=_autonomia_activa, reloj=time.time)
 
@@ -3725,6 +3821,7 @@ async def start_background(app: web.Application):
     odom_webcam.start()
     app["camera"] = camera
     _crear_vision_activa()
+    _crear_mision_plantas()
 
     app["stats_task"] = asyncio.create_task(stats_loop())
 
@@ -4197,6 +4294,8 @@ def create_app() -> web.Application:
     app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
     app.router.add_get("/api/giro_cerrado", giro_cerrado_handler)
     app.router.add_post("/api/giro_cerrado", giro_cerrado_handler)
+    app.router.add_get("/api/mision_plantas", mision_plantas_handler)
+    app.router.add_post("/api/mision_plantas", mision_plantas_handler)
     app.router.add_get("/api/vision_activa", vision_activa_get_handler)
     app.router.add_post("/api/vision_activa", vision_activa_post_handler)
     app.router.add_get("/api/patrol", patrol_status_handler)

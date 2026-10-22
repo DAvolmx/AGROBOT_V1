@@ -59,10 +59,13 @@ DEFECTOS = {
     "giro_cerrado": False,                              # True = centra con giro de LAZO CERRADO por giroscopio (giro_cerrado.py) en vez de pulsos fijos
     "giro_max_deg": 25.0,
     "sin_mover": False,                                 # True = ensayo: mueve el servo y DECIDE, pero los pulsos solo se registran (el robot no se mueve)
+    # 2026-10-22 (demo): tras el análisis base, una foto por vista. arriba/abajo = servo; izquierda/derecha = un pulso de giro (y vuelta).
+    "vistas_escaneo": ["arriba", "abajo", "izquierda", "volver_izquierda", "derecha", "volver_derecha"],
+    "paso_servo_vista_deg": 10.0,
 }
 
-INACTIVA, BUSCANDO, CENTRANDO, ACERCANDO, ENCUADRANDO, ANALIZANDO, ALEJANDO, PAUSA = (
-    "inactiva", "buscando", "centrando", "acercando", "encuadrando", "analizando", "alejando", "pausa")
+INACTIVA, BUSCANDO, CENTRANDO, ACERCANDO, ENCUADRANDO, ANALIZANDO, ESCANEANDO, ALEJANDO, PAUSA = (
+    "inactiva", "buscando", "centrando", "acercando", "encuadrando", "analizando", "escaneando", "alejando", "pausa")
 
 CARPETA = Path.home() / ".agrobot" / "vision_activa"
 
@@ -133,6 +136,8 @@ class VisionActiva:
         self.ultimo_objetivo: dict | None = None
         self.ultimo_resultado: dict | None = None
         self.motivo_fin: str | None = None
+        self._vistas_pend = []
+        self._vista_actual = None
 
     def _cambiar(self, nuevo: str):
         if nuevo != self.estado:
@@ -161,7 +166,7 @@ class VisionActiva:
         self._t_inicio = self.reloj()
         self.estado = BUSCANDO
         self._t_estado = self._t_inicio
-        self._set_servo(DEFECTOS["angulos_barrido_deg"][0])
+        self._set_servo(self.cfg()["angulos_barrido_deg"][0])
         self._esperar(self.cfg()["asentamiento_s"])
         self._on_event({"tipo": "inicio"})
         return True, "ok"
@@ -227,7 +232,8 @@ class VisionActiva:
         b = mejor[1]
         yaw, pitch = angulos_de_caja(b["xyxy"], ancho, alto, hfov, c["camara_yaw_offset_deg"])
         return {"clase": b["class"], "conf": round(float(b["confidence"]), 3), "yaw_deg": round(yaw, 1),
-                "pitch_deg": round(pitch, 1), "area_frac": round(mejor[0] / float(ancho * alto), 3)}
+                "pitch_deg": round(pitch, 1), "area_frac": round(mejor[0] / float(ancho * alto), 3),
+                "dist_m": b.get("dist_m")}            # distancia por cámara (base de la caja sobre el suelo), si el servidor la da
 
     def _ajustar_tilt(self, obj, c) -> bool:
         """Un paso del servo hacia centrar verticalmente. True si movió el servo."""
@@ -342,6 +348,9 @@ class VisionActiva:
             return
         self._ajustar_tilt(obj, c)
         gap = self._distancias().get("adelante")
+        # Una maceta baja puede quedar por debajo del plano del LIDAR (37,5 cm): la distancia por cámara manda si es menor.
+        if obj.get("dist_m") is not None and (gap is None or obj["dist_m"] < gap):
+            gap = float(obj["dist_m"])
         if gap is not None and gap <= c["distancia_inspeccion_m"] + c["tol_distancia_m"]:
             self._cambiar(ENCUADRANDO)
             return
@@ -388,7 +397,53 @@ class VisionActiva:
                 res["diagnostico"] = self._clasificar(res["foto"])
             except Exception as exc:
                 res["diagnostico_error"] = f"{type(exc).__name__}: {exc}"
+        res["vistas"] = [{"vista": "frente", "foto": res.get("foto")}]
         self.ultimo_resultado = res
+        vistas = list(c.get("vistas_escaneo") or [])
+        if vistas:
+            self._vistas_pend = vistas
+            self._servo_base = float(self._get_servo())
+            self._cambiar(ESCANEANDO)
+            self._on_event({"tipo": "escaneo_inicio", "vistas": len(vistas)})
+            return
+        self._cerrar_objetivo(c)
+
+    def _paso_escaneando(self, c, ahora, obj):
+        """Una vista por paso: mueve servo o da un pulso, espera a que se asiente (la propia espera de _pulso/_esperar) y saca la foto."""
+        res = self.ultimo_resultado
+        if getattr(self, "_vista_actual", None) is not None:          # la vista anterior ya se asentó: foto
+            info = {**res, "clase": res["clase"], "vista": self._vista_actual}
+            foto = None
+            if self._capturar is not None:
+                try:
+                    foto = self._capturar(info)
+                except Exception:
+                    foto = None
+            res["vistas"].append({"vista": self._vista_actual, "foto": foto, "servo": self._get_servo(), "visto": obj is not None})
+            self._vista_actual = None
+        if not self._vistas_pend:
+            self._set_servo(self._servo_base)
+            self._cerrar_objetivo(c)
+            return
+        v = self._vistas_pend.pop(0)
+        self._vista_actual = v
+        paso = float(c.get("paso_servo_vista_deg", 10.0))
+        if v == "arriba":
+            self._set_servo(max(c["servo_min_deg"], min(c["servo_max_deg"], self._servo_base + paso)))
+            self._esperar(c["asentamiento_s"])
+        elif v == "abajo":
+            self._set_servo(max(c["servo_min_deg"], min(c["servo_max_deg"], self._servo_base - paso)))
+            self._esperar(c["asentamiento_s"])
+        elif v in ("izquierda", "derecha"):
+            self._set_servo(self._servo_base)
+            self._pulso(v, c)
+        elif v.startswith("volver_"):
+            self._pulso("derecha" if v.endswith("izquierda") else "izquierda", c)
+        else:
+            self._esperar(c["asentamiento_s"])
+
+    def _cerrar_objetivo(self, c):
+        res = self.ultimo_resultado
         self._registrar(res)
         self._on_event({"tipo": "inspeccion", **res})
         self.objetivos_hechos += 1
@@ -398,6 +453,9 @@ class VisionActiva:
         self.giros_alejando = 0
         self._dir_busqueda = "derecha" if self._dir_busqueda == "izquierda" else "izquierda"
         self._cambiar(ALEJANDO)
+
+    _vistas_pend: list = []
+    _vista_actual = None
 
     def _paso_alejando(self, c, ahora, obj):
         if self.giros_alejando >= c["giros_tras_analisis"]:

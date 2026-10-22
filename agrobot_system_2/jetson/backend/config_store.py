@@ -75,7 +75,9 @@ DEFAULTS = {
         # movido desde el último escaneo (patrol.py).
         # Clases que son la PLANTA (no una plaga): al detectarlas el robot escanea, pero no se emite el
         # aviso «Plaga detectada» ni se manda alerta al gateway. Las demás clases se tratan como plaga.
-        "clases_planta": ["col_planta", "col_cogollo", "maceta_planta"],
+        "clases_planta": ["col_planta", "col_cogollo", "maceta_planta", "maceta"],
+        "modelo_maceta": "agrobot_maceta_det.pt",   # segundo modelo en la cámara (detector de macetas, Kaggle 2026-10-22)
+        "maceta_conf": 0.40,
         "escanear_al_detectar": "siempre",
     },
     "slam": {

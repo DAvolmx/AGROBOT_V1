@@ -49,6 +49,22 @@ INFER_PERIOD_S = 0.1
 # el dashboard y la galería se llena de la misma foto repetida.
 DETECTION_COOLDOWN_S = 3.0
 
+
+def fraccion_vegetacion(frame, xyxy) -> float:
+    """Fracción de píxeles verdes/amarillo-verdosos (H 20-95, S>=40, V>=40) dentro de la caja.
+
+    2026-10-22: el detector de plagas (sin clase «fondo») daba col_dano_insecto al 77-95 % sobre pufs, una puerta, un parlante y unos
+    zapatos. Esos fondos tienen <0,5 % de vegetación; una hoja, bastante más. Sirve de puerta barata ANTES de avisar y guardar."""
+    import cv2
+    h, w = frame.shape[:2]
+    x1, y1, x2, y2 = xyxy
+    x1, y1, x2, y2 = max(0, x1), max(0, y1), min(w, x2), min(h, y2)
+    if x2 - x1 < 4 or y2 - y1 < 4:
+        return 0.0
+    hsv = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
+    m = (hsv[..., 0] >= 20) & (hsv[..., 0] <= 95) & (hsv[..., 1] >= 40) & (hsv[..., 2] >= 40)
+    return float(m.mean())
+
 # Reintento de apertura de la cámara. No se reintenta en bucle cerrado: si
 # está desenchufada, martillar el driver no la trae de vuelta.
 REOPEN_DELAY_S = 2.0
@@ -77,6 +93,7 @@ class CameraWorker:
         self._cajas = []             # últimas detecciones dibujables
         self._cajas_ts = 0.0
         self._ultimo_aviso = {}      # clase -> ts del último aviso emitido
+        self._hist_clases = []       # clases vistas en los últimos fotogramas (persistencia)
 
         self._suscriptores = set()   # asyncio.Queue(maxsize=1) por cliente
         self.fps = 0.0
@@ -336,6 +353,9 @@ class CameraWorker:
                     continue
                 nombre = modelo.names[int(box.cls[0])]
                 x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
+                if cfg.get("plaga_requiere_vegetacion", True) and nombre not in cfg.get("clases_planta", []) \
+                        and fraccion_vegetacion(frame, (x1, y1, x2, y2)) < float(cfg.get("plaga_vegetacion_min", 0.08)):
+                    continue                       # caja sin hojas dentro: fondo, no planta
                 cajas.append({"class": nombre, "confidence": conf,
                               "xyxy": (x1, y1, x2, y2)})
                 nuevas.append((nombre, conf))
@@ -344,6 +364,14 @@ class CameraWorker:
                 self._cajas = cajas
                 self._cajas_ts = time.time()
             self.detecciones = len(cajas)
+
+            # Persistencia: una clase se avisa solo si salió en >= N de los últimos M fotogramas (un destello de un cuadro no es una plaga).
+            M = int(cfg.get("plaga_persistencia_ventana", 5))
+            N = int(cfg.get("plaga_persistencia_min", 3))
+            self._hist_clases.append({n for n, _ in nuevas})
+            del self._hist_clases[:-max(1, M)]
+            if N > 1:
+                nuevas = [(n, c) for n, c in nuevas if sum(1 for h in self._hist_clases if n in h) >= N]
 
             self._emitir(nuevas, frame, cfg)
 

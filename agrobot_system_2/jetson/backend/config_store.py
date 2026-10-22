@@ -50,6 +50,11 @@ DEFAULTS = {
         "active_model": None,
     },
     "detection": {
+        # Puertas contra falsos positivos (2026-10-22): vegetación mínima dentro de la caja y persistencia en N de M fotogramas.
+        "plaga_requiere_vegetacion": True,
+        "plaga_vegetacion_min": 0.08,
+        "plaga_persistencia_ventana": 5,
+        "plaga_persistencia_min": 3,
         "confidence_threshold": 0.45,
         "clip_record_threshold": 0.60,
         # Lado de la imagen que entra a YOLO. Medido en la Jetson el

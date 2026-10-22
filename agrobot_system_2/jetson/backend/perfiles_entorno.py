@@ -61,6 +61,10 @@ PERFILES = {
         # Las macetas son obstáculos ALTOS: el LIDAR (a 18 cm) sí las ve, así
         # que el cono frontal puede ser más ancho sin frenar de más.
         "cono_frontal_deg": 30,
+        # 2026-10-22 (prueba real): en interiores el color del suelo y las paredes (beige/madera, H 10-45) cae en el rango de «paja»
+        # y la cámara confundía el sendero. Dentro, el sendero sale solo del LIDAR.
+        "sendero_vision": False,
+        "sendero_paja": False,
     },
     "exterior": {
         "escala_velocidad": 0.5,
@@ -72,6 +76,8 @@ PERFILES = {
         "distancia_puntos_cm": 290,
         "sendero_pared_max_cm": 150,
         "cono_frontal_deg": 10,
+        "sendero_vision": True,
+        "sendero_paja": True,
     },
 }
 
@@ -82,6 +88,7 @@ SECCION = {
     "distancia_puntos_cm": "autonomia", "sendero_pared_max_cm": "autonomia",
     "deslizamiento_cm": "slam", "margen_parada_cm": "slam",
     "cono_frontal_deg": "slam",
+    "sendero_vision": "autonomia", "sendero_paja": "autonomia",
 }
 
 

@@ -63,7 +63,7 @@ controller_server:
       simulate_ahead_time: 1.0
 
       # ---- DWB (controlador principal) ----
-      min_vel_x: -0.2
+      min_vel_x: 0.0          # 2026-10-22: sin marcha atrás del planificador (retrocedía fuerte y mucho); el retroceso lo hace solo BackUp, despacio
       max_vel_x: 0.4
       min_vel_y: 0.0
       max_vel_y: 0.0
@@ -72,10 +72,10 @@ controller_server:
       min_speed_xy: 0.0
       max_speed_xy: 0.45
       min_speed_theta: 0.0
-      acc_lim_x: 1.0
+      acc_lim_x: 0.5
       acc_lim_y: 0.0
       acc_lim_theta: 2.0
-      decel_lim_x: -1.0
+      decel_lim_x: -0.8
       decel_lim_y: 0.0
       decel_lim_theta: -2.0
       vx_samples: 25
@@ -188,6 +188,6 @@ behavior_server:
 velocity_smoother:
   ros__parameters:
     max_velocity: [0.4, 0.0, 1.0]
-    min_velocity: [-0.2, 0.0, -1.0]
-    max_accel: [1.0, 0.0, 2.0]
-    max_decel: [-1.0, 0.0, -2.0]
+    min_velocity: [-0.06, 0.0, -1.0]      # 2026-10-22: marcha atrás suave
+    max_accel: [0.5, 0.0, 2.0]
+    max_decel: [-0.8, 0.0, -2.0]

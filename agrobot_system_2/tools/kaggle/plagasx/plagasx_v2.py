@@ -1,4 +1,4 @@
-# AGROBOT · PLAGASX v5 (negativos de interior + cajas reales de daño de hoja y mosca blanca) — base v2 — coles: plagas y enfermedades. Combina: (1) tu dataset de coles, (2) tres datasets externos de coliflor/papa,
+# AGROBOT · PLAGASX v6 (negativos de interior + cajas reales de daño de hoja, mosca blanca, pulgón, orugas y pulguilla) — base v2 — coles: plagas y enfermedades. Combina: (1) tu dataset de coles, (2) tres datasets externos de coliflor/papa,
 # (3) tu dataset de SENDEROS ('navegacion') como imágenes de fondo (plantas y caminos SIN enfermedad: reducen falsos positivos).
 # Entrena (a) un DETECTOR YOLO y (b) un CLASIFICADOR YOLO-cls. Las etiquetas de los datasets externos son de imagen completa, así que las
 # métricas que valen son las del CLASIFICADOR; el detector sirve para localizar la planta. Todo se imprime con tablas y gráficas.
@@ -23,7 +23,7 @@ random.seed(42); np.random.seed(42)
 if not DRY:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "ultralytics"], check=False)
 
-CLASES = ["col_sana", "col_amarillamiento", "col_manchas_cafe", "col_dano_insecto", "col_mildiu_velloso", "col_malformacion", "col_pudricion", "col_mosca_blanca"]
+CLASES = ["col_sana", "col_amarillamiento", "col_manchas_cafe", "col_dano_insecto", "col_mildiu_velloso", "col_malformacion", "col_pudricion", "col_mosca_blanca", "col_pulgon", "col_oruga", "col_pulguilla"]
 # nombre de carpeta externo (normalizado: minúsculas y solo letras/números) -> clase
 MAPA = {"healthy": 0, "nodisease": 0, "blackrot": 2, "alternarialeafspot": 2, "alternaria": 2, "bacterialspot": 2, "bacterialspotrot": 2,
         "ringspot": 2, "leafspot": 2, "downymildew": 4, "softrot": 6, "clubroot": 5,
@@ -41,8 +41,10 @@ mi = buscar_dir(lambda p: (p / "images").is_dir() and (p / "labels").is_dir() an
      or buscar_dir(lambda p: (p / "images").is_dir() and (p / "labels").is_dir() and "coles" in str(p).lower())
 nav = buscar_dir(lambda p: p.is_dir() and (p / "images").is_dir() and any(p.joinpath("images").glob("camino-*.jpg")))
 neg = buscar_dir(lambda p: p.is_dir() and "negativos" in p.name.lower() and (p / "images").is_dir())
-cajas = buscar_dir(lambda p: p.is_dir() and "cajas-plagas" in p.name.lower() and (p / "images" / "train").is_dir())
-print("cajas reales (daño de hoja + mosca blanca):", cajas)
+dir_cajas = buscar_dir(lambda p: p.is_dir() and "cajas-plagas" in p.name.lower() and (p / "images" / "train").is_dir())
+print("cajas reales (daño de hoja + mosca blanca):", dir_cajas)
+ip102 = buscar_dir(lambda p: (p / "data.yaml").exists() and "蚜虫" in (p / "data.yaml").read_text(encoding="utf-8", errors="ignore"))
+print("IP102 (pulgón, mosca blanca, orugas, pulguilla):", ip102)
 print("tu dataset de coles :", mi); print("navegación          :", nav); print("negativos de fondo  :", neg)
 print("contenido de", ENTRADA, ":", [p.name for p in ENTRADA.iterdir()][:20] if ENTRADA.exists() else "no existe")
 
@@ -128,16 +130,51 @@ print("imágenes de fondo (senderos):", sum(1 for r in registro if r[1] == "fond
 # ---------------- 3b) CAJAS REALES (v5, 2026-10-22): hojas de col dañadas/comidas (clase 3) y mosca blanca (clase 7) ----------------
 # Cajas dibujadas a mano sobre la imagen (no de imagen completa): mejoran la localización. Las de mosca blanca son fotos de YUCA (fondo
 # distinto a la col); las de daño, de col blanca (CC-BY-4.0, Arko007/white-cabbage-leaf-damage). Etiqueta vacía = hoja sin daño.
-if cajas is not None:
+if dir_cajas is not None:
     for sp in ("train", "val", "test"):
-        for f in sorted((cajas / "images" / sp).glob("*.jpg")):
-            lab = cajas / "labels" / sp / (f.stem + ".txt")
+        for f in sorted((dir_cajas / "images" / sp).glob("*.jpg")):
+            lab = dir_cajas / "labels" / sp / (f.stem + ".txt")
             img = cv2.imread(str(f))
             if img is None: continue
             filas = [l.split() for l in lab.read_text().splitlines() if len(l.split()) >= 5] if lab.exists() else []
             guardar(img, sp, f"caj_{f.stem}", [(int(c[0]), c[1], c[2], c[3], c[4]) for c in filas])
             registro.append((sp, "cajas", -2, f"caj_{f.stem}"))
 print("imágenes con cajas reales:", sum(1 for r in registro if r[1] == "cajas"))
+
+# ---------------- 3c) PLAGAS DE LA COL DEL IP102 (v6, 2026-10-22) con cajas reales ----------------
+# En las fotos del operador hay una colonia de PULGÓN CEROSO (Brevicoryne brassicae) y ningún modelo tenía clase de pulgón. Del IP102
+# (Wu et al., CVPR 2019) se toman solo las especies que atacan coles o se le parecen, y se agrupan: pulgones (8), mosca blanca de
+# invernadero (7), orugas/gusanos cortadores (9) y pulguilla/escarabajo pulga (10). Las fotos del IP102 son de internet, de cerca.
+IP_MAPA = {"蚜虫": 8, "长角麦蚜": 8, "麦二叉蚜": 8, "禾谷缢管蚜": 8, "苜蓿斑蚜": 8, "橘蚜": 8, "小桔蚜": 8, "苹果绣线菊蚜": 8,
+           "温室白粉虱": 7,
+           "甘蓝夜蛾": 9, "东方菜粉蝶": 9, "夜蛾": 9, "甜菜夜蛾": 9, "小地老虎": 9, "大地老虎": 9, "黄地老虎": 9, "棉斜纹夜蛾": 9,
+           "跳甲": 10}
+MAX_IP_TRAIN, MAX_IP_EVAL = 700, 150
+if ip102 is not None:
+    import yaml
+    nombres = [str(n).strip() for n in yaml.safe_load((ip102 / "data.yaml").read_text(encoding="utf-8"))["names"]]
+    ip_id = {i: IP_MAPA[n] for i, n in enumerate(nombres) if n in IP_MAPA}
+    print("clases IP102 usadas:", {nombres[i]: CLASES[k] for i, k in ip_id.items()})
+    for sp_src, destinos in (("train", ("train",)), ("valid", ("val", "test"))):
+        dimg = next((d for d in (ip102 / sp_src / "images", ip102 / sp_src) if d.is_dir()), None)
+        if dimg is None: print("IP102: falta", sp_src); continue
+        dlab = dimg.parent / "labels" if dimg.name == "images" else dimg
+        por_clase = defaultdict(list)
+        for lab in sorted(dlab.glob("*.txt")):
+            filas = [l.split() for l in lab.read_text().splitlines() if len(l.split()) >= 5]
+            mias = [(ip_id[int(c[0])], c[1], c[2], c[3], c[4]) for c in filas if int(c[0]) in ip_id]
+            if mias: por_clase[mias[0][0]].append((lab.stem, mias))
+        tope = MAX_IP_TRAIN if sp_src == "train" else 2 * MAX_IP_EVAL
+        for k, lst in por_clase.items():
+            random.shuffle(lst)
+            for j, (stem, mias) in enumerate(lst[:tope]):
+                f = next((dimg / (stem + e) for e in (".jpg", ".jpeg", ".png", ".JPG") if (dimg / (stem + e)).exists()), None)
+                img = leer_redim(f) if f is not None else None
+                if img is None: continue
+                sp = destinos[j % len(destinos)]
+                guardar(img, sp, f"ip_{k}_{stem}", mias)
+                registro.append((sp, "ip102", -2, f"ip_{k}_{stem}"))
+print("imágenes IP102 incluidas:", sum(1 for r in registro if r[1] == "ip102"))
 
 # ---------------- 4) NEGATIVOS DUROS DE INTERIOR (2026-10-22): fondos SIN planta que el detector marcó como plaga ----------------
 # Pufs, puerta, parlante, zapatos y paredes que PLAGASX confundió con col_dano_insecto/col_malformacion al 77-95 % en la prueba real.

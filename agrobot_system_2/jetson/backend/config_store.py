@@ -55,7 +55,8 @@ DEFAULTS = {
     "detection": {
         # Puertas contra falsos positivos (2026-10-22): vegetación mínima dentro de la caja y persistencia en N de M fotogramas.
         "plaga_requiere_vegetacion": True,
-        "plaga_vegetacion_min": 0.08,
+        "plaga_vegetacion_min": 0.05,
+        "plaga_bordes_max": 0.30,          # textura de pasto/paja (≈0,35) frente a hoja de col (≤0,26)
         "plaga_persistencia_ventana": 5,
         "plaga_persistencia_min": 3,
         "confidence_threshold": 0.45,

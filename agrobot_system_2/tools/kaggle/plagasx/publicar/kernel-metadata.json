@@ -18,7 +18,8 @@
   "shuvokumarbasak2030/cauliflower-disease-multi-transformation-dataset",
   "drtawfikrrahman/deep-learning-model-for-potato-pest-detection",
   "davidgomez32/agrobot-negativos-fondo-interior",
-  "davidgomez32/agrobot-cajas-plagas"
+  "davidgomez32/agrobot-cajas-plagas",
+  "cubeai/insect-pest-detection-for-yolo"
  ],
  "kernel_sources": [],
  "competition_sources": [],

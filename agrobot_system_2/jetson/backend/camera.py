@@ -50,6 +50,26 @@ INFER_PERIOD_S = 0.1
 DETECTION_COOLDOWN_S = 3.0
 
 
+def textura_bordes(frame, xyxy) -> float:
+    """Densidad de bordes (Canny) sobre los píxeles de vegetación de la caja, con la caja llevada a 256 px de lado mayor.
+
+    2026-10-22 (fotos del operador): pasto/paja ≈ 0,35; coles (con tierra alrededor) 0,06–0,26; baldosa ≈ 0,01. El detector de plagas
+    marcaba «col_amarillamiento» en todo el pasto seco y la puerta de vegetación no lo frena (el pasto ES vegetación): este sí."""
+    import cv2
+    x1, y1, x2, y2 = xyxy
+    c = frame[max(0, y1):y2, max(0, x1):x2]
+    if c.size == 0 or min(c.shape[:2]) < 4:
+        return 0.0
+    k = 256.0 / max(c.shape[:2])
+    c = cv2.resize(c, (max(8, int(c.shape[1] * k)), max(8, int(c.shape[0] * k))))
+    hsv = cv2.cvtColor(c, cv2.COLOR_BGR2HSV)
+    veg = (hsv[..., 0] >= 20) & (hsv[..., 0] <= 95) & (hsv[..., 1] >= 40) & (hsv[..., 2] >= 40)
+    if veg.mean() < 0.02:
+        return 0.0
+    e = cv2.Canny(cv2.GaussianBlur(cv2.cvtColor(c, cv2.COLOR_BGR2GRAY), (3, 3), 0), 60, 150) > 0
+    return float(e[veg].mean())
+
+
 _PROPS_CAMARA = {"auto_exposure": "CAP_PROP_AUTO_EXPOSURE", "exposure": "CAP_PROP_EXPOSURE", "gain": "CAP_PROP_GAIN",
                  "brightness": "CAP_PROP_BRIGHTNESS", "contrast": "CAP_PROP_CONTRAST", "autofocus": "CAP_PROP_AUTOFOCUS",
                  "focus": "CAP_PROP_FOCUS", "backlight": "CAP_PROP_BACKLIGHT"}
@@ -76,7 +96,7 @@ def _aplicar_ajustes_camara(cv2, cap, ajustes: dict):
 
 
 def fraccion_vegetacion(frame, xyxy) -> float:
-    """Fracción de píxeles verdes/amarillo-verdosos (H 20-95, S>=40, V>=40) dentro de la caja.
+    """Fracción de píxeles verdes/amarillo-verdosos (H 20-95, S>=60, V>=40) dentro de la caja.
 
     2026-10-22: el detector de plagas (sin clase «fondo») daba col_dano_insecto al 77-95 % sobre pufs, una puerta, un parlante y unos
     zapatos. Esos fondos tienen <0,5 % de vegetación; una hoja, bastante más. Sirve de puerta barata ANTES de avisar y guardar."""
@@ -87,7 +107,8 @@ def fraccion_vegetacion(frame, xyxy) -> float:
     if x2 - x1 < 4 or y2 - y1 < 4:
         return 0.0
     hsv = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
-    m = (hsv[..., 0] >= 20) & (hsv[..., 0] <= 95) & (hsv[..., 1] >= 40) & (hsv[..., 2] >= 40)
+    # S >= 60: la baldosa beige-amarillenta tiene tono de hoja pero poca saturación (fotos del operador, 2026-10-22)
+    m = (hsv[..., 0] >= 20) & (hsv[..., 0] <= 95) & (hsv[..., 1] >= 60) & (hsv[..., 2] >= 40)
     return float(m.mean())
 
 # Reintento de apertura de la cámara. No se reintenta en bucle cerrado: si
@@ -382,6 +403,9 @@ class CameraWorker:
                 if cfg.get("plaga_requiere_vegetacion", True) and nombre not in cfg.get("clases_planta", []) \
                         and fraccion_vegetacion(frame, (x1, y1, x2, y2)) < float(cfg.get("plaga_vegetacion_min", 0.08)):
                     continue                       # caja sin hojas dentro: fondo, no planta
+                if nombre not in cfg.get("clases_planta", []) and \
+                        textura_bordes(frame, (x1, y1, x2, y2)) > float(cfg.get("plaga_bordes_max", 0.30)):
+                    continue                       # textura de pasto (hojas finas por todas partes), no hojas de col
                 cajas.append({"class": nombre, "confidence": conf,
                               "xyxy": (x1, y1, x2, y2)})
                 nuevas.append((nombre, conf))

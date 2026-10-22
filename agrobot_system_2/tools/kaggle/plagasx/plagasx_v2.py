@@ -40,7 +40,8 @@ def buscar_dir(pred, base=ENTRADA):
 mi = buscar_dir(lambda p: (p / "images").is_dir() and (p / "labels").is_dir() and (p / "dataset.yaml").exists()) \
      or buscar_dir(lambda p: (p / "images").is_dir() and (p / "labels").is_dir() and "coles" in str(p).lower())
 nav = buscar_dir(lambda p: p.is_dir() and (p / "images").is_dir() and any(p.joinpath("images").glob("camino-*.jpg")))
-print("tu dataset de coles :", mi); print("navegación          :", nav)
+neg = buscar_dir(lambda p: p.is_dir() and "negativos" in p.name.lower() and (p / "images").is_dir())
+print("tu dataset de coles :", mi); print("navegación          :", nav); print("negativos de fondo  :", neg)
 print("contenido de", ENTRADA, ":", [p.name for p in ENTRADA.iterdir()][:20] if ENTRADA.exists() else "no existe")
 
 # ---------------- calidad de imagen ----------------
@@ -122,6 +123,19 @@ if nav is not None:
         registro.append((sp, "fondo", -1, f"fondo_{j:04d}"))
 print("imágenes de fondo (senderos):", sum(1 for r in registro if r[1] == "fondo"))
 
+# ---------------- 4) NEGATIVOS DUROS DE INTERIOR (2026-10-22): fondos SIN planta que el detector marcó como plaga ----------------
+# Pufs, puerta, parlante, zapatos y paredes que PLAGASX confundió con col_dano_insecto/col_malformacion al 77-95 % en la prueba real.
+# Se usan TODOS y sin filtro de nitidez: lo borroso y oscuro de la cámara del robot es justo lo que debe aprender a ignorar.
+if neg is not None:
+    fotos = sorted((neg / "images").glob("*.jpg"))
+    for j, f in enumerate(fotos):
+        img = leer_redim(f)
+        if img is None: continue
+        sp = "val" if j % 5 == 0 else ("test" if j % 5 == 1 else "train")        # un test propio para medir los falsos positivos
+        guardar(img, sp, f"negint_{j:04d}", [])
+        registro.append((sp, "fondo_interior", -1, f"negint_{j:04d}"))
+print("negativos duros de interior:", sum(1 for r in registro if r[1] == "fondo_interior"))
+
 df = pd.DataFrame(registro, columns=["split", "origen", "clase", "archivo"])
 df["clase_nombre"] = df.clase.map(lambda c: "fondo" if c < 0 else CLASES[c])
 display(pd.crosstab(df.clase_nombre, [df.split, df.origen], margins=True))
@@ -144,6 +158,11 @@ print("\nDETECTOR (test) · mAP50 global:", round(float(mdet.box.map50), 3), "·
 display(tabla_det)
 
 shutil.copy(RES / "runs" / "det" / "weights" / "best.pt", RES / "coles_det_best.pt")      # el detector ya está a salvo
+# Falsos positivos sobre los negativos de interior reservados para test (objetivo: 0 detecciones >= 0.45; el modelo anterior daba 77-95 %).
+_neg_test = sorted((SALIDA / "images" / "test").glob("negint_*.jpg"))
+if _neg_test:
+    _fp = sum(1 for f in _neg_test if any(float(b) >= 0.45 for r in det.predict(str(f), verbose=False, conf=0.25) for b in r.boxes.conf))
+    print(f"\nFALSOS POSITIVOS en {len(_neg_test)} fondos de interior (test): {_fp} ({100 * _fp / len(_neg_test):.1f} %)")
 import traceback
 try:
     # ---------------- 5) CLASIFICADOR (YOLO-cls): la métrica que vale ----------------

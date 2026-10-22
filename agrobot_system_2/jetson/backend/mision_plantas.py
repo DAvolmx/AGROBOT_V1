@@ -137,11 +137,24 @@ class MisionPlantas:
 
         if self.estado == INSPECCIONANDO and self.vision.estado == "inactiva":
             self._grabar(False)
+            if getattr(self.vision, "objetivos_hechos", 1) == 0:
+                # la visión terminó SIN analizar (perdió la maceta): no es una planta escaneada, y ultimo_resultado sería el de la anterior
+                self._ev({"tipo": "inspeccion_fallida", "motivo": getattr(self.vision, "motivo_fin", None)})
+                self._t_ignorar = ahora + c["pausa_tras_planta_s"]
+                self._racha = 0
+                self.expl.iniciar()
+                self.estado = EXPLORANDO
+                return
             res = getattr(self.vision, "ultimo_resultado", None) or {}
             p = self._pose()
             pos = self._objetivo.get("estimada")
             ult = getattr(self.vision, "ultimo_objetivo", None) or {}
-            if p and ult.get("dist_m") is not None:
+            if res.get("pose") and res.get("dist_cam_m") is not None:     # pose y distancia del momento del análisis (antes de alejarse)
+                pa = res["pose"]
+                r = math.radians(pa["theta_deg"] - (res.get("yaw_deg") or 0.0))
+                d = float(res["dist_cam_m"]) + 0.15
+                pos = (pa["x"] + d * math.cos(r), pa["y"] + d * math.sin(r))
+            elif p and ult.get("dist_m") is not None:
                 # La posición sale de la CAJA de la cámara (rumbo + distancia), no del hueco del LIDAR: si al acercarse se interpuso una pata
                 # de silla, el LIDAR mide la pata y la planta quedaba mal ubicada (simulación 2026-10-22: la misma planta escaneada dos veces).
                 pos = self._posicion_estimada({"yaw_deg": ult.get("yaw_deg", 0.0), "dist_m": ult["dist_m"]})

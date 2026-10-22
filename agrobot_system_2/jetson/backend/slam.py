@@ -124,7 +124,8 @@ class LidarReactive:
         None = nada a la vista en ese sector.
         """
         clave = (self.last_scan_at, cfg["robot_largo_cm"], cfg["robot_ancho_cm"],
-                 cfg["cono_frontal_deg"], cfg["cono_lateral_deg"], cfg.get("lidar_adelante_cm"), cfg.get("lidar_atras_cm"))
+                 cfg["cono_frontal_deg"], cfg["cono_lateral_deg"], cfg.get("lidar_adelante_cm"), cfg.get("lidar_atras_cm"),
+                 cfg.get("corredor_holgura_cm"))
         if self._cache is not None and self._cache[0] == clave:
             return self._cache[1]
 
@@ -134,8 +135,11 @@ class LidarReactive:
         ml_f = cfg["lidar_adelante_cm"] / 100.0 if cfg.get("lidar_adelante_cm") else ml
         ml_b = cfg["lidar_atras_cm"] / 100.0 if cfg.get("lidar_atras_cm") else ml
         semi_frontal = cfg["cono_frontal_deg"] / 2.0
+        # 2026-10-22: configurable. Con 5 cm el robot (38 cm) se metía entre las patas de una mesa (70 cm) y quedaba atrapado.
+        holgura_corredor = float(cfg.get("corredor_holgura_cm", CORREDOR_HOLGURA_M * 100)) / 100.0
         semi_lateral = cfg["cono_lateral_deg"] / 2.0
         adelante = atras = izquierda = derecha = math.inf
+        cerca = math.inf                 # distancia mínima del cuerpo a CUALQUIER punto (todas las direcciones): para girar en el sitio
 
         for p in self.last_scan:
             d = p["distance_m"]
@@ -150,13 +154,17 @@ class LidarReactive:
             if (abs(proy) <= (ml_f if proy >= 0 else ml_b) + HUELLA_TOLERANCIA_M
                     and lateral <= ma + HUELLA_TOLERANCIA_M):
                 continue
+            # distancia del punto a la huella (rectángulo): 0 dentro (ya descartado arriba), si no la mínima a los bordes
+            ex = max(0.0, (proy - ml_f) if proy >= 0 else (-proy - ml_b))
+            ey = max(0.0, lateral - ma)
+            cerca = min(cerca, math.hypot(ex, ey))
             a = _wrap180(p["angle_deg"])
             abs_a = abs(a)
             # Adelante/atrás: solo lo que queda en el camino que barre la
             # carrocería yendo recto. Con cono de 45° una pared paralela a
             # 12 cm del costado caía en el sector frontal y bloqueaba el
             # avance sin estar en la trayectoria (2026-09-19).
-            en_camino = lateral <= ma + CORREDOR_HOLGURA_M
+            en_camino = lateral <= ma + holgura_corredor
             if abs_a <= semi_frontal:
                 if en_camino:
                     adelante = min(adelante, d - ml_f)
@@ -172,7 +180,7 @@ class LidarReactive:
             return None if v == math.inf else round(max(0.0, v), 3)
 
         res = {"adelante": _fin(adelante), "atras": _fin(atras),
-               "izquierda": _fin(izquierda), "derecha": _fin(derecha)}
+               "izquierda": _fin(izquierda), "derecha": _fin(derecha), "cerca": _fin(cerca)}
         self._cache = (clave, res)
         return res
 

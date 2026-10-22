@@ -388,7 +388,9 @@ class VisionActiva:
         confs = [cf for cl, cf in self._muestras if cl == clase]
         res = {"t": time.time(), "clase": clase, "conf_media": round(sum(confs) / len(confs), 3), "muestras": len(self._muestras),
                "yaw_deg": (self.ultimo_objetivo or {}).get("yaw_deg"), "hueco_m": self._distancias().get("adelante"),
-               "servo": self._get_servo(), "pulsos": self.pulsos}
+               "servo": self._get_servo(), "pulsos": self.pulsos,
+               # pose y distancia por cámara EN ESTE INSTANTE: luego se retrocede y se gira, y quien ubique la planta necesita estas
+               "pose": self._get_pose(), "dist_cam_m": (self.ultimo_objetivo or {}).get("dist_m")}
         if self._capturar is not None:
             try:
                 res["foto"] = self._capturar(res)

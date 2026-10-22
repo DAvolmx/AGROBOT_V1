@@ -1898,7 +1898,7 @@ def _crear_vision_activa():
         import cv2
         carpeta = vision_activa_mod.CARPETA / "fotos"
         carpeta.mkdir(parents=True, exist_ok=True)
-        ruta = carpeta / f"{time.strftime('%Y%m%d_%H%M%S')}_{info['clase']}.jpg"
+        ruta = carpeta / f"{time.strftime('%Y%m%d_%H%M%S')}_{int(time.time() * 1000) % 1000:03d}_{info['clase']}_{info.get('vista', 'frente')}.jpg"
         cv2.imwrite(str(ruta), f[0])
         return str(ruta)
 

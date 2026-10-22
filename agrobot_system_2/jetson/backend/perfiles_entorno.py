@@ -58,8 +58,10 @@ PERFILES = {
         "distancia_puntos_cm": 120,
         # Paredes cerca: en una sala los dos lados cuentan siempre.
         "sendero_pared_max_cm": 120,
-        # 2026-10-22: 20° (antes 30) — el óptimo del entrenamiento calibrado (pe1_11) usa 20 y con él baja de 79 a 54 contactos.
-        "cono_frontal_deg": 20,
+        # 2026-10-22 (noche): 45° y holgura de corredor 17 cm. Con patas finas de mesa/silla (laboratorio simulado con el código del
+        # robot) el cono de 20° dejaba patas en diagonal fuera de la vista y la holgura de 5 cm metía el robot entre las patas de una mesa.
+        "cono_frontal_deg": 45,
+        "corredor_holgura_cm": 17,
         # 2026-10-22 (prueba real): en interiores el color del suelo y las paredes (beige/madera, H 10-45) cae en el rango de «paja»
         # y la cámara confundía el sendero. Dentro, el sendero sale solo del LIDAR.
         "sendero_vision": False,
@@ -78,6 +80,7 @@ PERFILES = {
         "distancia_puntos_cm": 290,
         "sendero_pared_max_cm": 150,
         "cono_frontal_deg": 10,
+        "corredor_holgura_cm": 5,
         "sendero_vision": True,
         "sendero_paja": True,
         # 2026-10-22, videos del operador: el detector por contraste veía el sendero en el 38–46 % de los cuadros; por apariencia
@@ -94,7 +97,7 @@ SECCION = {
     "lado_libre_cm": "autonomia", "retroceso_libre_cm": "autonomia",
     "distancia_puntos_cm": "autonomia", "sendero_pared_max_cm": "autonomia",
     "deslizamiento_cm": "slam", "margen_parada_cm": "slam",
-    "cono_frontal_deg": "slam",
+    "cono_frontal_deg": "slam", "corredor_holgura_cm": "slam",
     "sendero_vision": "autonomia", "sendero_paja": "autonomia", "sendero_metodo": "autonomia",
     "sendero_apariencia_umbral": "autonomia", "sendero_apariencia_textura": "autonomia",
 }

@@ -34,6 +34,7 @@ import explorador as EXP                              # noqa: E402
 import vision_activa as VA                            # noqa: E402
 import mision_plantas as MP                           # noqa: E402
 from slam import LidarReactive                        # noqa: E402
+from anticolision import Anticolision                 # noqa: E402
 import sendero as SEN                                 # noqa: E402
 
 CFG_ROBOT = json.loads((AQUI.parent / "jetson" / "backend" / "agrobot_config.json").read_text())
@@ -153,9 +154,17 @@ class Demo:
         self.cajas, self.cajas_ts = [], 0.0
         self.t_sim = 0.0
         cfg_ctl = lambda: CFG_ROBOT["control"]
-        self.conductor = pulse_drive.ConductorPulsos(send_command=lambda v, w, sc=0: self.act.send_command(v, w, self.t_sim),
+        self.anticol = Anticolision(reloj=lambda: self.t_sim)
+        self.conductor = pulse_drive.ConductorPulsos(send_command=self._enviar,
                                                      emergency_stop=lambda: self.act.emergency_stop(self.t_sim), get_config=cfg_ctl)
         self.conductor.modo = ctl.get("modo_manejo", "preciso")
+
+    def _enviar(self, v, w, sc=0):
+        """Como ActuatorController._aplicar del robot: la anticolisión con retroceso filtra cada orden antes del actuador."""
+        v2, w2, ev, _ = self.anticol.filtrar(v, w, self.distancias(), self.lidar.edad_scan_s(), CFG_ROBOT["safety"])
+        if ev:
+            self.eventos.append({"t": round(self.t_sim, 1), "tipo": "anticolision", **{k: ev[k] for k in list(ev)[:3]}})
+        self.act.send_command(v2, w2, self.t_sim)
 
     # ------------------- sensores sintéticos
     def pose(self):
@@ -283,7 +292,8 @@ class Demo:
                                                       omega_max=CFG_ROBOT["control"]["max_omega_rps"], maniobra=False),
             ocupado=lambda: self.conductor.activo, parar=self.conductor.parar, distancias=self.distancias, edad_scan=self.lidar.edad_scan_s,
             get_config=lambda: vcfg, on_event=lambda e: ev({"origen": "vision", **{k: v for k, v in e.items() if k in ("tipo", "estado", "motivo", "clase")}}),
-            capturar=lambda info: f"foto_{info.get('vista', 'frente')}", autonomia_activa=lambda: self.expl.activo, carpeta=Path("/tmp"))
+            capturar=lambda info: f"foto_{info.get('vista', 'frente')}", autonomia_activa=lambda: self.expl.activo, carpeta=Path("/tmp"),
+            get_pose=lambda: {"x": self.pose()[0], "y": self.pose()[1], "theta_deg": math.degrees(self.pose()[2])})
 
         def led(on):
             self.led = on
@@ -329,11 +339,16 @@ class Demo:
                 "motivo_fin": self.mision.motivo_fin, "eventos": self.eventos[-60:], "tray": self.tray[::5]}
 
 
+AJUSTES = {}
+
+
 def una(args):
-    layout, suelo, semilla, tiempo = args
+    layout, suelo, semilla, tiempo, ajustes = args
+    for sec, kv in ajustes.items():
+        CFG_ROBOT.setdefault(sec, {}).update(kv)
     d = Demo(layout, suelo, semilla, tiempo)
     r = asyncio.run(d.correr())
-    r.update(layout=layout, semilla=semilla)
+    r.update(layout=layout, semilla=semilla, ajustes=ajustes)
     return r
 
 
@@ -365,17 +380,22 @@ def main():
     ap.add_argument("--semillas", default="1")
     ap.add_argument("--tiempo", type=float, default=420)
     ap.add_argument("--procs", type=int, default=6)
+    ap.add_argument("--ajustes", default="", help='JSON con variantes de config, p. ej. {"duty60":{"control":{"suavidad_duty":0.6}}}')
     a = ap.parse_args()
     carpeta = Path.home() / ".agrobot" / "informes" / f"demo_{time.strftime('%Y%m%d_%H%M')}"
     carpeta.mkdir(parents=True, exist_ok=True)
-    trabajos = [(int(l), v, int(s), a.tiempo) for l in a.layouts.split(",") for v in a.variantes.split(",") for s in a.semillas.split(",")]
+    variantes_cfg = json.loads(a.ajustes) if a.ajustes else {"robot": {}}
+    trabajos = [(int(l), v, int(s), a.tiempo, aj) for l in a.layouts.split(",") for v in a.variantes.split(",") for s in a.semillas.split(",")
+                for aj in variantes_cfg.values()]
+    nombres = {json.dumps(aj, sort_keys=True): n for n, aj in variantes_cfg.items()}
     print(f"[demo] {len(trabajos)} simulaciones en tiempo real (~{a.tiempo / 60:.0f} min) -> {carpeta}", flush=True)
     with Pool(min(a.procs, len(trabajos))) as p:
         res = p.map(una, trabajos)
-    filas = ["| layout | suelo | plantas escaneadas (reales) | vistas | contactos | videos | LED s | cobertura m² | tiempo s | fin |", "|---|---|---|---|---|---|---|---|---|---|"]
+    filas = ["| variante | layout | suelo | plantas escaneadas (reales) | vistas | contactos | videos | LED s | cobertura m² | tiempo s | fin |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in res:
-        dibujar(r, laboratorio(r["layout"]), carpeta / f"tray_L{r['layout']}_{r['suelo']}_s{r['semilla']}.png")
-        filas.append(f"| {r['layout']} | {r['suelo']} | {r['plantas_inspeccionadas']} ({r['plantas_distintas_reales']}) | {r['vistas_por_planta']} | "
+        nv = nombres.get(json.dumps(r["ajustes"], sort_keys=True), "?")
+        dibujar(r, laboratorio(r["layout"]), carpeta / f"tray_{nv}_L{r['layout']}_{r['suelo']}_s{r['semilla']}.png")
+        filas.append(f"| {nv} | {r['layout']} | {r['suelo']} | {r['plantas_inspeccionadas']} ({r['plantas_distintas_reales']}) | {r['vistas_por_planta']} | "
                      f"{r['contactos']} | {r['videos']} | {r['led_encendido_s']} | {r['cobertura_m2']} | {r['tiempo_s']} | {r['motivo_fin']} |")
     (carpeta / "resumen.json").write_text(json.dumps(res, indent=1, ensure_ascii=False, default=str))
     (carpeta / "informe.md").write_text("# Demo plantas en maceta (simulador, código del robot)\n\n" + "\n".join(filas) + "\n")

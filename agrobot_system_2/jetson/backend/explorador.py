@@ -194,6 +194,19 @@ class ExploradorReactivo:
         return math.inf if v is None else v
 
     def _conducir(self, accion, maniobra=True, esc_dur=1.0):
+        # Girar en el sitio barre un círculo de ~31 cm con las esquinas: una pata de silla o mesa en diagonal (fuera de los sectores
+        # frontal y laterales) quedaba dentro y se golpeaba (simulación del laboratorio, 2026-10-22). Si algo está a menos de
+        # `margen_giro_m` del cuerpo y hay sitio detrás, primero se retrocede un pulso; el giro llega en el ciclo siguiente.
+        if accion in ("izquierda", "derecha"):
+            cfg = self._get_config() or {}
+            d = self._distancias() or {}
+            margen = float(cfg.get("margen_giro_m", 0.10))
+            atras = self._hueco(d, "atras")
+            if d.get("cerca") is not None and d["cerca"] < margen and atras > max(0.30, float(cfg.get("retroceso_libre_cm", 30)) / 100.0):
+                self.estado = f"algo a {d['cerca'] * 100:.0f} cm del costado: retrocedo antes de girar"
+                self._rumbo_ref = None
+                self._conducir_cb("atras", False)
+                return
         if accion in ("izquierda", "derecha", "atras") and not self._corr_propia:
             self._rumbo_ref = None          # giro o marcha atrás a propósito: el rumbo deseado será el nuevo
         if esc_dur != 1.0:

@@ -1137,6 +1137,26 @@ WAYPOINTS_PATH = _AQUI / "patrol_waypoints.json"
 odom_webcam: OdometriaWebcam | None = None
 
 
+def _distancias_explorador() -> dict:
+    """Huecos del LIDAR + lo que la CÁMARA ve en el suelo delante (2026-10-22).
+
+    El LIDAR está a 37,5 cm: cojines, cajas, macetas bajas no existen para él y el explorador se les echaba encima. suelo_libre (método por
+    apariencia) da la distancia al primer obstáculo del suelo en el camino del robot; si es menor que la del LIDAR, manda la cámara.
+    Se apaga con autonomia.camara_obstaculos = false."""
+    d = lidar_reactive.distancias(state.config["slam"])
+    if not state.config["autonomia"].get("camara_obstaculos", True):
+        return d
+    cam = suelo_libre.hueco_delante(state.config["slam"]["robot_ancho_cm"] / 100.0)
+    if cam is None:
+        return d
+    cam = max(0.0, cam - state.config["slam"]["robot_largo_cm"] / 200.0)       # desde la cara delantera, como el LIDAR
+    if d.get("adelante") is None or cam < d["adelante"]:
+        d = dict(d)
+        d["adelante"] = cam
+        d["adelante_fuente"] = "camara"
+    return d
+
+
 def _servo_al_frente() -> tuple[bool, str]:
     """¿La cámara mira al frente y quieta? Si no, la odometría visual leería
     el giro del servo como giro del robot. Se mira lo que REPORTA el C3, no lo
@@ -1472,8 +1492,13 @@ async def _bucle_suelo_libre():
             # Con el barrido activo la cámara mira a propósito al suelo cercano o
             # al sendero: si está quieta en un ángulo conocido, la geometría
             # corregida por tilt (ver _geometria_camara) sí vale.
-            if not al_frente and not _barrido_estable():
-                suelo_libre.ultimo = None          # nada de datos con la cámara girada
+            st_srv = state.actuator_status or {}
+            # 2026-10-22: con el servo QUIETO en cualquier ángulo conocido la geometría vale (_geometria_camara suma el tilt del servo
+            # siempre); antes solo se aceptaba HOME y con la cámara a 64° (mirando el suelo cercano) no había ningún dato.
+            servo_quieto = bool(st_srv) and not st_srv.get("scanning") and time.time() - st_srv.get("_received_at", 0) < 1.0 \
+                and st_srv.get("servo_angle") is not None
+            if not al_frente and not _barrido_estable() and not servo_quieto:
+                suelo_libre.ultimo = None          # nada de datos con la cámara moviéndose
                 continue
             await asyncio.to_thread(suelo_libre.analizar, cv2, dato[0], _geometria_camara())
             # Paralaje: con el barrido activo, acumula avance y alimenta el
@@ -3653,7 +3678,7 @@ async def start_background(app: web.Application):
         except Exception as exc:
             print(f"[exploración] FSM no disponible ({exc}); uso ExploradorReactivo", flush=True)
     explorador = _ClaseExpl(
-        distancias=lambda: lidar_reactive.distancias(state.config["slam"]),
+        distancias=_distancias_explorador,
         get_pose=ros_bridge.pose_en_mapa,
         conducir=_conducir_pulso,
         parar=lambda: conductor.parar(),

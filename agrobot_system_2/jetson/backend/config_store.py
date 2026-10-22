@@ -202,6 +202,7 @@ DEFAULTS = {
         # Política entrenada en el simulador (politica.pt). Apagada por
         # defecto: se enciende cuando se ha comprobado que mejora.
         "politica_activa": False,
+        "camara_obstaculos": True,        # el explorador usa también el suelo libre de la cámara (obstáculos bajos que el LIDAR no ve)
     },
     "odometria_webcam": {
         # Odometría visual con la webcam (odometria_webcam.py). `habilitada`

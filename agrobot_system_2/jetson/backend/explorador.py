@@ -557,8 +557,20 @@ class ExploradorReactivo:
                         await asyncio.sleep(ESPERA_INCERTIDUMBRE_S)
                         continue
 
+                    # El rumbo fusionado va ANTES que la política: si no, una política que siempre dice «adelante» lo anulaba (2026-10-22).
+                    a_rumbo_previo = self._rumbo_correccion(cfg)
+                    if a_rumbo_previo:
+                        self.estado = f"corrigiendo rumbo ({a_rumbo_previo})"
+                        self._corr_propia = True
+                        try:
+                            self._conducir(a_rumbo_previo, maniobra=False, esc_dur=float(cfg.get("rumbo_pulso_escala", 1.0)))
+                        finally:
+                            self._corr_propia = False
+                        self.correcciones_rumbo += 1
+                        self._sin_corregir = 0
+                        continue
                     accion_politica = None
-                    if self._politica is not None and self._politica.disponible:
+                    if self._politica is not None and self._politica.disponible and cfg.get("politica_activa", False):
                         accion_politica, seguridad = self._politica.decidir(self._percepcion())
                     if accion_politica in ("adelante", "izquierda", "derecha"):
                         self.estado = f"política: {accion_politica} ({seguridad:.2f})"

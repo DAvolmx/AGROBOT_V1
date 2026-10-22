@@ -105,6 +105,12 @@ def un_control(control, a, t_ini, presupuesto_s):
     if control == "pulsos" and a.espacio == "amplio":      # un candidato con el rumbo fusionado, para que la evolución parta de algo bueno
         sem = S.Config(nombre="semilla_rumbo", modo="preciso", escala_velocidad=0.3, rumbo_zm_deg=4.0, rumbo_pulso_escala=0.5)
     cands, vistos = ([sem] if (control == "pulsos" and a.espacio == "amplio") else []), set()
+    if control == "pulsos" and a.espacio == "amplio":      # el perfil que YA está aplicado en el robot compite como candidato (se ve si algo lo supera con la física calibrada)
+        f_ap = SALIDA / "modelo_manejo_optimo_20261022_1417.json"
+        if f_ap.exists():
+            cfg_ap = json.loads(f_ap.read_text())["config"]
+            cfg_ap["nombre"] = "optimo_aplicado"
+            cands.append(S.Config(**cfg_ap))
     while len(cands) < a.n:
         d = {k: rng.choice(v) for k, v in esp.items()}
         if tuple(d.values()) in vistos:

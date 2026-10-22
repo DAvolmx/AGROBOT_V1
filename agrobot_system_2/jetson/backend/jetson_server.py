@@ -1719,9 +1719,24 @@ async def emergencia_handler(request: web.Request):
     """POST /api/emergencia — parada total por HTTP (el WebSocket se cae al
     bloquear la pantalla del móvil; una petición HTTP llega o da error)."""
     try:
-        manejo = (await request.json()).get("tipo") == "manejo"
+        tipo = (await request.json()).get("tipo")
     except Exception:
-        manejo = False
+        tipo = None
+    if tipo == "soltar":
+        # 2026-10-22: el dashboard perdió el foco (otra pestaña, el video, una captura, pantalla bloqueada). Antes eso era PARADA DE
+        # EMERGENCIA y apagaba el modo autónomo a cada rato. Ahora solo se suelta el manejo MANUAL; la autonomía sigue.
+        if _autonomia_activa() or (vision_activa is not None and getattr(vision_activa, "activa", False)):
+            return web.json_response({"ok": True, "detenido": [], "nota": "autonomía activa: sigue"})
+        hecho = []
+        for nombre, fn in (("pulsos", lambda: conductor is not None and conductor.parar()),
+                           ("motores", lambda: actuator_proto is not None and actuator_proto.emergency_stop())):
+            try:
+                fn()
+                hecho.append(nombre)
+            except Exception as exc:
+                print(f"[soltar] {nombre}: {exc}", flush=True)
+        return web.json_response({"ok": True, "detenido": hecho})
+    manejo = tipo == "manejo"
     hecho = _parada_total("manejo HTTP" if manejo else "dashboard HTTP", emergencia=not manejo)
     return web.json_response({"ok": True, "detenido": hecho})
 

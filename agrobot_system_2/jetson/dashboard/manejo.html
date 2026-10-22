@@ -20,7 +20,7 @@ $('power').oninput=()=>{$('powerLabel').textContent=$('power').value+'%'};
 document.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>drive(b.dataset.action));
 $('stop').onpointerdown=e=>{e.preventDefault();stop()};$('stop').onclick=stop;
 window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.code==='Space'){e.preventDefault();stop();return}const a={ArrowUp:'adelante',ArrowDown:'atras',ArrowLeft:'izquierda',ArrowRight:'derecha'}[e.key];if(a){e.preventDefault();if(!e.repeat)drive(a)}});
-window.addEventListener('blur',stop);document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});window.addEventListener('pagehide',()=>navigator.sendBeacon('/api/emergencia',''));
+const soltar=()=>fetch('/api/emergencia',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'soltar'})}).catch(()=>{});window.addEventListener('blur',soltar);document.addEventListener('visibilitychange',()=>{if(document.hidden)soltar()});window.addEventListener('pagehide',()=>navigator.sendBeacon('/api/emergencia',''));
 async function status(){try{const r=await fetch('/api/estado/completo',{cache:'no-store'});if(!r.ok)throw Error(r.status);const d=await r.json();connected=d.c3.conectado;$('status').textContent=`C3: ${connected?'enlace disponible; verificar mapeo y modo Jetson':'apagada o desconectada'}\nPerfil: ${d.perfil}\nTimeout de órdenes: ${d.deadman_s}s, siempre activo\nIMU: ${d.imu.vigente?'datos recientes':'sin datos recientes; no se usa para dirigir'}`;}catch(e){connected=false;$('status').textContent='Sin conexión con Jetson'}buttons()}
 buttons();status();setInterval(status,1000);
 </script></html>

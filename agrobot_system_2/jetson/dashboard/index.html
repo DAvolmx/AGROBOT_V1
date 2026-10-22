@@ -3563,8 +3563,11 @@ input[type="text"], select { font-family: inherit; }
   }
   const safeguardButton=document.getElementById('safeguard-btn');
   if(safeguardButton){safeguardButton.disabled=true;safeguardButton.textContent='Timeout siempre activo';}
-  window.addEventListener('blur',()=>pararTodo());
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)pararTodo();});
+  // Perder el foco solo SUELTA el manejo manual; no apaga la autonomía (antes: parada de emergencia a cada rato, 2026-10-22).
+  const soltarManejo = () => fetch('/api/emergencia', {method: 'POST', keepalive: true, headers: {'Content-Type': 'application/json'},
+                                                        body: JSON.stringify({tipo: 'soltar'})}).catch(() => {});
+  window.addEventListener('blur', soltarManejo);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) soltarManejo(); });
   window.addEventListener('pagehide',()=>navigator.sendBeacon('/api/emergencia',''));
   // Se quitó (2026-10-15) la barra "DEMO MANUAL" que se inyectaba con
   // document.body.prepend(): el <body> es un layout de barra lateral +

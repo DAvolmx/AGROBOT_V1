@@ -566,6 +566,7 @@ class VisionSendero:
         self._historial_error = deque(maxlen=5)
         self._error_filtrado = None
         self._perdidas = 0
+        self._mem_apariencia = None
 
     def cenital(self, geo) -> Cenital:
         clave = tuple(geo[k] for k in Cenital.CLAVES)
@@ -574,6 +575,13 @@ class VisionSendero:
         return self._cenital
 
     def detectar(self, cv2, frame, cfg, geo) -> dict:
+        if cfg.get("sendero_metodo", "contraste") == "apariencia":
+            # 2026-10-22: camino = lo que se parece (color + textura) al suelo de delante; ver sendero_apariencia.py
+            import sendero_apariencia
+            if self._mem_apariencia is None:
+                self._mem_apariencia = sendero_apariencia.MemoriaApariencia()
+            return sendero_apariencia.detectar_apariencia(cv2, frame, cfg, geo, self.cenital(geo), self._mem_apariencia,
+                                                          centro_previo=self.lateral_m or 0.0)
         return detectar(cv2, frame, cfg, geo, self.cenital(geo),
                         centro_previo=self.lateral_m or 0.0, ancho_previo=self.ancho_m,
                         modelo=self.modelo, angulo_previo=self.angulo_deg)

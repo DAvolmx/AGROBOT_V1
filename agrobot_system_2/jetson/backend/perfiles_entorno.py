@@ -64,6 +64,9 @@ PERFILES = {
         # y la cámara confundía el sendero. Dentro, el sendero sale solo del LIDAR.
         "sendero_vision": False,
         "sendero_paja": False,
+        "sendero_metodo": "apariencia",        # si se enciende la visión dentro: el suelo por apariencia separa bien la baldosa
+        "sendero_apariencia_umbral": 2.6,
+        "sendero_apariencia_textura": 1.2,
     },
     "exterior": {
         "escala_velocidad": 0.5,
@@ -77,6 +80,11 @@ PERFILES = {
         "cono_frontal_deg": 10,
         "sendero_vision": True,
         "sendero_paja": True,
+        # 2026-10-22, videos del operador: el detector por contraste veía el sendero en el 38–46 % de los cuadros; por apariencia
+        # (color + textura del suelo de delante) en el 82–85 %, y recorta bien un callejón de tierra con obstáculos.
+        "sendero_metodo": "apariencia",
+        "sendero_apariencia_umbral": 1.4,
+        "sendero_apariencia_textura": 2.5,
     },
 }
 
@@ -87,7 +95,8 @@ SECCION = {
     "distancia_puntos_cm": "autonomia", "sendero_pared_max_cm": "autonomia",
     "deslizamiento_cm": "slam", "margen_parada_cm": "slam",
     "cono_frontal_deg": "slam",
-    "sendero_vision": "autonomia", "sendero_paja": "autonomia",
+    "sendero_vision": "autonomia", "sendero_paja": "autonomia", "sendero_metodo": "autonomia",
+    "sendero_apariencia_umbral": "autonomia", "sendero_apariencia_textura": "autonomia",
 }
 
 

@@ -120,5 +120,41 @@
       "y": 7.179887202470443,
       "theta_deg": 0.0
     }
+  },
+  "vision_activa": {
+    "activa": false,
+    "clases_objetivo": [
+      "planta",
+      "col",
+      "maceta"
+    ],
+    "conf_min": 0.35,
+    "camara_yaw_offset_deg": 0.0,
+    "tol_rumbo_deg": 6.0,
+    "tol_tilt_deg": 4.0,
+    "ganancia_tilt": 0.7,
+    "paso_servo_max_deg": 4.0,
+    "servo_min_deg": 60,
+    "servo_max_deg": 125,
+    "distancia_inspeccion_m": 0.45,
+    "tol_distancia_m": 0.08,
+    "no_avanzar_bajo_m": 0.2,
+    "asentamiento_s": 1.0,
+    "analisis_s": 2.0,
+    "dwell_barrido_s": 1.4,
+    "angulos_barrido_deg": [
+      98,
+      82,
+      112,
+      98
+    ],
+    "max_giros_busqueda": 26,
+    "giros_tras_analisis": 4,
+    "max_pulsos_objetivo": 16,
+    "max_objetivos": 3,
+    "perder_objetivo_s": 4.0,
+    "tiempo_max_s": 600.0,
+    "scan_max_s": 1.0,
+    "sin_mover": false
   }
 }

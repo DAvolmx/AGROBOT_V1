@@ -279,6 +279,8 @@ DEFAULTS = {
     },
 }
 
+from vision_activa import DEFECTOS as _VISION_ACTIVA_DEFECTOS   # noqa: E402  (calibracion_camara es lo único que importa)
+DEFAULTS["vision_activa"] = dict(_VISION_ACTIVA_DEFECTOS)         # APAGADA por defecto (2026-10-22)
 DEFAULTS["control"].setdefault("c3_wifi_only", False)
 DEFAULTS["control"].setdefault("c3_usb", True)       # cable USB a la C3 como vía principal (2026-10-21)
 

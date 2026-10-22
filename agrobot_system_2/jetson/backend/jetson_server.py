@@ -38,6 +38,7 @@ from protocol import SERVO_HOME_DEG, clamp_servo
 from ble_link import BleActuatorLink
 import imu_nivel
 import anticolision
+import vision_activa as vision_activa_mod
 import entorno_auto
 from enlace_c3 import EnlaceC3
 import udp_actuator_link
@@ -551,6 +552,7 @@ async def calibrar_imu_nivel_handler(request: web.Request):
 # transporte por debajo: en vez de un datagrama al 192.168.12.50 escribe en
 # un puerto serie. Ver uart_link.py para por que se dejaron el WiFi y el BLE.
 anticolision_global = anticolision.Anticolision()
+vision_activa = None          # vision_activa.VisionActiva (se crea al arrancar; APAGADA hasta que el operador la pide)
 
 
 class ActuatorController:
@@ -1016,6 +1018,8 @@ async def ws_handler(request: web.Request):
                 continue
 
             if cmd.get("type") == "control":
+                if vision_activa is not None and (cmd.get("v") or cmd.get("omega")):
+                    vision_activa.cancelar("orden manual")
                 now = time.monotonic()
                 # Un "parar" nunca se descarta por el limitador: antes, si
                 # llegaba a menos de 50 ms del último comando (un toque corto
@@ -1658,6 +1662,7 @@ def _parada_total(origen: str, remote: bool = True, emergencia: bool = True) -> 
     sirve también desde el callback UDP del LoRa."""
     hecho = []
     pasos = [
+        ("vision_activa", lambda: vision_activa is not None and vision_activa.cancelar("parada")),
         ("evasion", _detener_evasion),
         ("paso_robotico", lambda: paso_robotico is not None and paso_robotico.detener()),
         ("exploracion", lambda: explorador is not None and explorador.detener()),
@@ -1701,6 +1706,86 @@ def _pulso_robotico(accion: str, escala: float, maniobra: bool):
     ctrl = state.config["control"]
     conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * escala,
                       omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
+
+
+def _crear_vision_activa():
+    """Visión activa (vision_activa.py): mueve el servo y pulsa el conductor para centrar, acercarse y analizar un objetivo."""
+    global vision_activa
+
+    def cajas():
+        if camera is None:
+            return None
+        f = camera.ultimo_frame()
+        if f is None:
+            return None
+        with camera._lock:
+            lista, ts = list(camera._cajas), camera._cajas_ts
+        h, w = f[0].shape[:2]
+        hf = vision_activa_mod.hfov_con_zoom(state.config["odometria_webcam"]["camara_hfov_deg"], getattr(camera, "zoom", 1.0))
+        return lista, ts, w, h, hf
+
+    def poner_servo(a):
+        state.servo_angle = clamp_servo(float(a))
+        if actuator_proto is not None:
+            actuator_proto.send_actuator_update()
+        _schedule(state.broadcast({"type": "actuator_setpoint", "data": {"servo_angle": state.servo_angle, "led": state.led_on}}))
+
+    def conducir(accion):
+        ctrl = state.config["control"]
+        esc = state.config["autonomia"]["escala_velocidad"]
+        conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * esc, omega_max=ctrl["max_omega_rps"], maniobra=False)
+
+    def capturar(info):
+        f = camera.ultimo_frame() if camera is not None else None
+        if f is None:
+            return None
+        import cv2
+        carpeta = vision_activa_mod.CARPETA / "fotos"
+        carpeta.mkdir(parents=True, exist_ok=True)
+        ruta = carpeta / f"{time.strftime('%Y%m%d_%H%M%S')}_{info['clase']}.jpg"
+        cv2.imwrite(str(ruta), f[0])
+        return str(ruta)
+
+    def evento(e):
+        print(f"[vision_activa] {e}", flush=True)
+        _schedule(state.broadcast({"type": "vision_activa", "data": e}))
+        if e.get("tipo") in ("inspeccion", "fin", "pausa"):
+            txt = {"inspeccion": f"Inspección: {e.get('clase')} ({e.get('conf_media')})",
+                   "fin": f"Visión activa terminada: {e.get('motivo')}", "pausa": f"Visión activa en pausa: {e.get('motivo')}"}[e["tipo"]]
+            _schedule(state.broadcast({"type": "toast", "data": {"kind": "info", "title": "Visión activa", "message": txt}}))
+
+    vision_activa = vision_activa_mod.VisionActiva(
+        get_cajas=cajas, get_servo=lambda: state.servo_angle, set_servo=poner_servo, conducir=conducir,
+        ocupado=lambda: conductor.activo, parar=lambda: conductor.parar(),
+        distancias=lambda: lidar_reactive.distancias(state.config["slam"]), edad_scan=lidar_reactive.edad_scan_s,
+        get_config=lambda: state.config.get("vision_activa", {}), on_event=evento, capturar=capturar,
+        get_pose=ros_bridge.pose_en_mapa, enlace_ok=lambda: enlace_c3 is not None and enlace_c3.connected,
+        autonomia_activa=_autonomia_activa, reloj=time.time)
+
+
+async def vision_activa_get_handler(request: web.Request):
+    """GET /api/vision_activa — estado de la visión activa y su configuración."""
+    if vision_activa is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    return web.json_response({**vision_activa.estado_dict(), "config": state.config.get("vision_activa", {})})
+
+
+async def vision_activa_post_handler(request: web.Request):
+    """POST /api/vision_activa {"activa": true|false} — la ENCIENDE (mueve el servo y el robot en pulsos cortos) o la para."""
+    if vision_activa is None:
+        return web.json_response({"error": "no disponible"}, status=503)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if body.get("activa"):
+        ok, msg = vision_activa.iniciar()
+        if not ok:
+            return web.json_response({"error": msg}, status=409)
+        vision_activa.arrancar_tarea()
+    else:
+        vision_activa.cancelar("detenida por el operador")
+    return web.json_response(vision_activa.estado_dict())
 
 
 async def paso_get_handler(request: web.Request):
@@ -1760,6 +1845,8 @@ async def drive_handler(request: web.Request):
     except Exception:
         body = {}
     accion = body.get("accion", "")
+    if accion and accion != "parar" and vision_activa is not None:
+        vision_activa.cancelar("orden manual")             # el operador manda: la visión activa no pelea con él
 
     if accion == "parar":
         # Parar lo para TODO (misma parada que el botón de emergencia).
@@ -2524,7 +2611,7 @@ async def calibration_update_handler(request: web.Request):
 # =============================================
 # ===== PARÁMETROS (SLAM / DETECCIÓN / SEGURIDAD) =====
 # =============================================
-PARAM_SECTIONS = ("slam", "detection", "safety", "control", "odometria_webcam", "autonomia")
+PARAM_SECTIONS = ("slam", "detection", "safety", "control", "odometria_webcam", "autonomia", "vision_activa")
 
 # Topes que un cliente NO puede sobrepasar por más que mande cualquier cosa
 # al POST. La sección `control` multiplica directamente lo que sale hacia
@@ -3540,6 +3627,7 @@ async def start_background(app: web.Application):
     )
     odom_webcam.start()
     app["camera"] = camera
+    _crear_vision_activa()
 
     app["stats_task"] = asyncio.create_task(stats_loop())
 
@@ -4010,6 +4098,8 @@ def create_app() -> web.Application:
     app.router.add_get("/api/mapas", mapas_listar_handler)
     app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)
     app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
+    app.router.add_get("/api/vision_activa", vision_activa_get_handler)
+    app.router.add_post("/api/vision_activa", vision_activa_post_handler)
     app.router.add_get("/api/patrol", patrol_status_handler)
     app.router.add_post("/api/patrol/record", patrol_record_handler)
     app.router.add_post("/api/exploracion/start", exploracion_start_handler)

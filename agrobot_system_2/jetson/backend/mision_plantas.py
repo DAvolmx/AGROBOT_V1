@@ -140,10 +140,11 @@ class MisionPlantas:
             res = getattr(self.vision, "ultimo_resultado", None) or {}
             p = self._pose()
             pos = self._objetivo.get("estimada")
-            if p and res.get("hueco_m") is not None:                     # tras acercarse, la posición desde el robot es más fiable
-                d = float(res["hueco_m"]) + 0.30
-                r = math.radians(p["theta_deg"])
-                pos = (p["x"] + d * math.cos(r), p["y"] + d * math.sin(r))
+            ult = getattr(self.vision, "ultimo_objetivo", None) or {}
+            if p and ult.get("dist_m") is not None:
+                # La posición sale de la CAJA de la cámara (rumbo + distancia), no del hueco del LIDAR: si al acercarse se interpuso una pata
+                # de silla, el LIDAR mide la pata y la planta quedaba mal ubicada (simulación 2026-10-22: la misma planta escaneada dos veces).
+                pos = self._posicion_estimada({"yaw_deg": ult.get("yaw_deg", 0.0), "dist_m": ult["dist_m"]})
             self.plantas.append({"n": len(self.plantas) + 1, "x": None if pos is None else round(pos[0], 2),
                                  "y": None if pos is None else round(pos[1], 2), "clase": res.get("clase"),
                                  "vistas": len(res.get("vistas", [])), "motivo_fin_vision": getattr(self.vision, "motivo_fin", None)})

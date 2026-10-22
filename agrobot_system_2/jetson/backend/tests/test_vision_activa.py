@@ -86,9 +86,11 @@ def test_encuentra_centra_se_acerca_y_analiza(tmp_path):
     assert va.estado == V.INACTIVA
     assert "inspeccion" in [e["tipo"] for e in m.eventos]
     assert va.objetivos_hechos == 1 and "objetivos inspeccionados" in va.motivo_fin
-    assert abs(m.rumbo - m.theta) <= 12.0                                           # quedó mirando a la planta
-    assert m.distancias()["adelante"] is not None and m.distancias()["adelante"] <= 0.45 + 0.08 + 0.12
+    insp = [e for e in m.eventos if e["tipo"] == "inspeccion"][0]
+    assert abs(insp["yaw_deg"]) <= 12.0                                             # al inspeccionar estaba mirando a la planta
+    assert insp["hueco_m"] is not None and insp["hueco_m"] <= 0.55 + 0.08 + 0.12   # y cerca
     assert "adelante" in m.pulsos and "izquierda" in m.pulsos
+    assert "atras" in m.pulsos                                                      # al terminar se aleja antes de girar (2026-10-22)
     assert (tmp_path / (__import__("time").strftime("%Y%m%d") + ".jsonl")).exists()
 
 

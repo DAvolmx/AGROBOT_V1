@@ -41,7 +41,7 @@ DEFECTOS = {
     "paso_servo_max_deg": 4.0,
     "servo_min_deg": 60,
     "servo_max_deg": 125,
-    "distancia_inspeccion_m": 0.45,                     # hueco LIDAR (hasta la carrocería) al que se inspecciona
+    "distancia_inspeccion_m": 0.55,                     # hueco LIDAR (hasta la carrocería) al que se inspecciona
     "tol_distancia_m": 0.08,
     "no_avanzar_bajo_m": 0.20,
     "asentamiento_s": 1.0,                              # espera tras cada pulso/servo para que la imagen no salga movida
@@ -62,6 +62,8 @@ DEFECTOS = {
     # 2026-10-22 (demo): tras el análisis base, una foto por vista. arriba/abajo = servo; izquierda/derecha = un pulso de giro (y vuelta).
     "vistas_escaneo": ["arriba", "abajo", "izquierda", "volver_izquierda", "derecha", "volver_derecha"],
     "paso_servo_vista_deg": 10.0,
+    "retroceso_tras_analisis": 2,                       # pulsos atrás antes de girar para irse: girar pegado a la planta la golpea con la esquina
+    "atras_libre_m": 0.35,
 }
 
 INACTIVA, BUSCANDO, CENTRANDO, ACERCANDO, ENCUADRANDO, ANALIZANDO, ESCANEANDO, ALEJANDO, PAUSA = (
@@ -447,10 +449,10 @@ class VisionActiva:
         self._registrar(res)
         self._on_event({"tipo": "inspeccion", **res})
         self.objetivos_hechos += 1
-        if self.objetivos_hechos >= c["max_objetivos"]:
-            self._terminar(f"{self.objetivos_hechos} objetivos inspeccionados")
-            return
+        # Siempre se aleja (retroceso + giros) antes de terminar: quien siga (el explorador) no debe arrancar pegado a la planta.
+        self._fin_tras_alejar = self.objetivos_hechos >= c["max_objetivos"]
         self.giros_alejando = 0
+        self.retrocesos_alejando = 0
         self._dir_busqueda = "derecha" if self._dir_busqueda == "izquierda" else "izquierda"
         self._cambiar(ALEJANDO)
 
@@ -458,7 +460,18 @@ class VisionActiva:
     _vista_actual = None
 
     def _paso_alejando(self, c, ahora, obj):
+        if getattr(self, "retrocesos_alejando", 0) < c.get("retroceso_tras_analisis", 0):
+            atras = self._distancias().get("atras")
+            if atras is None or atras > c.get("atras_libre_m", 0.35):
+                self.retrocesos_alejando = getattr(self, "retrocesos_alejando", 0) + 1
+                self._pulso("atras", c)
+                return
+            self.retrocesos_alejando = c.get("retroceso_tras_analisis", 0)     # sin sitio detrás: se gira desde aquí
         if self.giros_alejando >= c["giros_tras_analisis"]:
+            if getattr(self, "_fin_tras_alejar", False):
+                self._fin_tras_alejar = False
+                self._terminar(f"{self.objetivos_hechos} objetivos inspeccionados")
+                return
             self.pulsos = 0
             self._i_barrido = 0
             self._cambiar(BUSCANDO)

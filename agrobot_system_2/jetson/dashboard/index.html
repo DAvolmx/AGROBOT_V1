@@ -933,6 +933,11 @@ input[type="text"], select { font-family: inherit; }
             <button class="btn primary" id="btn-expl-on">▶ Explorar y mapear</button>
             <button class="btn peligro" id="btn-expl-off">■ Detener</button>
           </div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; align-items:center;">
+            <button class="btn primary" id="btn-mision-on">🌱 Misión plantas en maceta</button>
+            <button class="btn peligro" id="btn-mision-off">■ Detener misión</button>
+            <span class="hint" id="mision-estado">Explora y mapea; al ver una maceta enciende el LED, se acerca, la escanea desde varias vistas grabando video, y sigue.</span>
+          </div>
           <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px;">
             <span>Avances: <b class="mono" id="expl-pulsos">0</b></span>
             <span>Giros: <b class="mono" id="expl-giros">0</b></span>
@@ -2435,6 +2440,20 @@ input[type="text"], select { font-family: inherit; }
     if (!res.ok) toast("warning", "No se pudo explorar", d.error || d.message || `HTTP ${res.status}`);
   });
   $("btn-expl-off").addEventListener("click", () => fetch("/api/exploracion/stop", { method: "POST" }));
+  $("btn-mision-on").addEventListener("click", async () => {
+    if (!confirm("Misión de plantas: el robot explora solo, se acerca a las macetas y las escanea.\n\n¿Está en el suelo, con espacio, y la cámara conectada?")) return;
+    const res = await fetch("/api/mision_plantas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activa: true }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) toast("warning", "No arrancó la misión", d.msg || `HTTP ${res.status}`);
+  });
+  $("btn-mision-off").addEventListener("click", () => fetch("/api/mision_plantas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activa: false }) }));
+  setInterval(async () => {
+    try {
+      const d = await (await fetch("/api/mision_plantas")).json();
+      if (d && d.estado && d.estado !== "inactiva")
+        $("mision-estado").textContent = `Misión: ${d.estado} · plantas escaneadas: ${(d.plantas || []).length}` + (d.vision && d.vision !== "inactiva" ? ` · visión: ${d.vision}` : "") + (d.motivo_fin ? ` · ${d.motivo_fin}` : "");
+    } catch (_) {}
+  }, 2000);
 
   // ---------------------------------------------------------------
   // Calibración de navegación

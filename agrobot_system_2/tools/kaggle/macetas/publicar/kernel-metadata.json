@@ -1,0 +1,19 @@
+{
+ "id": "davidgomez32/agrobot-macetas",
+ "title": "agrobot-macetas",
+ "code_file": "agrobot-macetas.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_tpu": false,
+ "enable_internet": true,
+ "dataset_sources": [
+  "awsaf49/coco-2017-dataset",
+  "davidgomez32/agrobot-macetas-propias",
+  "davidgomez32/agrobot-negativos-fondo-interior"
+ ],
+ "kernel_sources": [],
+ "competition_sources": [],
+ "model_sources": []
+}

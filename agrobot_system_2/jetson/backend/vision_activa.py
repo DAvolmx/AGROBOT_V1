@@ -55,6 +55,7 @@ DEFECTOS = {
     "perder_objetivo_s": 4.0,
     "tiempo_max_s": 600.0,
     "scan_max_s": 1.0,
+    "max_area_frac": 0.85,                              # cajas que ocupan casi toda la imagen no sirven para centrar (modelo sin localización)
     "sin_mover": False,                                 # True = ensayo: mueve el servo y DECIDE, pero los pulsos solo se registran (el robot no se mueve)
 }
 
@@ -80,7 +81,7 @@ def hfov_con_zoom(hfov_deg, zoom):
 
 class VisionActiva:
     def __init__(self, *, get_cajas, get_servo, set_servo, conducir, ocupado, parar, distancias, edad_scan, get_config,
-                 on_event=None, capturar=None, get_pose=None, enlace_ok=None, autonomia_activa=None, reloj=time.monotonic,
+                 on_event=None, capturar=None, clasificar=None, get_pose=None, enlace_ok=None, autonomia_activa=None, reloj=time.monotonic,
                  carpeta: Path | None = None):
         self._get_cajas = get_cajas        # () -> (cajas[{class, confidence, xyxy}], instante_unix, ancho_px, alto_px, hfov_efectivo_deg) | None
         self._get_servo = get_servo        # () -> ángulo actual del servo
@@ -93,6 +94,8 @@ class VisionActiva:
         self._get_config = get_config      # () -> dict de la sección vision_activa
         self._on_event = on_event or (lambda e: None)
         self._capturar = capturar          # (info) -> ruta | None
+        self._clasificar = clasificar      # (ruta_foto) -> dict | None: segunda opinión con un clasificador (p. ej. PLAGASX)
+        self.aviso: str | None = None
         self._get_pose = get_pose or (lambda: None)
         self._enlace_ok = enlace_ok or (lambda: True)
         self._autonomia = autonomia_activa or (lambda: False)
@@ -142,6 +145,7 @@ class VisionActiva:
         return {"estado": self.estado, "activa": self.estado != INACTIVA, "pulsos": self.pulsos,
                 "giros_busqueda": self.giros_busqueda, "objetivos_hechos": self.objetivos_hechos,
                 "objetivo": self.ultimo_objetivo, "resultado": self.ultimo_resultado, "motivo_fin": self.motivo_fin,
+                "aviso": self.aviso,
                 "servo": self._get_servo()}
 
     # ------------------------------------------------------------------ ciclo de vida
@@ -209,6 +213,10 @@ class VisionActiva:
                 continue
             x1, y1, x2, y2 = b["xyxy"]
             area = max(0, x2 - x1) * max(0, y2 - y1)
+            if area / float(ancho * alto) > c["max_area_frac"]:
+                self.aviso = ("el modelo activo no localiza (sus cajas ocupan toda la imagen): para centrar y acercarse usa "
+                              "'Interior (macetas)' o 'Col (planta y cogollo)'")
+                continue
             if mejor is None or area > mejor[0]:
                 mejor = (area, b)
         if mejor is None:
@@ -363,6 +371,11 @@ class VisionActiva:
                 res["foto"] = self._capturar(res)
             except Exception as exc:
                 res["foto_error"] = str(exc)
+        if self._clasificar is not None and res.get("foto"):
+            try:
+                res["diagnostico"] = self._clasificar(res["foto"])
+            except Exception as exc:
+                res["diagnostico_error"] = f"{type(exc).__name__}: {exc}"
         self.ultimo_resultado = res
         self._registrar(res)
         self._on_event({"tipo": "inspeccion", **res})

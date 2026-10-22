@@ -180,3 +180,23 @@ def test_sin_mover_decide_pero_no_manda_pulsos():
     m.correr(va, pasos=300)
     assert m.pulsos == [] and any(e["tipo"] == "pulso_simulado" for e in m.eventos)
     assert va.estado == V.INACTIVA and "centrar" in va.motivo_fin
+
+
+def test_caja_de_imagen_completa_no_sirve_para_centrar_y_avisa():
+    m = Mundo(rumbo=0.0, dist=1.0)
+    m.cajas_original = m.cajas
+    m.cajas = lambda: ([{"class": "col_dano_insecto", "confidence": 0.9, "xyxy": (0, 0, W, H)}], m.t, W, H, HFOV)
+    va = m.crear(cfg={"clases_objetivo": ["col"], "max_giros_busqueda": 1})
+    va.iniciar()
+    m.correr(va, pasos=300)
+    assert "adelante" not in m.pulsos and "no localiza" in (va.aviso or "")
+
+
+def test_clasificador_da_una_segunda_opinion_en_el_resultado(tmp_path):
+    m = Mundo(rumbo=0.0, dist=0.7)
+    va = m.crear(cfg={"max_objetivos": 1}, tmp=tmp_path)
+    va._clasificar = lambda ruta: {"modelo": "falso", "top": [{"clase": "col_sana", "prob": 0.9}]}
+    va._capturar = lambda info: "/tmp/foto.jpg"
+    va.iniciar()
+    m.correr(va, pasos=400)
+    assert va.ultimo_resultado["diagnostico"]["top"][0]["clase"] == "col_sana"

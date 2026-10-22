@@ -94,7 +94,8 @@
     "nav2_w_max_rps": 0.6,
     "solo_manual": false,
     "pivote_en_sitio": true,
-    "c3_wifi_only": false
+    "c3_wifi_only": false,
+    "c3_usb": true
   },
   "safety": {
     "freno_lidar_autonomo": false,
@@ -148,13 +149,14 @@
       112,
       98
     ],
-    "max_giros_busqueda": 26,
+    "max_giros_busqueda": 2,
     "giros_tras_analisis": 4,
-    "max_pulsos_objetivo": 16,
-    "max_objetivos": 3,
+    "max_pulsos_objetivo": 6,
+    "max_objetivos": 1,
     "perder_objetivo_s": 4.0,
     "tiempo_max_s": 600.0,
     "scan_max_s": 1.0,
-    "sin_mover": false
+    "sin_mover": false,
+    "max_area_frac": 0.85
   }
 }

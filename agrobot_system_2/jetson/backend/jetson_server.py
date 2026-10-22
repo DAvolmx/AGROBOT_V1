@@ -1708,6 +1708,17 @@ def _pulso_robotico(accion: str, escala: float, maniobra: bool):
                       omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
 
 
+_plagasx_cls_modelo = None
+
+
+def _plagasx_clasificador():
+    global _plagasx_cls_modelo
+    if _plagasx_cls_modelo is None:
+        from ultralytics import YOLO
+        _plagasx_cls_modelo = YOLO(str(Path(__file__).resolve().parent / "models" / "agrobot_plagasx_cls.pt"))
+    return _plagasx_cls_modelo
+
+
 def _crear_vision_activa():
     """Visión activa (vision_activa.py): mueve el servo y pulsa el conductor para centrar, acercarse y analizar un objetivo."""
     global vision_activa
@@ -1746,6 +1757,14 @@ def _crear_vision_activa():
         cv2.imwrite(str(ruta), f[0])
         return str(ruta)
 
+    def clasificar(ruta):
+        """Segunda opinión sobre la foto con el clasificador PLAGASX (CPU: es pequeño y el robot está parado en este paso)."""
+        mod = _plagasx_clasificador()
+        r = mod.predict(ruta, verbose=False, device="cpu")[0]
+        p = r.probs.data.cpu().numpy()
+        orden = p.argsort()[::-1][:3]
+        return {"modelo": "plagasx_cls", "top": [{"clase": mod.names[int(i)], "prob": round(float(p[i]), 3)} for i in orden]}
+
     def evento(e):
         print(f"[vision_activa] {e}", flush=True)
         _schedule(state.broadcast({"type": "vision_activa", "data": e}))
@@ -1758,7 +1777,7 @@ def _crear_vision_activa():
         get_cajas=cajas, get_servo=lambda: state.servo_angle, set_servo=poner_servo, conducir=conducir,
         ocupado=lambda: conductor.activo, parar=lambda: conductor.parar(),
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]), edad_scan=lidar_reactive.edad_scan_s,
-        get_config=lambda: state.config.get("vision_activa", {}), on_event=evento, capturar=capturar,
+        get_config=lambda: state.config.get("vision_activa", {}), on_event=evento, capturar=capturar, clasificar=clasificar,
         get_pose=ros_bridge.pose_en_mapa, enlace_ok=lambda: enlace_c3 is not None and enlace_c3.connected,
         autonomia_activa=_autonomia_activa, reloj=time.time)
 
@@ -1779,6 +1798,11 @@ async def vision_activa_post_handler(request: web.Request):
     except Exception:
         body = {}
     if body.get("activa"):
+        try:
+            await asyncio.to_thread(_plagasx_clasificador)          # se carga ahora, no con el robot ya en pleno análisis
+        except Exception as exc:
+            print(f"[vision_activa] sin clasificador PLAGASX: {exc}", flush=True)
+        vision_activa.aviso = None
         ok, msg = vision_activa.iniciar()
         if not ok:
             return web.json_response({"error": msg}, status=409)

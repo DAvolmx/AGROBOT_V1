@@ -58,7 +58,8 @@ print("% scans NO válidos (scan_ok=0, fotograma actual):", round(100 * float((X
 for nom, arr in (("escenario", ESC), ("falla", FALLA)):
     u, c = np.unique(arr, return_counts=True)
     print(nom, dict(zip(u, c)))
-corr = np.nan_to_num(np.corrcoef(np.c_[X[:, (K - 1) * NB:], Y_INC].T)[:NB, NB:])
+with np.errstate(invalid="ignore", divide="ignore"):            # columnas constantes (dt) dan NaN: se ponen a 0
+    corr = np.nan_to_num(np.corrcoef(np.c_[X[:, (K - 1) * NB:], Y_INC].T)[:NB, NB:])
 print("correlación |features (fotograma actual)| vs targets_inc [dx, dy, dth]:")
 for n, c in zip(NOMBRES, corr):
     print(f"  {n:13s} {np.round(c, 3)}")
@@ -117,7 +118,7 @@ for ep in range(150):
         b = perm[i:i + 64]
         opt.zero_grad()
         l = perdida(modelo(Xtr[b]), Ytr[b]); l.backward(); opt.step()
-        tot += float(l) * len(b)
+        tot += l.item() * len(b)
     modelo.eval()
     with torch.no_grad():
         lv = float(perdida(modelo(Xdv), Ydv))

@@ -11,6 +11,13 @@ try:
     from .contrato_robot import targets as command_targets
 except ImportError:
     from contrato_robot import targets as command_targets
+try:                                   # núcleo compilado con numba (2026-10-22); sin numba se usa la versión de Python de siempre
+    from . import dinamica_rapida as _rapida
+except ImportError:
+    try:
+        import dinamica_rapida as _rapida
+    except ImportError:
+        _rapida = None
 
 
 @dataclass
@@ -152,6 +159,9 @@ class DinamicaPasiva:
         if dt <= 0: return
         count = max(1,math.ceil(dt/p.substep))
         hdt = dt/count
+        if _rapida is not None and _rapida.DISPONIBLE and not getattr(self, "forzar_python", False):
+            self._step_rapido(count, hdt, linear, angular, wheel_targets, libres)
+            return
         for _ in range(count):
             M,h = self.mass_bias()
             Q = np.zeros(4)
@@ -187,6 +197,23 @@ class DinamicaPasiva:
             self.enforce_stop(M)
             self.q[2] = math.atan2(math.sin(self.q[2]),math.cos(self.q[2]))
             self.slip = float(np.mean(slips))
+        if not np.all(np.isfinite(self.q)):
+            raise FloatingPointError('Non-finite dynamics')
+
+    def _step_rapido(self, count, hdt, linear, angular, wheel_targets, libres):
+        p = self.p
+        drive = {'all': 0., 'front': 1., 'rear': 2.}[p.drive]
+        P = np.array([p.wheelbase, p.front_outer, p.rear_outer, p.tire_width, p.radius, p.trail, p.chassis_mass, p.front_mass,
+                      p.chassis_inertia, p.front_inertia, p.cg_x, p.wheel_inertia, p.mu, p.longitudinal, p.lateral, p.pivot_damping,
+                      p.pivot_friction, p.motor_gain, p.max_torque, p.front_drive_bias, p.rolling_drag, p.limit, drive])
+        wt = np.zeros(4) if wheel_targets is None else np.asarray(wheel_targets, dtype=float)
+        lb = np.zeros(4, dtype=np.bool_) if libres is None else np.asarray(libres, dtype=np.bool_)
+        stats = np.array([self.slip, self.max_force_ratio, 0., 0.])
+        _rapida.paso_rapido(self.q, self.dq, self.wheels, P, np.asarray(p.toe_ruedas, dtype=float), np.asarray(p.gain_ruedas, dtype=float),
+                            wt, wheel_targets is not None, lb, libres is not None, float(linear), float(angular), count, hdt, stats)
+        self.slip, self.max_force_ratio = float(stats[0]), float(stats[1])
+        self.stop_impacts += int(stats[2])
+        self.stop_energy_loss += float(stats[3])
         if not np.all(np.isfinite(self.q)):
             raise FloatingPointError('Non-finite dynamics')
 

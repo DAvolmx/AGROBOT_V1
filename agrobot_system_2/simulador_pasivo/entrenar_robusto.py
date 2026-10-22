@@ -127,6 +127,40 @@ def un_control(control, a, t_ini, presupuesto_s):
             top = rank[:2] if a.rapido else rank[:(a.top or max(6, a.n // 6))]
             print(f"      {int(time.time() - t0)} s · mejor {top[0]} {clave(top[0], todo, por_h)} · actual {clave('actual', todo, por_h)} · "
                   f"perfil {clave('perfil_interior', todo, por_h)}", flush=True)
+        # ---- 1b. EVOLUCIÓN (modo agresivo, --evolucion R): hijos = mutaciones de los mejores, evaluados igual que el filtro ----
+        if a.evolucion and prev is None:
+            ref_n = ("actual", "perfil_interior")
+            for ronda in range(a.evolucion):
+                if not quedan():
+                    break
+                t0 = time.time()
+                elite = sorted((n for n in todo if n not in ref_n), key=lambda n: clave(n, todo, por_h))[:max(4, a.top or 8)]
+                hijos = []
+                intentos = 0
+                while len(hijos) < a.hijos and intentos < a.hijos * 30:
+                    intentos += 1
+                    padre = asdict(cfgn[rng.choice(elite)])
+                    padre.pop("nombre", None)
+                    for k in rng.sample(list(esp), k=min(len(esp), rng.choice((1, 1, 2, 3)))):
+                        padre[k] = rng.choice(esp[k])
+                    huella = tuple(padre.get(k) for k in esp)
+                    if huella in vistos:
+                        continue
+                    vistos.add(huella)
+                    hijos.append(S.Config(nombre=f"{control[:1]}e{ronda}_{len(hijos):02d}", **padre))
+                if not hijos:
+                    break
+                cfgn.update({c.nombre: c for c in hijos})
+                t2, h2 = evaluar(pool, hijos, T.TRAIN[:a.sem_filtro], HUECOS)
+                todo.update(t2)
+                por_h.update(h2)
+                rank = sorted((n for n in todo if n not in ref_n), key=lambda n: clave(n, todo, por_h))
+                top = rank[:a.top or max(6, a.n // 6)]
+                print(f"[{control}] 1b EVOLUCIÓN {ronda + 1}/{a.evolucion}: {len(hijos)} hijos · {int(time.time() - t0)} s · mejor {rank[0]} "
+                      f"{clave(rank[0], todo, por_h)}", flush=True)
+                out["filtro"] = {n: {"cfg": asdict(cfgn[n]), **ficha(n, todo, por_h)} for n in todo}
+                out["evolucion_rondas"] = ronda + 1
+                guardar()
         guardar()
         if not quedan():
             out["veredicto"] = "interrumpido tras el filtro"
@@ -198,6 +232,8 @@ def main():
     ap.add_argument("--sem-test", type=int, default=10)
     ap.add_argument("--top", type=int, default=0, help="finalistas del filtro (0 = n/6, mínimo 6)")
     ap.add_argument("--finalistas", type=int, default=3)
+    ap.add_argument("--evolucion", type=int, default=0, help="rondas de mutación de los mejores tras el filtro (modo agresivo)")
+    ap.add_argument("--hijos", type=int, default=40, help="hijos por ronda de evolución")
     ap.add_argument("--reanudar", default="", help="robusto_<control>_*.json con un FILTRO ya calculado: se salta esa etapa")
     a = ap.parse_args()
     global HUECOS

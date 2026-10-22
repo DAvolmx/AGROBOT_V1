@@ -31,6 +31,11 @@ import math
 import time
 import traceback
 
+try:
+    import rumbo_fusion as _RF
+except ImportError:                    # sin el módulo el explorador sigue como siempre
+    _RF = None
+
 TICK_S = 0.25
 
 # Los umbrales de decisión (cuánto hueco hace falta para avanzar, girar o
@@ -125,6 +130,11 @@ class ExploradorReactivo:
         self.callejones = 0
         self._ref_pose = None
         self._ref_t = 0.0
+        self._rumbo_ref = None             # rumbo (rad) que se quiere mantener en el tramo recto actual
+        self._rumbo_corr = None            # rumbo_fusion.CorrectorRumbo
+        self._rumbo_pend = False           # hay un pulso recto cuya caída de rumbo aún no se midió
+        self._corr_propia = False          # el pulso en curso es una corrección de rumbo (no reinicia la referencia)
+        self.correcciones_rumbo = 0
 
     # ------------------------------------------------------------------
     def iniciar(self) -> tuple[bool, str]:
@@ -183,8 +193,37 @@ class ExploradorReactivo:
         v = d.get(lado)
         return math.inf if v is None else v
 
-    def _conducir(self, accion, maniobra=True):
-        self._conducir_cb(accion, maniobra)
+    def _conducir(self, accion, maniobra=True, esc_dur=1.0):
+        if accion in ("izquierda", "derecha", "atras") and not self._corr_propia:
+            self._rumbo_ref = None          # giro o marcha atrás a propósito: el rumbo deseado será el nuevo
+        if esc_dur != 1.0:
+            self._conducir_cb(accion, maniobra, esc_dur)
+        else:
+            self._conducir_cb(accion, maniobra)
+
+    def _rumbo_correccion(self, cfg):
+        """Pulso de corrección ('izquierda'/'derecha') para volver al rumbo del tramo recto, o None.
+
+        Fusión del 2026-10-22 (rumbo_fusion): la pose del SLAM mide el error de rumbo, la zona muerta evita corregir ruido y el sesgo por
+        pulso aprendido anticipa hacia qué lado cae este robot. Apagado por defecto (autonomia.rumbo_fusion_activo): se valida primero con
+        tools/probar_recta.py."""
+        if _RF is None or not cfg.get("rumbo_fusion_activo", False):
+            return None
+        pose = self._get_pose()
+        if not pose:
+            return None
+        th = math.radians(pose["theta_deg"])
+        if self._rumbo_corr is None:
+            self._rumbo_corr = _RF.CorrectorRumbo(float(cfg.get("rumbo_zona_muerta_deg", 6.0)), aprende=float(cfg.get("rumbo_aprende", 0.15)))
+        if self._rumbo_ref is None:
+            self._rumbo_ref = th
+            self._rumbo_pend = False
+            return None
+        e = _RF._ang(th - self._rumbo_ref)
+        if self._rumbo_pend:
+            self._rumbo_corr.fin_pulso_recto(e)
+            self._rumbo_pend = False
+        return self._rumbo_corr.decidir(e)
 
     def ceder_mando(self, segundos: float):
         """El operador acaba de corregir: la autonomía calla un rato.
@@ -528,8 +567,24 @@ class ExploradorReactivo:
                         self.pulsos += 1
                         self._sin_corregir += 1
                         continue
+                    a_rumbo = self._rumbo_correccion(cfg)
+                    if a_rumbo:
+                        self.estado = f"corrigiendo rumbo ({a_rumbo})"
+                        self._corr_propia = True
+                        try:
+                            self._conducir(a_rumbo, maniobra=False, esc_dur=float(cfg.get("rumbo_pulso_escala", 1.0)))
+                        finally:
+                            self._corr_propia = False
+                        self.correcciones_rumbo += 1
+                        self._sin_corregir = 0
+                        continue
                     self.estado = f"avanzando ({frente:.2f} m libres)"
                     self._conducir("adelante")
+                    if self._rumbo_corr is not None and self._rumbo_ref is not None:
+                        pose_r = self._get_pose()
+                        if pose_r:
+                            self._rumbo_corr.inicio_pulso_recto(_RF._ang(math.radians(pose_r["theta_deg"]) - self._rumbo_ref))
+                            self._rumbo_pend = True
                     self.pulsos += 1
                     self._sin_corregir += 1
                     if self._compromiso:
@@ -548,6 +603,10 @@ class ExploradorReactivo:
                 lado = self._mejor_lado(d)
                 if self._hueco(d, lado) < lado_libre:
                     lado = "izquierda" if izq >= der else "derecha"
+                h_cm = float(cfg.get("man_histeresis_cm", 0.0)) if cfg.get("rumbo_fusion_activo", False) else 0.0
+                if h_cm > 0 and math.isfinite(izq) and math.isfinite(der) and abs(izq - der) < h_cm / 100.0 \
+                        and self._hueco(d, self._ultimo_lado) >= lado_libre:
+                    lado = self._ultimo_lado          # lados casi iguales: repite el último giro en vez de titubear
                 if self._hueco(d, lado) >= lado_libre:
                     maniobra = self._giro_con_arco_seguro(d)
                     if (not maniobra and cfg.get(
@@ -561,6 +620,8 @@ class ExploradorReactivo:
                     self._ultimo_lado = lado
                     self._conducir(lado, maniobra=maniobra)
                     self.giros += 1
+                    if cfg.get("rumbo_fusion_activo", False) and float(cfg.get("man_pausa_s", 0.0)) > 0:
+                        await asyncio.sleep(float(cfg["man_pausa_s"]))     # deja que el LIDAR se asiente antes de decidir
                     continue
 
                 if self._hueco(d, "atras") >= retro_libre:

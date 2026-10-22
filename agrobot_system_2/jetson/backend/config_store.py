@@ -109,6 +109,14 @@ DEFAULTS = {
         "pose_gyro_trust": 0.8,
     },
     "autonomia": {
+        # Rumbo fusionado y maniobras (2026-10-22, rumbo_fusion.py + tanda de entrenamiento). APAGADO por defecto: se prueba primero con
+        # tools/probar_recta.py y se enciende con POST /api/params/autonomia {"rumbo_fusion_activo": true}.
+        "rumbo_fusion_activo": False,
+        "rumbo_zona_muerta_deg": 6.0,
+        "rumbo_aprende": 0.15,
+        "rumbo_pulso_escala": 0.3,       # duración del pulso de corrección de rumbo respecto al giro normal
+        "man_histeresis_cm": 12.0,
+        "man_pausa_s": 0.0,
         # Acelerador que usan los pulsos del modo exploración, como fracción
         # del máximo. Los motores no bajan de ~78 % de potencia, así que esto
         # solo limita el tope; para ir "despacio" lo que vale son los pulsos.

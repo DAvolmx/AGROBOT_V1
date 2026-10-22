@@ -132,8 +132,10 @@ class ConductorPulsos:
         sentido = 1. if accion == 'izquierda' else -1.
         return [(v, sentido * w, m["pulso_giro_s"])]
 
-    def ordenar(self, accion, v_max, omega_max, maniobra=True):
+    def ordenar(self, accion, v_max, omega_max, maniobra=True, esc_dur=1.0):
         segmentos = self.segmentos(accion, v_max, omega_max, maniobra)
+        if esc_dur != 1.0:                    # pulsos de corrección de rumbo más finos (rumbo_pulso_escala)
+            segmentos = [(v, w, d * max(0.1, min(1.0, esc_dur))) for (v, w, d) in segmentos]
         if self.activo:
             return False
         self._tarea = asyncio.create_task(self._ejecutar(segmentos))

@@ -2133,7 +2133,7 @@ def _percepcion_robot() -> dict:
     }
 
 
-def _conducir_pulso(accion: str, maniobra: bool = True):
+def _conducir_pulso(accion: str, maniobra: bool = True, esc_dur: float = 1.0):
     """Un pulso del conductor manual, con el acelerador de la config.
 
     `maniobra` la decide quien llama (el explorador): con una pared cerca la
@@ -2151,7 +2151,7 @@ def _conducir_pulso(accion: str, maniobra: bool = True):
         altura = estimador_altura.altura()
         v_max = min(v_max, freno_proactivo.tope_velocidad(hueco, v_max, altura_m=altura))
     conductor.ordenar(accion, v_max=v_max,
-                      omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
+                      omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra, esc_dur=esc_dur)
 
 
 def _evento(tipo: str, data: dict):
@@ -2675,6 +2675,8 @@ PARAM_SECTIONS = ("slam", "detection", "safety", "control", "odometria_webcam", 
 CONTROL_LIMITS = {
     "max_v_mps": (0.05, 1.5),
     "max_omega_rps": (0.1, 4.0),
+    "suavidad_duty": (0.15, 1.0),        # los pulsos de la exploración se trocean con este ciclo (ver Conductor._tramo)
+    "suavidad_periodo_s": (0.1, 1.0),
 }
 
 

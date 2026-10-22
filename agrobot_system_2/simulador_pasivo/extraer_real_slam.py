@@ -24,6 +24,7 @@ import numpy as np
 import generar_dataset_slam as G
 
 RAIZ = Path.home() / ".agrobot" / "datos"
+CAMPO = Path.home() / ".agrobot" / "campo"
 SALIDA = Path.home() / ".agrobot" / "slam"
 K, N_BASE = G.K, G.N_BASE
 
@@ -48,6 +49,43 @@ def cargar(ses: Path):
     return tel, ts, ang, D
 
 
+def cargar_campo(ses: Path):
+    """Grabación de CAMPO (recoleccion.py, 2026-10-22): variables.jsonl a 5 Hz con scan completo, pose, giroscopio y velocidades.
+    Mismo formato de salida que cargar(). Los scans llegan a ~5 Hz (dt ≈ 0,2 s) en vez de ~1 Hz: mucho más cerca del simulador (10 Hz)."""
+    tel = {k: [] for k in ("t", "v_aplicada", "w_aplicada", "giro_z", "x", "y", "rumbo_deg")}
+    ts, D, visto = [], [], set()
+    ang = np.arange(-180.0, 180.0, 0.5)
+    with open(ses / "variables.jsonl", errors="ignore") as f:
+        for linea in f:
+            try:
+                d = json.loads(linea)
+            except ValueError:
+                continue
+            t = d.get("t_unix")
+            p, v, env = d.get("pose") or {}, d.get("velocities") or {}, d.get("env") or {}
+            if t is None:
+                continue
+            tel["t"].append(t)
+            tel["v_aplicada"].append(v.get("v_aplicada", np.nan)); tel["w_aplicada"].append(v.get("omega_aplicada", np.nan))
+            tel["giro_z"].append(env.get("gyroZ", np.nan))
+            tel["x"].append(p.get("x", np.nan)); tel["y"].append(p.get("y", np.nan)); tel["rumbo_deg"].append(p.get("theta_deg", np.nan))
+            lt, sc = d.get("lidar_timestamp"), d.get("lidar_scan")
+            if not sc or lt in visto:                       # el mismo scan repetido en dos muestras se usa una vez
+                continue
+            visto.add(lt)
+            fila = np.full(720, np.nan, dtype=np.float32)
+            for r in sc:
+                a, dist = r.get("angle_deg"), r.get("distance_m")
+                if a is None or dist is None:
+                    continue
+                fila[int(round((((a + 180.0) % 360.0)) * 2)) % 720] = dist
+            ts.append(t - float(d.get("lidar_age_s") or 0.0)); D.append(fila)
+    if not D:
+        return None
+    tel = {k: np.array([np.nan if x is None else x for x in v], dtype=float) for k, v in tel.items()}
+    return tel, np.array(ts), ang, np.array(D)
+
+
 def a_360(ang, d):
     """720 rayos de 0,5° (-180..180) -> 360 rayos de 1° con índice = grado % 360 (0° al frente, + izquierda), inf si no válido."""
     r = np.full(360, np.inf)
@@ -60,7 +98,7 @@ def a_360(ang, d):
 
 
 def procesar_sesion(ses: Path, max_pares=2500):
-    c = cargar(ses)
+    c = cargar_campo(ses) if (ses / "variables.jsonl").exists() else cargar(ses)
     if c is None:
         return None
     tel, ts, ang, D = c
@@ -141,6 +179,7 @@ def main():
     a = ap.parse_args()
     ses = [Path(p) for p in sorted(glob.glob(str(RAIZ / "2026*")))
            if (Path(p) / "telemetria.csv").exists() and glob.glob(p + "/scans_*.npz")][-a.max_sesiones:]
+    ses += [Path(p) for p in sorted(glob.glob(str(CAMPO / "2026*"))) if (Path(p) / "variables.jsonl").exists()]   # grabaciones de campo a 5 Hz
     print(f"[real] {len(ses)} sesiones con scans y telemetría", flush=True)
     t0 = time.time()
     feats, tss, ests, refs, sid, gz, inval = [], [], [], [], [], [], []

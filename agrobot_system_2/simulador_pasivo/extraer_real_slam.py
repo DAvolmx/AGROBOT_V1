@@ -143,7 +143,12 @@ def procesar_sesion(ses: Path, max_pares=2500):
         if abs(v_c) + abs(w_c) < 0.01:                    # parado: no aporta a la corrección de movimiento
             prev = (tk, G.a_xy(r) if okr else None, okr)
             continue
-        gyro = math.radians(float(np.nanmean(tel["giro_z"][m])))           # suposición: °/s (se comprueba en las estadísticas)
+        gz = tel["giro_z"][m]
+        if np.isfinite(gz).any():
+            gyro = math.radians(float(np.nanmean(gz)))                     # suposición: °/s (se comprueba en las estadísticas)
+        else:                                                             # sin giroscopio en el tramo: giro de la pose grabada
+            r0, r1 = tel["rumbo_deg"][i0], tel["rumbo_deg"][max(i0, i1 - 1)]
+            gyro = math.radians(((r1 - r0 + 180) % 360) - 180) / dt if np.isfinite(r0) and np.isfinite(r1) else 0.0
         guess = np.array([v_c * dt, 0.0, gyro * dt])
         if okr and ok_j and xy_j is not None:
             inc_est, res, ok_icp = G.icp(xy_j, G.a_xy(r), guess)

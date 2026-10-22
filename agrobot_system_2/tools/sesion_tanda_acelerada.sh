@@ -29,7 +29,7 @@ paso() {   # paso <min_estimados> <nombre> <cmd...>
 }
 log "=== TANDA ACELERADA · fin previsto $(date -d @$FIN_EPOCH '+%F %T') ==="
 fase "1 manejo robusto (continuo + pulsos)"
-paso 215 "búsqueda de manejo robusta" bash -c "cd '$SIM' && nice -n 5 $PY -u entrenar_robusto.py --control ambos --procs 6 --n 120 --evolucion 6 --hijos 60 --horas 3.6 --huecos 0.50,0.60,0.75 --sem-filtro 3 --sem-val 6 --sem-test 10 --top 12 --finalistas 4"
+paso 175 "búsqueda de manejo robusta" bash -c "cd '$SIM' && nice -n 5 $PY -u entrenar_robusto.py --control ambos --procs 6 --espacio amplio --n 100 --evolucion 5 --hijos 50 --horas 2.9 --huecos 0.50,0.60,0.75 --sem-filtro 3 --sem-val 6 --sem-test 10 --top 12 --finalistas 4"
 fase "2 fallas con manejo asistido"
 paso 110 "aprendizaje de fallas" bash -c "cd '$SIM' && nice -n 5 $PY -u entrenar_fallas.py --config optimo --procs 6 --rondas 5 --semillas 4"
 fase "3 pruebas de geometría + informe"

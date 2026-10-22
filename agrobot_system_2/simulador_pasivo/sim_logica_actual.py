@@ -60,6 +60,7 @@ from calibracion_real import CAL                       # noqa: E402  (datos real
 from manual_demo import reference as demo_reference   # noqa: E402  (REAL)
 from ble_link import _pct                             # noqa: E402  (REAL)
 from slam import LidarReactive                        # noqa: E402  (REAL)
+import rumbo_fusion as RF                             # noqa: E402  (REAL: giroscopio + paredes del LIDAR; ver jetson/backend/rumbo_fusion.py)
 import huella_pasiva as H                             # noqa: E402
 from dinamica_pasiva import DinamicaPasiva            # noqa: E402
 from robot_rustico import parametros_rusticos         # noqa: E402
@@ -141,6 +142,9 @@ class Config:
     # a 0,60*V_SCALE y manual_demo.command a .60. Cambiarlo es un "¿y si?": exigiría tocar esos
     # DOS sitios (son límites de seguridad que puso Codex), NO es un parámetro de config.
     tope_duty: float = 60.0
+    # control.invertir_giro del robot REAL (true): el cableado cruza los lados y jetson_server niega omega al enviarlo a la C3. El simulador
+    # lo omitía y por eso su «izquierda» giraba a la derecha (descubierto el 2026-10-22 al medir el rumbo tras cada pulso).
+    invertir_giro: bool = True
     # --- firmware 1.2 (/config) ---
     fw_fwd: float = 60.0
     fw_rev: float = 35.0
@@ -186,6 +190,22 @@ class Config:
     cc_nominal: float = 0.35
     cc_dstop: float = 0.30
     cc_dslow: float = 0.80
+    # --- MANIOBRAS del explorador de pulsos (2026-10-22). Todas en 0/False = el explorador de siempre. Solo existen en el simulador:
+    # llevarlas al robot exige portarlas a autonomia/pulse_drive y es decisión del operador. ---
+    man_retroceso_cm: float = 0.0       # bloqueado a menos de esto: marcha atrás de 1 pulso antes de girar (0 = no)
+    man_atras_pulsos: int = 1           # cuántos pulsos hacia atrás
+    man_giro_pulsos: int = 1            # pulsos de giro seguidos al bloquearse (giro más decidido)
+    man_desacel_cm: float = 0.0         # frente a menos de esto: avanza a man_desacel_factor de la velocidad (0 = no)
+    man_desacel_factor: float = 0.6
+    man_histeresis_cm: float = 0.0      # lados casi iguales: repite el último giro (evita titubear)
+    man_pausa_s: float = 0.0            # espera tras girar para que el LIDAR se asiente antes de decidir
+    man_escape_s: float = 0.0           # sin avanzar 2 cm en tanto tiempo: secuencia de escape (atrás + giro al lado libre)
+    man_corr_doble: bool = False        # corrección de centrado en 2 pulsos si el error es el doble de la tolerancia
+    # --- mantener el RUMBO (el robot real siempre cae hacia un lado): giroscopio + paredes del LIDAR fusionados (rumbo_fusion) ---
+    rumbo_zm_deg: float = 0.0           # zona muerta del error de rumbo; 0 = apagado
+    rumbo_paredes: bool = True          # corrige el giroscopio con el ángulo de las paredes cuando se ven
+    rumbo_pulso_escala: float = 1.0     # duración del pulso de corrección de rumbo respecto al giro normal (<1 = giros más finos)
+    rumbo_aprende: float = 0.3          # rapidez con que aprende hacia qué lado cae el robot en cada pulso recto
 
     def slam_cfg(self):
         return {"robot_largo_cm": self.robot_largo_cm, "robot_ancho_cm": self.robot_ancho_cm,
@@ -632,7 +652,7 @@ class ActuadorJetson:
                 v, w = demo_ref_tope(self.ramp_v, self.ramp_w, self.cfg.tope_duty)
         except (ValueError, TypeError):
             v = w = 0.0
-        self.out_v, self.out_w = v, w
+        self.out_v, self.out_w = v, (-w if self.cfg.invertir_giro else w)      # borde del actuador: jetson_server._giro_signo()
 
     def send_command(self, v, w, t):
         self.obj_v, self.obj_w, self.obj_t = v, w, t
@@ -669,10 +689,12 @@ class Conductor:
     def activo(self) -> bool:
         return self._gen is not None
 
-    def ordenar(self, accion, t, maniobra=True) -> bool:
-        v_max = self.cfg.max_v_mps * self.cfg.escala_velocidad
+    def ordenar(self, accion, t, maniobra=True, esc_v=1.0, esc_dur=1.0) -> bool:
+        v_max = self.cfg.max_v_mps * self.cfg.escala_velocidad * esc_v
         w_max = self.cfg.max_omega_rps * self.cfg.escala_velocidad
         segs = self._real.segmentos(accion, v_max, w_max, maniobra)
+        if esc_dur != 1.0:
+            segs = [(v, w, d * esc_dur) for (v, w, d) in segs]
         if self.cfg.tope_duty != 60.0:            # ¿y si? subir el tope de avance
             vf = pulse_drive.MODOS[self.cfg.modo]["vel_factor"]
             tope_v = self.cfg.tope_duty / 100.0 * V_SCALE
@@ -939,6 +961,13 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     dt = TICK_FW
     prox_expl, prox_cond, prox_jet = TICK_EXPLORADOR, 0.0, 0.0
     sin_corregir = 0
+    cola_man, pausa_hasta, ultimo_giro, escapes = [], 0.0, None, 0
+    rf = RF.RumboFusion() if cfg.rumbo_zm_deg > 0 else None
+    corr_rumbo = RF.CorrectorRumbo(cfg.rumbo_zm_deg, aprende=cfg.rumbo_aprende) if rf else None
+    sesgo_gyro = float(rng.normal(0.0, math.radians(CAL["imu_gyro_sesgo_dps"]) / 2)) if rf else 0.0
+    sigma_gyro = math.radians(CAL["imu_gyro_sigma_dps"])
+    pulso_recto_pend, rumbo_corr = False, 0
+    prog_ref, prog_t = (x0, y0), 0.0
     correcciones = corr_ejec = bloqueos = avances = 0
     contactos, prev_choque = 0, False
     err, quieto, dist_rec = [], 0, 0.0
@@ -970,32 +999,95 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         if ctrl is None and t + 1e-9 >= prox_expl:
             prox_expl += TICK_EXPLORADOR
             lx, ly = robot.lidar_pos()
-            lidar.ingest_scan(lidar_scan(esc, lx, ly, robot.psi_real(), rng))
+            scan = lidar_scan(esc, lx, ly, robot.psi_real(), rng)
+            lidar.ingest_scan(scan)
             d = lidar.distancias(cfg.slam_cfg())
+            if rf is not None and cfg.rumbo_paredes and not cond.activo and not cola_man:
+                pi = [(r["distance_m"] * math.cos(math.radians(r["angle_deg"])), r["distance_m"] * math.sin(math.radians(r["angle_deg"])))
+                      for r in scan if 40 <= r["angle_deg"] <= 140 and r["distance_m"] < 1.6]
+                pd = [(r["distance_m"] * math.cos(math.radians(r["angle_deg"])), r["distance_m"] * math.sin(math.radians(r["angle_deg"])))
+                      for r in scan if 220 <= r["angle_deg"] <= 320 and r["distance_m"] < 1.6]
+                ref = RF.angulo_paredes(pi, pd, y_max=1.6)
+                if ref is not None:
+                    rf.actualizar(*ref)
             frente = d["adelante"] if d["adelante"] is not None else math.inf
             izq = d["izquierda"]
             der = d["derecha"]
-            if frente < cfg.avance_libre_cm / 100.0:
+            li = izq if izq is not None else math.inf
+            ld = der if der is not None else math.inf
+            # progreso para el escape: referencia que se mueve cuando el robot avanza 2 cm
+            cx_, cy_ = robot.centro()
+            if math.hypot(cx_ - prog_ref[0], cy_ - prog_ref[1]) > 0.02:
+                prog_ref, prog_t = (cx_, cy_), t
+            if t < pausa_hasta and not cola_man:
+                pass
+            elif cola_man:                                      # maniobra en curso: se ejecuta el siguiente pulso cuando el conductor queda libre
+                if not cond.activo:
+                    cond.ordenar(cola_man.pop(0), t, maniobra=False)
+            elif cfg.man_escape_s > 0 and t - prog_t > cfg.man_escape_s:
+                lado = "izquierda" if li >= ld else "derecha"   # secuencia de escape: atrás x2 + giro x3 hacia el lado libre
+                cola_man = ["atras", "atras", lado, lado, lado]
+                escapes += 1
+                prog_ref, prog_t = (cx_, cy_), t
+            elif frente < cfg.avance_libre_cm / 100.0:
                 bloqueos += 1
-                li = izq if izq is not None else math.inf
-                ld = der if der is not None else math.inf
-                cond.ordenar("izquierda" if li >= ld else "derecha", t, maniobra=False)
+                if cfg.man_histeresis_cm > 0 and ultimo_giro and abs(li - ld) < cfg.man_histeresis_cm / 100.0:
+                    lado = ultimo_giro
+                else:
+                    lado = "izquierda" if li >= ld else "derecha"
+                ultimo_giro = lado
+                if rf is not None:
+                    rf.e = 0.0                                  # el rumbo nuevo, tras esquivar, pasa a ser el deseado
+                    rf.P[0][0] = math.radians(8.0) ** 2
+                seq = []
+                if cfg.man_retroceso_cm > 0 and frente < cfg.man_retroceso_cm / 100.0:
+                    seq += ["atras"] * max(1, int(cfg.man_atras_pulsos))
+                seq += [lado] * max(1, int(cfg.man_giro_pulsos))
+                if len(seq) == 1 and cfg.man_pausa_s <= 0:
+                    cond.ordenar(seq[0], t, maniobra=False)
+                else:
+                    cola_man = seq[1:]
+                    cond.ordenar(seq[0], t, maniobra=False)
+                if cfg.man_pausa_s > 0:
+                    pausa_hasta = t + cfg.man_pausa_s + 0.4 * len(seq)
                 sin_corregir = 0
             else:
                 corr = None
-                if sin_corregir >= 1 and izq is not None and der is not None:
+                n_corr = 1
+                if pulso_recto_pend and not cond.activo and rf is not None:
+                    corr_rumbo.fin_pulso_recto(rf.e)
+                    pulso_recto_pend = False
+                if rf is not None and not cond.activo:
+                    corr = corr_rumbo.decidir(rf.e)              # primero el rumbo fusionado; el centrado lateral solo si el rumbo está bien
+                    if corr:
+                        rumbo_corr += 1
+                        correcciones += 1
+                        if cond.ordenar(corr, t, maniobra=False, esc_dur=cfg.rumbo_pulso_escala):
+                            corr_ejec += 1
+                        sin_corregir = 0
+                        corr = "hecho"
+                if corr is None and sin_corregir >= 1 and izq is not None and der is not None:
                     lim = cfg.sendero_pared_max_cm / 100.0
                     if izq <= lim and der <= lim:
                         e = izq - der
                         if abs(e) / max(cfg.sendero_tol_cm / 100.0, 1e-3) >= 1.0:
                             corr = "izquierda" if e > 0 else "derecha"
-                if corr:
+                            if cfg.man_corr_doble and abs(e) / max(cfg.sendero_tol_cm / 100.0, 1e-3) >= 2.0:
+                                n_corr = 2
+                if corr == "hecho":
+                    pass
+                elif corr:
                     correcciones += 1
+                    if n_corr == 2:
+                        cola_man = [corr]
                     if cond.ordenar(corr, t, maniobra=False):
                         corr_ejec += 1
                     sin_corregir = 0
                 else:
-                    cond.ordenar("adelante", t)
+                    esc_v = cfg.man_desacel_factor if (cfg.man_desacel_cm > 0 and frente < cfg.man_desacel_cm / 100.0) else 1.0
+                    if cond.ordenar("adelante", t, esc_v=esc_v) and rf is not None:
+                        corr_rumbo.inicio_pulso_recto(rf.e)
+                        pulso_recto_pend = True
                     avances += 1
                     sin_corregir += 1
         # ---- conductor (cada 0,05 s) ----
@@ -1015,6 +1107,8 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         duty_max_visto = max(duty_max_visto, max(abs(x) for x in duties))
         robot.step(dt, duties, hip.dead)
         t += dt
+        if rf is not None:
+            rf.predecir(float(robot.d.dq[2]) + sesgo_gyro + float(rng.normal(0.0, sigma_gyro)), dt)
 
         cx, cy = robot.centro()
         dist_rec += math.hypot(cx - ultimo[0], cy - ultimo[1])
@@ -1067,7 +1161,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         "pico_cm": round(float(np.max(np.abs(e))) * 100, 1),
         "quieto_pct": round(100.0 * quieto / max(1, len(err)), 1),
         "pulsos": cond.aceptadas, "descartados": cond.descartadas,
-        "correcciones": correcciones, "corr_ejecutadas": corr_ejec, "bloqueos": bloqueos,
+        "correcciones": correcciones, "corr_ejecutadas": corr_ejec, "bloqueos": bloqueos, "escapes": escapes, "correcciones_rumbo": rumbo_corr,
         "atascado": atascado,
         "pivote_pico_deg": round(math.degrees(pico_delta), 1),
         "duty_max": round(duty_max_visto, 1),

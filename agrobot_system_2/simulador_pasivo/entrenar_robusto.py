@@ -33,6 +33,28 @@ import sim_logica_actual as S
 SALIDA = Path.home() / ".agrobot" / "aprendizaje"
 STOP = SALIDA / "robusto.STOP"
 HUECOS = (0.50, 0.60, 0.75)
+# Espacio AMPLIO (2026-10-22): además del anterior, las maniobras nuevas del explorador, el control de rumbo fusionado (giroscopio + paredes del
+# LIDAR) y los demás parámetros del conductor que antes estaban fijos. Con --espacio amplio.
+AMPLIO = {
+    "rumbo_zm_deg": [0.0, 3.0, 4.0, 6.0],
+    "rumbo_pulso_escala": [1.0, 0.5, 0.3],
+    "rumbo_aprende": [0.15, 0.3],
+    "man_retroceso_cm": [0.0, 35.0, 50.0],
+    "man_atras_pulsos": [1, 2],
+    "man_giro_pulsos": [1, 2],
+    "man_desacel_cm": [0.0, 80.0, 120.0],
+    "man_desacel_factor": [0.5, 0.7],
+    "man_histeresis_cm": [0.0, 6.0, 12.0],
+    "man_pausa_s": [0.0, 0.4],
+    "man_escape_s": [0.0, 10.0, 20.0],
+    "man_corr_doble": [False, True],
+    "suavidad_periodo_s": [0.2, 0.3, 0.5],
+    "cono_lateral_deg": [45, 60, 75],
+    "sendero_pared_max_cm": [100, 150, 200],
+    "max_omega_rps": [2.0, 3.0, 4.0],
+    "accel_ang": [4.0, 8.0, 12.0],
+    "accel_lin": [1.5, 3.0, 5.0],
+}
 PEOR_HW = {"dead": 40.0, "mu": 0.65, "drag": 0.10}
 
 
@@ -76,9 +98,13 @@ def un_control(control, a, t_ini, presupuesto_s):
     esp["tras_factor"] = [0.0, 0.5, 1.0]
     if control == "pulsos":
         esp["suavidad_duty"] = [1.0, 0.7, 0.5, 0.35]
+        if a.espacio == "amplio":
+            esp.update(AMPLIO)
     rng = random.Random(20261020 + (1 if control == "continuo" else 0))
     refs = [S.config_actual(), S.config_interior_perfil()]
-    cands, vistos = [], set()
+    if control == "pulsos" and a.espacio == "amplio":      # un candidato con el rumbo fusionado, para que la evolución parta de algo bueno
+        sem = S.Config(nombre="semilla_rumbo", modo="preciso", escala_velocidad=0.3, rumbo_zm_deg=4.0, rumbo_pulso_escala=0.5)
+    cands, vistos = ([sem] if (control == "pulsos" and a.espacio == "amplio") else []), set()
     while len(cands) < a.n:
         d = {k: rng.choice(v) for k, v in esp.items()}
         if tuple(d.values()) in vistos:
@@ -232,6 +258,7 @@ def main():
     ap.add_argument("--sem-test", type=int, default=10)
     ap.add_argument("--top", type=int, default=0, help="finalistas del filtro (0 = n/6, mínimo 6)")
     ap.add_argument("--finalistas", type=int, default=3)
+    ap.add_argument("--espacio", choices=("base", "amplio"), default="base", help="amplio = añade maniobras, rumbo fusionado y más parámetros")
     ap.add_argument("--evolucion", type=int, default=0, help="rondas de mutación de los mejores tras el filtro (modo agresivo)")
     ap.add_argument("--hijos", type=int, default=40, help="hijos por ronda de evolución")
     ap.add_argument("--reanudar", default="", help="robusto_<control>_*.json con un FILTRO ya calculado: se salta esa etapa")
@@ -253,6 +280,8 @@ def main():
     if not ok0:
         raise SystemExit("PUERTA 0 FALLIDA: el simulador no es válido; no se entrena.")
     controles = ("continuo", "pulsos") if a.control == "ambos" else (a.control,)
+    if a.control == "ambos" and a.espacio == "amplio":      # el robot real conduce con pulsos: va primero y con la mayor parte del tiempo
+        controles = ("pulsos", "continuo")
     resultados = {}
     for k, ctl in enumerate(controles):
         restante = a.horas * 3600 - (time.time() - t_ini)
@@ -260,7 +289,10 @@ def main():
             print(f"[{ctl}] sin tiempo/parada: se omite", flush=True)
             continue
         # el presupuesto se reparte entre los controles que faltan
-        resultados[ctl] = un_control(ctl, a, time.time(), restante / (len(controles) - k))[0]
+        parte = restante / (len(controles) - k)
+        if a.control == "ambos" and a.espacio == "amplio" and k == 0:
+            parte = restante * 0.65
+        resultados[ctl] = un_control(ctl, a, time.time(), parte)[0]
     # ---- óptimo global entre controles ----
     ok = {c: r for c, r in resultados.items() if "elegido" in r}
     if ok:

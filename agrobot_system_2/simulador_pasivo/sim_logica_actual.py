@@ -829,6 +829,11 @@ def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=None, rango=8.0):
         ruido = sigma
         if CAL["lidar_dropout"] > 0:
             dist = np.where(rng.random(360) < CAL["lidar_dropout"], np.inf, dist)
+    for sec in CAL.get("lidar_chasis", []):       # el LIDAR ve su propio chasis (medido en el robot real): puntos fijos que viajan con él
+        for a in range(int(sec["desde"]), int(sec["hasta"])):
+            i = a % 360
+            if rng.random() < sec["prob"]:
+                dist[i] = min(dist[i], sec["dist_m"])
     dist = np.where(dist <= rango, dist + rng.normal(0, 1.0, 360) * ruido, np.inf)
     return [{"angle_deg": float(a), "distance_m": float(d)}
             for a, d in zip(range(360), dist) if np.isfinite(d) and d > 0.05]

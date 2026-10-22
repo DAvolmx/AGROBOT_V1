@@ -50,6 +50,31 @@ INFER_PERIOD_S = 0.1
 DETECTION_COOLDOWN_S = 3.0
 
 
+_PROPS_CAMARA = {"auto_exposure": "CAP_PROP_AUTO_EXPOSURE", "exposure": "CAP_PROP_EXPOSURE", "gain": "CAP_PROP_GAIN",
+                 "brightness": "CAP_PROP_BRIGHTNESS", "contrast": "CAP_PROP_CONTRAST", "autofocus": "CAP_PROP_AUTOFOCUS",
+                 "focus": "CAP_PROP_FOCUS", "backlight": "CAP_PROP_BACKLIGHT"}
+
+
+def _aplicar_ajustes_camara(cv2, cap, ajustes: dict):
+    """Ajustes de exposición/enfoque de la cámara USB, SOLO los que estén en hardware.camara_ajustes (vacío = no toca nada).
+
+    2026-10-22: en interiores el 89 % de las fotos salió borrosa (var. del Laplaciano < 60) y oscura (brillo medio 65/255). Valores
+    por probar con tools/ajustar_camara.py (con el backend parado); una propiedad que el driver no acepta se ignora con un aviso."""
+    for clave, valor in ajustes.items():
+        nombre = _PROPS_CAMARA.get(clave)
+        prop = getattr(cv2, nombre, None) if nombre else None
+        if prop is None:
+            print(f"[camara] ajuste desconocido: {clave}", flush=True)
+            continue
+        try:
+            ok = cap.set(prop, float(valor))
+        except Exception as exc:
+            ok = False
+            print(f"[camara] {clave}: {exc}", flush=True)
+        if not ok:
+            print(f"[camara] el driver no aceptó {clave}={valor}", flush=True)
+
+
 def fraccion_vegetacion(frame, xyxy) -> float:
     """Fracción de píxeles verdes/amarillo-verdosos (H 20-95, S>=40, V>=40) dentro de la caja.
 
@@ -196,6 +221,7 @@ class CameraWorker:
         # no ir sacando frames viejos de una cola.
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         _fijar_framerate_camara()
+        _aplicar_ajustes_camara(cv2, cap, (self._get_config().get("hardware") or {}).get("camara_ajustes") or {})
         return cap
 
     def _bucle_captura(self):

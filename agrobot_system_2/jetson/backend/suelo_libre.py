@@ -53,6 +53,7 @@ MEMORIA_EXTRANA = 0.55
 # resto del suelo sí coincide (la cobija: > 30 %). 2026-10-02: sin esto la
 # memoria quedó mal tras reiniciar y bloqueó el freno con el suelo despejado.
 MEMORIA_INVALIDA = 0.05
+EXTRANA_MIN = 3             # fotogramas seguidos con la franja «rara» antes de declarar hueco 0 (objeto pegado)
 
 
 def _suelo_por_histograma(cv2, hsv, hist, hist_v):
@@ -74,6 +75,7 @@ class SueloLibre:
         self._reloj = reloj          # el simulador pasa su reloj virtual
         self.ultimo: dict | None = None
         self._historia: list[np.ndarray] = []
+        self._extrana_seguidas = 0
         # Cómo se ve el suelo, aprendido de fotogramas anteriores. Sin esto,
         # un objeto que ya está en la franja de referencia (la cobija del
         # paso 1, 2026-10-02) se aprendía como "suelo" y desaparecía.
@@ -200,6 +202,10 @@ class SueloLibre:
             "mascara": suelo,
             "base": firme,
         }
+        # Persistencia de «hay algo en la franja»: en interiores (baldosa oscura, reflejos de ventana) la referencia cambia de un
+        # fotograma a otro y daba hueco 0 durante medio segundo sin obstáculo real (2026-10-22: 93 rachas, mediana 0,4 s).
+        self._extrana_seguidas = self._extrana_seguidas + 1 if extrana else 0
+        res["extrana_seguidas"] = self._extrana_seguidas
         self.ultimo = res
         return res
 
@@ -211,6 +217,8 @@ class SueloLibre:
         r = self.ultimo
         if r is None or self._reloj() - r["t"] > max_edad_s:
             return None
+        if r.get("objeto_en_referencia") and r.get("extrana_seguidas", EXTRANA_MIN) < EXTRANA_MIN:
+            return None                         # un destello de un fotograma: sin dato, no «hueco cero»
         if r.get("objeto_en_referencia"):
             # Algo ocupa la franja que el robot va a pisar, y la cámara no ve
             # los primeros ~65 cm: puede estar pegado. Hueco CERO.

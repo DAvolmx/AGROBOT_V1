@@ -39,6 +39,9 @@ DEFAULTS = {
     },
     "hardware": {
         "camera_enabled": True,
+        # Exposición/enfoque de la cámara USB; vacío = valores del driver. Claves: auto_exposure, exposure, gain, brightness, contrast,
+        # autofocus, focus, backlight. Elegirlos con tools/ajustar_camara.py.
+        "camara_ajustes": {},
         "lidar_baud": 460800,
         # El C3 se comunica por UART, no por red: `actuator_ip` se elimino
         # el 2026-09-04. ttyTHS1 es el UART del cabezal de 40 pines de la

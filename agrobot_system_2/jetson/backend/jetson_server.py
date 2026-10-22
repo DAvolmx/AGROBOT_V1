@@ -1719,6 +1719,15 @@ def _plagasx_clasificador():
     return _plagasx_cls_modelo
 
 
+def _gyro_dps():
+    """Velocidad angular Z del IMU en °/s (+ izquierda, ya con sesgo y nivel corregidos) o None si el dato no es fresco."""
+    env = state.env_telemetry or {}
+    ra = env.get("_received_at")
+    if ra is None or time.time() - ra > 0.5 or env.get("gyroZ") is None:
+        return None
+    return float(env["gyroZ"])
+
+
 def _crear_vision_activa():
     """Visión activa (vision_activa.py): mueve el servo y pulsa el conductor para centrar, acercarse y analizar un objetivo."""
     global vision_activa
@@ -1777,9 +1786,31 @@ def _crear_vision_activa():
         get_cajas=cajas, get_servo=lambda: state.servo_angle, set_servo=poner_servo, conducir=conducir,
         ocupado=lambda: conductor.activo, parar=lambda: conductor.parar(),
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]), edad_scan=lidar_reactive.edad_scan_s,
-        get_config=lambda: state.config.get("vision_activa", {}), on_event=evento, capturar=capturar, clasificar=clasificar,
+        get_config=lambda: state.config.get("vision_activa", {}), on_event=evento, capturar=capturar, clasificar=clasificar, girar=lambda g: conductor.girar_grados(g, _gyro_dps),
         get_pose=ros_bridge.pose_en_mapa, enlace_ok=lambda: enlace_c3 is not None and enlace_c3.connected,
         autonomia_activa=_autonomia_activa, reloj=time.time)
+
+
+async def giro_cerrado_handler(request: web.Request):
+    """GET /api/giro_cerrado — último giro de lazo cerrado. POST {"grados": 15, "w": 0.6} — gira esos grados (+ izquierda) midiendo con el
+    giroscopio y para al alcanzarlos. Se cancela con la parada total. Rechaza si ya hay un movimiento en curso o no hay C3/IMU."""
+    if request.method == "GET":
+        return web.json_response({"activo": conductor.activo, "ultimo": conductor.ultimo_giro, "anticipo_s": round(conductor.anticipo_giro_s, 3)})
+    try:
+        body = await request.json()
+        grados = float(body["grados"])
+        w = float(body.get("w", 0.6))
+    except Exception:
+        return web.json_response({"error": "se espera {'grados': número}"}, status=400)
+    if not (-180.0 <= grados <= 180.0 and 0.1 <= w <= 1.2):
+        return web.json_response({"error": "grados en [-180, 180] y w en [0.1, 1.2]"}, status=400)
+    if enlace_c3 is None or not enlace_c3.connected:
+        return web.json_response({"error": "C3 sin enlace"}, status=409)
+    if _gyro_dps() is None:
+        return web.json_response({"error": "IMU sin datos frescos"}, status=409)
+    if not conductor.girar_grados(grados, _gyro_dps, w_rps=w):
+        return web.json_response({"error": "ya hay un movimiento en curso"}, status=409)
+    return web.json_response({"ok": True, "grados": grados})
 
 
 async def vision_activa_get_handler(request: web.Request):
@@ -4122,6 +4153,8 @@ def create_app() -> web.Application:
     app.router.add_get("/api/mapas", mapas_listar_handler)
     app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)
     app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
+    app.router.add_get("/api/giro_cerrado", giro_cerrado_handler)
+    app.router.add_post("/api/giro_cerrado", giro_cerrado_handler)
     app.router.add_get("/api/vision_activa", vision_activa_get_handler)
     app.router.add_post("/api/vision_activa", vision_activa_post_handler)
     app.router.add_get("/api/patrol", patrol_status_handler)

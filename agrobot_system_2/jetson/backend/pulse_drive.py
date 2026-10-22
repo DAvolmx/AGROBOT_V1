@@ -56,11 +56,59 @@ class ConductorPulsos:
         self._get_config = get_config or (lambda: {"suavidad_duty": 1.0,
                                                    "suavidad_periodo_s": 0.3})
         self._tarea = None
+        self.ultimo_giro = None
+        self.anticipo_giro_s = 0.30          # inercia del giro: se APRENDE de cada giro medido (EMA)
         self.modo = "preciso"
 
     @property
     def activo(self):
         return self._tarea is not None and not self._tarea.done()
+
+    def girar_grados(self, grados: float, get_gyro_dps, *, w_rps: float = 0.6, anticipo_s: float | None = None, t_max_s: float = 2.0) -> bool:
+        """Gira `grados` (+ = izquierda) en LAZO CERRADO con el giroscopio (giro_cerrado.py). No bloquea: crea la tarea como `ordenar`.
+        `get_gyro_dps()` -> °/s o None si no hay IMU fresco (entonces no se mueve). False si ya hay un movimiento en curso."""
+        if self.activo:
+            return False
+        self.ultimo_giro = None
+        self._tarea = asyncio.create_task(self._girar(float(grados), get_gyro_dps, w_rps, anticipo_s, t_max_s))
+        return True
+
+    async def _girar(self, grados, get_gyro_dps, w_rps, anticipo_s, t_max_s):
+        from giro_cerrado import GiroCerrado
+        g = GiroCerrado(grados, w_rps=w_rps, anticipo_s=self.anticipo_giro_s if anticipo_s is None else anticipo_s, t_max_s=t_max_s)
+        previo = time.monotonic()
+        try:
+            while True:
+                await asyncio.sleep(TICK_S)
+                ahora = time.monotonic()
+                dt, previo = ahora - previo, ahora
+                gz = get_gyro_dps()
+                if gz is None:
+                    g._fin("sin IMU fresco")
+                    break
+                w = g.paso(gz, dt)
+                if g.terminado:
+                    break
+                self._send_command(0.0, w, 0)
+            # motor parado: se sigue midiendo 0,5 s para conocer el ángulo FINAL y aprender la inercia
+            self._emergency_stop()
+            fin_obs = time.monotonic() + 0.5
+            previo = time.monotonic()
+            while time.monotonic() < fin_obs:
+                await asyncio.sleep(TICK_S)
+                ahora = time.monotonic()
+                gz = get_gyro_dps()
+                if gz is not None:
+                    g.observar_tras_parar(gz, ahora - previo)
+                previo = ahora
+            medido = g.anticipo_medido()
+            if medido is not None:
+                self.anticipo_giro_s = min(0.6, max(0.05, 0.7 * self.anticipo_giro_s + 0.3 * medido))
+        finally:
+            self.ultimo_giro = g.resumen()
+            if asyncio.current_task() is self._tarea:
+                self._emergency_stop()
+                self._tarea = None
 
     def _modo(self):
         return MODOS.get(self.modo, MODOS["preciso"])

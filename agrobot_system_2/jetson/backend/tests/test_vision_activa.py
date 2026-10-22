@@ -36,6 +36,11 @@ class Mundo:
         elif accion == "adelante":
             self.dist -= self.avance
 
+    def girar(self, grados):
+        self.giros_cerrados = getattr(self, "giros_cerrados", []) + [grados]
+        self.theta += grados * 0.93                                   # el giro cerrado casi acierta (7 % de error)
+        return True
+
     def set_servo(self, a):
         self.servo = a
 
@@ -56,7 +61,7 @@ class Mundo:
     def crear(self, cfg=None, tmp=None):
         return V.VisionActiva(get_cajas=self.cajas, get_servo=lambda: self.servo, set_servo=self.set_servo, conducir=self.conducir,
                               ocupado=lambda: False, parar=lambda: setattr(self, "paradas", self.paradas + 1), distancias=self.distancias,
-                              edad_scan=lambda: self.edad, get_config=lambda: cfg or {"max_objetivos": 1}, on_event=self.eventos.append,
+                              edad_scan=lambda: self.edad, get_config=lambda: cfg or {"max_objetivos": 1}, on_event=self.eventos.append, girar=self.girar,
                               enlace_ok=lambda: self.enlace, autonomia_activa=lambda: self.autonomia, reloj=self.reloj, carpeta=tmp)
 
     def correr(self, va, pasos=400, hasta=None):
@@ -200,3 +205,16 @@ def test_clasificador_da_una_segunda_opinion_en_el_resultado(tmp_path):
     va.iniciar()
     m.correr(va, pasos=400)
     assert va.ultimo_resultado["diagnostico"]["top"][0]["clase"] == "col_sana"
+
+
+def test_con_giro_cerrado_centra_en_menos_ordenes_que_con_pulsos(tmp_path):
+    m1 = Mundo(rumbo=40.0, dist=1.6)
+    v1 = m1.crear(cfg={"max_objetivos": 1, "giro_cerrado": False}, tmp=tmp_path)
+    v1.iniciar(); m1.correr(v1)
+    m2 = Mundo(rumbo=40.0, dist=1.6)
+    v2 = m2.crear(cfg={"max_objetivos": 1, "giro_cerrado": True}, tmp=tmp_path)
+    v2.iniciar(); m2.correr(v2)
+    assert v2.objetivos_hechos == 1
+    giros_pulsos = sum(1 for a in m1.pulsos if a in ("izquierda", "derecha"))
+    assert len(getattr(m2, "giros_cerrados", [])) < giros_pulsos
+    assert all(g > 0 for g in m2.giros_cerrados)                    # la planta está a la izquierda: giros positivos

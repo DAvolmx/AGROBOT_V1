@@ -157,6 +157,8 @@
     "tiempo_max_s": 600.0,
     "scan_max_s": 1.0,
     "max_area_frac": 0.85,
-    "sin_mover": false
+    "sin_mover": false,
+    "giro_cerrado": false,
+    "giro_max_deg": 25.0
   }
 }

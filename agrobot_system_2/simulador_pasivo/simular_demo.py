@@ -56,6 +56,12 @@ def laboratorio(layout: int):
         paredes = [(*poli[i], *poli[(i + 1) % len(poli)]) for i in range(len(poli))]
         return {"W": 2.05, "H": 2.0, "paredes": paredes, "poligono": poli, "patas": [(0.25, 0.84, 0.03), (1.1, 0.84, 0.03)],
                 "macetas": [(1.92, 1.0), (1.92, 1.35), (1.92, 1.7)], "inicio": (0.35, 1.3, 0.0)}
+    if layout == 4:
+        # El callejón que describió el operador (2026-10-23): ~5 x 2 m, 4 macetas repartidas a los dos lados, entrada por un extremo.
+        W, H = 5.0, 2.0
+        paredes = [(0, 0, W, 0), (W, 0, W, H), (W, H, 0, H), (0, H, 0, 0)]
+        return {"W": W, "H": H, "paredes": paredes, "patas": [], "macetas": [(1.3, 0.35), (2.4, 1.65), (3.5, 0.35), (4.5, 1.5)],
+                "inicio": (0.4, 1.0, 0.0)}
     W, H = (3.3, 1.0) if layout == 2 else (6.0, 5.0)
     paredes = [(0, 0, W, 0), (W, 0, W, H), (W, H, 0, H), (0, H, 0, 0)]
     patas = []

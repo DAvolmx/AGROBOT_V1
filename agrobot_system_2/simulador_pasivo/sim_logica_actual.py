@@ -177,6 +177,7 @@ class Config:
     fu_refuerzo: float = 100.0
     fu_comp_neg: float = 0.0
     fu_comp_pos: float = 0.0
+    fu_freno_ms: float = 80.0           # freno activo (firmware 2026-10-23): 0 = rueda libre como antes
     # --- firmware «MAX FRENTE» (firmware/agrobot_c3_skidsteer_maxfrente): las ruedas delanteras (R1, L1) al 100 % de PWM en
     # el sentido que pida su lado; las traseras (pivote) a tras_factor x el duty proporcional (0 = sin ayuda trasera) ---
     tras_factor: float = 1.0
@@ -588,6 +589,10 @@ class MotoresFusion:
         self.boost = 1.0
         self.t_mon = 0.0
         self.esc = [1.0] * 4
+        self.cero_desde = [None] * 4
+        self.frenado = [False] * 4
+        self.freno_hasta = [-1.0] * 4
+        self.frenando = [False] * 4        # en el orden de salida [R1, L1, L2, R2]
 
     def recibir(self, pv, pw, t):
         self.refreshed = t
@@ -597,9 +602,28 @@ class MotoresFusion:
                             c.fu_pivote, c.fu_minp, c.fu_tras, c.fu_dif_del, self.boost)
         self.esc = fu_escala_giro(w, self.t, c.fu_comp_neg, c.fu_comp_pos)
 
+    def _freno(self, i, t, inmediato, c):
+        """Port del freno activo de motorTask(): frena tras 200 ms seguidos con orden cero (no en cada hueco del troceo de la Jetson)
+        o al instante en failsafe; dura fu_freno_ms. Devuelve True mientras frena la rueda i."""
+        if t < self.freno_hasta[i]:
+            return self.t[i] == 0.0 or inmediato
+        if self.freno_hasta[i] > 0:
+            self.freno_hasta[i] = -1.0
+        if c.fu_freno_ms <= 0 or self.frenado[i]:
+            return False
+        if inmediato and self.cur_previo[i] != 0.0:
+            self.freno_hasta[i], self.frenado[i] = t + c.fu_freno_ms / 1000.0, True
+            return True
+        if self.t[i] == 0.0 and self.cero_desde[i] is not None and t - self.cero_desde[i] >= 0.2:
+            self.freno_hasta[i], self.frenado[i] = t + c.fu_freno_ms / 1000.0, True
+            return True
+        return False
+
     def tick(self, t):
         c = self.cfg
-        if t - self.refreshed > DEADMAN_FW_S:
+        self.cur_previo = list(self.cur)
+        inmediato = t - self.refreshed > DEADMAN_FW_S
+        if inmediato:
             self.cur = [0.0] * 4
             self.t = [0.0] * 4
         else:
@@ -616,8 +640,15 @@ class MotoresFusion:
                 self.cur[i] = su_rampa(prev, tgt, TICK_FW, c.fu_minp, c.fu_acel, c.fu_frena)
                 if self.cur[i] == 0 and prev != 0:
                     self.zero_at[i] = t
+        for i in range(4):                                     # seguimiento del «orden cero sostenido» para el freno
+            if self.t[i] != 0.0:
+                self.cero_desde[i], self.frenado[i] = None, False
+            elif self.cero_desde[i] is None:
+                self.cero_desde[i] = t
+        fr = [self._freno(i, t, inmediato, c) for i in range(4)]
         t_ms = int(round(t * 1000))
-        d = [fu_rebanada(fu_rafaga(x, t_ms, c.fu_periodo), t_ms, e) for x, e in zip(self.cur, self.esc)]
+        d = [0.0 if f else fu_rebanada(fu_rafaga(x, t_ms, c.fu_periodo), t_ms, e) for x, e, f in zip(self.cur, self.esc, fr)]
+        self.frenando = [fr[0], fr[2], fr[3], fr[1]]
         return [d[0], d[2], d[3], d[1]]
 
 
@@ -871,6 +902,7 @@ class RobotModelo:
         ox, oy = x + k * MID * math.cos(psi), y + k * MID * math.sin(psi)
         self.d = DinamicaPasiva(pose=(ox, oy, psi_m), parametros=params)
         self.geo = replace(H.geo_de_parametros(params), cuerpo_largo=CUERPO_L, cuerpo_ancho=CUERPO_A)
+        self.efic = None                            # [(fwd, rev)] por rueda en el orden [R1, L1, L2, R2]; None = ideal
 
     def centro(self):
         ox, oy, psi_m, delta = self.d.q
@@ -887,8 +919,11 @@ class RobotModelo:
     def delta(self):
         return float(self.d.q[3])
 
-    def step(self, dt, duties, dead):
-        """duties firmados [R1,L1,L2,R2] en %  ->  velocidades de rueda del modelo."""
+    def step(self, dt, duties, dead, frenos=None):
+        """duties firmados [R1,L1,L2,R2] en %  ->  velocidades de rueda del modelo. `frenos`: [bool] por rueda con el freno activo
+        del firmware (el puente en corto): la rueda NO queda libre, su objetivo de velocidad es 0 y el motor la retiene."""
+        if self.efic:
+            duties = [d * (e[0] if d >= 0 else e[1]) for d, e in zip(duties, self.efic)]
         vel, libre = [], []
         for dpc in duties:
             # Duty 0 (o por debajo de la zona muerta) = rueda LIBRE, no frenada: el firmware
@@ -897,6 +932,8 @@ class RobotModelo:
             libre.append(es_libre)
             sg = -1.0 if PIVOTE == "trasero" else 1.0   # pivote atrás: avanzar real = retroceder en el modelo
             vel.append(0.0 if es_libre else sg * (dpc / 100.0 * V_SCALE))
+        if frenos:
+            libre = [l and not f for l, f in zip(libre, frenos)]      # frenada = NO libre con objetivo 0
         R1, L1, L2, R2 = vel
         fR1, fL1, fL2, fR2 = libre
         if PIVOTE == "trasero":
@@ -925,6 +962,14 @@ class Hip:
     drag: float = 0.17
     # Robot PESADO / delanteras flojas (montecarlo_firmware_pesado.py). None = el modelo por defecto.
     masa: float | None = None          # chassis_mass en kg (la medida: ~12 kg en total)
+    # Asimetrías MEDIDAS el 2026-10-23 (calibracion_pulsos_20261023.json): hacia atrás el robot rueda más que hacia delante y un lado
+    # empuja más que el otro. Multiplican el duty de cada rueda: avance (+), retroceso (-) y lado (der = R1,R2; izq = L1,L2).
+    efic_fwd: float = 1.0
+    efic_rev: float = 1.0
+    lateral: float | None = None       # rigidez lateral del neumático (menor = el robot gira más fácil, patinando)
+    pivot_fric: float | None = None    # rozamiento del pivote delantero pasivo
+    lado_der: float = 1.0
+    lado_izq: float = 1.0
     eje_fijo: float | None = None      # ancho exterior del eje FIJO delantero (estrecho); None = FIJO_EXT_M
     # Rigidez lateral de los neumáticos (N por m/s): lo que se resiste al giro de un skid-steer. El 2026-10-21 el
     # operador dijo que el robot REAL gira bien; con 65 el simulador gira 13 °/s en el sitio (muy poco), con 15 gira ~40.
@@ -962,11 +1007,18 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                      front_outer=PIVOTE_EXT_M, rear_outer=hip.eje_fijo or FIJO_EXT_M)
     if hip.masa is not None:
         params = replace(params, chassis_mass=hip.masa)
+    if hip.lateral is not None:
+        params = replace(params, lateral=hip.lateral)
+    if hip.pivot_fric is not None:
+        params = replace(params, pivot_friction=hip.pivot_fric)
     # perturbación inicial: el robot nunca arranca perfectamente centrado
     x0, y0, psi0 = esc.inicio
     y0 += rng.uniform(-0.04, 0.04)
     psi0 += math.radians(rng.uniform(-3.0, 3.0))
     robot = RobotModelo(params, (x0, y0, psi0))
+    if (hip.efic_fwd, hip.efic_rev, hip.lado_der, hip.lado_izq) != (1.0, 1.0, 1.0, 1.0):
+        lado = (hip.lado_der, hip.lado_izq, hip.lado_izq, hip.lado_der)           # [R1, L1, L2, R2]
+        robot.efic = [(hip.efic_fwd * k, hip.efic_rev * k) for k in lado]
     mundo = MundoSim(esc)
 
     act = ActuadorJetson(cfg)
@@ -1141,7 +1193,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         # ---- firmware + dinámica (10 ms) ----
         duties = fw.tick(t)
         duty_max_visto = max(duty_max_visto, max(abs(x) for x in duties))
-        robot.step(dt, duties, hip.dead)
+        robot.step(dt, duties, hip.dead, getattr(fw, "frenando", None))
         t += dt
         if rf is not None:
             rf.predecir(float(robot.d.dq[2]) + sesgo_gyro + float(rng.normal(0.0, sigma_gyro)), dt)

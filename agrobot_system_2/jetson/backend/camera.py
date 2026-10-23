@@ -135,6 +135,10 @@ class CameraWorker:
         self._frame_ts = 0.0         # time.monotonic() de la captura
         self._frame_seq = 0          # sube con cada frame: permite saber si hay uno nuevo
         self.zoom = 1.0              # zoom de la cámara (1 = campo completo, hasta ZOOM_MAX)
+        # Cuadros recientes con su NITIDEZ (varianza del laplaciano), solo mientras `guardar_nitidos` (la cámara es de foco fijo: sin
+        # enfoque automático, lo que se puede hacer es quedarse con el cuadro más nítido al analizar una planta).
+        self.guardar_nitidos = False
+        self._nitidos = []
         self._res_abierta = (640, 480)
         self._cajas = []             # últimas detecciones dibujables
         self._cajas_ts = 0.0
@@ -211,6 +215,15 @@ class CameraWorker:
             if self._frame_crudo is None:
                 return None
             return self._frame_crudo, self._frame_ts, self._frame_seq
+
+    def mejor_nitido(self, max_edad_s: float = 1.2):
+        """Como `ultimo_frame()` pero del cuadro MÁS NÍTIDO de los últimos `max_edad_s` s (si no hay, el último)."""
+        ahora = time.monotonic()
+        lista = [(n, f, ts, sq) for ts, n, f, sq in list(self._nitidos) if ahora - ts <= max_edad_s]
+        if not lista:
+            return self.ultimo_frame()
+        n, f, ts, sq = max(lista, key=lambda x: x[0])
+        return f, ts, sq
 
     def snapshot(self) -> dict:
         return {"fps": round(self.fps, 1), "estado": self.estado,
@@ -292,6 +305,15 @@ class CameraWorker:
                     self._frame_ts = time.monotonic()
                     self._frame_seq += 1
                     cajas = list(self._cajas)
+                if self.guardar_nitidos:
+                    try:
+                        pequeno = cv2.resize(frame, (320, 240), interpolation=cv2.INTER_AREA)
+                        nit = float(cv2.Laplacian(cv2.cvtColor(pequeno, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var())
+                        self._nitidos = (self._nitidos + [(self._frame_ts, nit, frame, self._frame_seq)])[-8:]
+                    except Exception:
+                        pass
+                elif self._nitidos:
+                    self._nitidos = []
 
                 # Se dibuja sobre una COPIA. Antes se dibujaba sobre el mismo
                 # array guardado como "crudo": YOLO analizaba imágenes con sus

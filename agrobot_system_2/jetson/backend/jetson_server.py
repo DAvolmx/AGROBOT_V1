@@ -57,6 +57,7 @@ from mapas import GestorMapas, ErrorMapa
 from scan_mapa import scan_a_mapa
 from asistido import Asistido
 from servo_bajo import ServoBajo
+from zoom_auto import ZoomAuto, DEFECTOS as ZOOM_DEFECTOS
 from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
 from explorador import ExploradorReactivo
 from sendero import SeguidorSendero
@@ -1983,8 +1984,15 @@ def _dist_caja_m(xyxy, ancho, alto):
     queda por encima del horizonte. Sirve para macetas bajas que el LIDAR (a 37,5 cm) no ve."""
     try:
         x1, y1, x2, y2 = xyxy
-        u = (x1 + x2) / 2.0 * suelo_mod.ANCHO / float(ancho)
-        v = min(y2, alto - 1) * suelo_mod.ALTO / float(alto)
+        # Con zoom digital la imagen es el recorte CENTRAL ampliado z veces: se devuelve el píxel al cuadro sin zoom
+        # (antes la distancia por cámara salía mal en cuanto se hacía zoom, y la visión activa ahora lo usa al acercarse).
+        z = max(1.0, float(getattr(camera, "zoom", 1.0) or 1.0)) if camera is not None else 1.0
+        xc = (x1 + x2) / 2.0
+        yb = min(y2, alto - 1)
+        xc = (xc - ancho / 2.0) / z + ancho / 2.0
+        yb = (yb - alto / 2.0) / z + alto / 2.0
+        u = xc * suelo_mod.ANCHO / float(ancho)
+        v = yb * suelo_mod.ALTO / float(alto)
         x, y = suelo_libre.a_suelo(u, v, _geometria_camara())
         d = float(math.hypot(float(x), float(y))) - state.config["slam"]["robot_largo_cm"] / 200.0
         return round(d, 2) if math.isfinite(d) and d > 0 else None
@@ -2012,6 +2020,55 @@ def _grabar_video(on: bool):
 
 
 _servo_bajo = ServoBajo()
+_zoom_auto = ZoomAuto()
+_zoom_puesto_por_auto = False
+
+
+async def _bucle_zoom_auto():
+    """Zoom digital automático al acercarse a una planta (zoom_auto.py): sube hasta que la planta ocupa ~55 % de la imagen mientras la
+    visión activa centra, se acerca, encuadra y analiza; vuelve a 1× al terminar. No toca el zoom si el operador tiene el mando o lo
+    puso él (solo suelta el zoom que puso este lazo)."""
+    global _zoom_puesto_por_auto
+    while True:
+        try:
+            await asyncio.sleep(0.25)
+            if camera is None or vision_activa is None:
+                continue
+            cfg = {**ZOOM_DEFECTOS, **(state.config.get("vision_activa") or {})}
+            _zoom_auto.cfg = cfg
+            estado = vision_activa.estado
+            camera.guardar_nitidos = estado in ("analizando", "escaneando")
+            if not cfg["zoom_auto"] or asistido.activa:
+                continue
+            if estado == "inactiva" and not _zoom_puesto_por_auto:
+                continue
+            f = camera.ultimo_frame()
+            if f is None:
+                continue
+            h, w = f[0].shape[:2]
+            with camera._lock:
+                lista, ts = list(camera._cajas), camera._cajas_ts
+            caja = None
+            if ts is not None and time.time() - ts < 0.8:
+                cand = [b for b in lista if float(b.get("confidence", 0)) >= 0.35
+                        and any(k in str(b.get("class", "")).lower() for k in ("planta", "col", "maceta"))]
+                if cand:
+                    caja = max(cand, key=lambda b: (b["xyxy"][2] - b["xyxy"][0]) * (b["xyxy"][3] - b["xyxy"][1]))["xyxy"]
+            nuevo = _zoom_auto.paso(estado, caja, w, h, float(camera.zoom), time.monotonic())
+            if nuevo is None:
+                if estado == "inactiva" and camera.zoom <= 1.02:
+                    _zoom_puesto_por_auto = False
+                continue
+            camera.set_zoom(nuevo)
+            _zoom_puesto_por_auto = nuevo > 1.02
+            if hasattr(vision_activa, "_esperar"):
+                vision_activa._esperar(0.7)                  # el zoom reabre/reencuadra: que no decida con cajas de antes
+            await state.broadcast({"type": "zoom_auto", "data": {"zoom": nuevo, "estado": estado}})
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[zoom_auto] falló: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(2.0)
 
 
 async def _bucle_servo_macetas():
@@ -2188,7 +2245,7 @@ def _crear_vision_activa():
         conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * esc, omega_max=ctrl["max_omega_rps"], maniobra=False)
 
     def capturar(info):
-        f = camera.ultimo_frame() if camera is not None else None
+        f = (camera.mejor_nitido() if camera is not None else None)       # el cuadro más nítido de los últimos ~1 s
         if f is None:
             return None
         import cv2
@@ -4074,6 +4131,7 @@ async def start_background(app: web.Application):
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
     app["vigia_asistido_task"] = asyncio.create_task(_vigia_asistido())
     app["servo_macetas_task"] = asyncio.create_task(_bucle_servo_macetas())
+    app["zoom_auto_task"] = asyncio.create_task(_bucle_zoom_auto())
     app["zupt_task"] = asyncio.create_task(_bucle_zupt())
     app["modo_seguro_task"] = asyncio.create_task(_bucle_modo_seguro())
     global entorno

@@ -147,8 +147,8 @@ def main():
             gen += 1
             pob = [de_unidad(mu)] + ([HOY] if gen == 1 else []) + [de_unidad(mu + sd * rng.standard_normal(len(CLAVES))) for _ in range(a.pob)]
             pob = pob[:a.pob]
-            si = [100 + gen * 7, 101 + gen * 7]                # semillas nuevas cada generación
-            se = [200 + gen * 7]
+            si = [100 + gen * 7 + k for k in range(3)]         # semillas nuevas cada generación (con numba un episodio dura ~1 s)
+            se = [200 + gen * 7 + k for k in range(2)]
             rs = evaluar(pool, pob, si, se)
             fit = np.array([fitness(r) for r in rs])
             orden = np.argsort(fit)
@@ -181,7 +181,7 @@ def main():
         cand.append(de_unidad(mu))
         nombres = [f"top{i+1}" for i in range(len(cand) - 1)] + ["media_final", "HOY", "AYER"]
         todos = cand + [HOY, AYER]
-        si, se = list(range(5000, 5008)), list(range(6000, 6005))
+        si, se = list(range(5000, 5016)), list(range(6000, 6008))
         val = evaluar(pool, todos, si, se)
         filas = [{"nombre": n, "params": p, **resumen(r)} for n, p, r in zip(nombres, todos, val)]
         for f in filas:
@@ -190,7 +190,7 @@ def main():
         mejor = min(validos, key=lambda f: f["todo"]["puntos"])
         say("mejor validado:", mejor["nombre"], mejor["todo"])
         say("== ESTRÉS (hardware más flojo: masa, drag y agarre) ==")
-        est = evaluar(pool, [mejor["params"], HOY, AYER], list(range(7000, 7006)), list(range(8000, 8004)), extremo=True)
+        est = evaluar(pool, [mejor["params"], HOY, AYER], list(range(7000, 7012)), list(range(8000, 8006)), extremo=True)
         estres = {n: resumen(r) for n, r in zip(["mejor", "HOY", "AYER"], est)}
         for n, v in estres.items():
             say(f"  {n:6s} {v['todo']}")

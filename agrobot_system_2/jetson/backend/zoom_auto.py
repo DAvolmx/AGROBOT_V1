@@ -16,7 +16,7 @@ from __future__ import annotations
 ESTADOS_ZOOM = ("centrando", "acercando", "encuadrando", "analizando", "escaneando")
 DEFECTOS = {
     "zoom_auto": True,
-    "zoom_fraccion_objetivo": 0.55,     # la planta debe ocupar ~55 % del lado mayor de la imagen
+    "zoom_fraccion_objetivo": 0.80,     # la planta debe ocupar ~80 % del lado mayor de la imagen (validado: 0.85 > 0.72 > 0.55 en exactitud del clasificador)
     "zoom_max": 3.0,                    # tope (la cámara permite 4×, pero con 3× el recorte aún da 427×240 px reales a 1280×720)
     "zoom_banda": 0.15,                 # zona muerta: no se mueve si la fracción está a ±15 % del objetivo
     "zoom_paso_sube": 1.3,

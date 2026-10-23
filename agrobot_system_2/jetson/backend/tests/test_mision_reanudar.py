@@ -71,3 +71,25 @@ def test_detener_dos_veces_no_duplica_el_evento_de_fin():
     m.detener("mando manual")
     m.detener("parada")
     assert [e["tipo"] for e in eventos].count("mision_fin") == 1
+
+
+class VisionConPausa(FakeVision):
+    pausa_externa = False
+
+    def __init__(self):
+        super().__init__()
+        self.estado = "analizando"
+        self.cancelada = False
+
+    def cancelar(self, m=""):
+        self.cancelada = True
+
+
+def test_pausar_la_mision_pausa_la_inspeccion_en_vez_de_cancelarla():
+    v = VisionConPausa()
+    m, expl = _mision(v, [])
+    m.iniciar()
+    m.pausar()
+    assert v.pausa_externa is True and v.cancelada is False
+    m.continuar()
+    assert v.pausa_externa is False

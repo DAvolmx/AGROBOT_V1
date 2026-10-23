@@ -75,7 +75,10 @@ class MisionPlantas:
         self.pausado, self._t_pausa = True, self.reloj()
         try:
             if self.vision.estado != "inactiva":
-                self.vision.cancelar("mando manual")
+                if hasattr(self.vision, "pausa_externa"):
+                    self.vision.pausa_externa = True       # la inspección se PAUSA y sigue donde iba (antes se cancelaba y se perdía)
+                else:
+                    self.vision.cancelar("mando manual")
         finally:
             if hasattr(self.expl, "pausar"):
                 self.expl.pausar()
@@ -86,6 +89,8 @@ class MisionPlantas:
         if not self.pausado:
             return
         self.pausado = False
+        if hasattr(self.vision, "pausa_externa"):
+            self.vision.pausa_externa = False
         self._t0 += self.reloj() - self._t_pausa        # el rato en pausa no gasta el tiempo máximo
         self._racha = 0
         self._t_ignorar = self.reloj() + 1.0

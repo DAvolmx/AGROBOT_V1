@@ -1777,7 +1777,7 @@ def _pausar_autonomia():
         ("mision_plantas", lambda: mision_plantas is not None and mision_plantas.pausar()),
         ("exploracion", lambda: explorador is not None and explorador.pausar()),
         ("patrulla", lambda: patrol is not None and patrol.pausar()),
-        ("vision_activa", lambda: vision_activa is not None and vision_activa.cancelar("mando manual")),
+        ("vision_activa", lambda: vision_activa is not None and vision_activa.estado != "inactiva" and setattr(vision_activa, "pausa_externa", True)),
         ("evasion", _detener_evasion),
         ("paso_robotico", lambda: paso_robotico is not None and paso_robotico.detener()),
         ("nav2", ros_bridge.cancel_nav_goal),
@@ -1834,6 +1834,10 @@ async def _reanudar_autonomia() -> tuple[bool, str, str | None]:
     conductor.parar()
     ok, msg = False, "este modo no se puede reanudar solo"
     objetos = [o for o in (mision_plantas, explorador, patrol) if o is not None and getattr(o, "pausado", False)]
+    if vision_activa is not None and getattr(vision_activa, "pausa_externa", False):
+        vision_activa.pausa_externa = False                # la inspección sigue donde iba
+        if modo == "vision_activa" and not objetos:
+            ok, msg = True, "la visión activa continúa"
     if modo != "nav2" and objetos:
         for o in objetos:                                # en pausa: se CONTINÚA donde se quedó (plantas, ruta, contadores)
             o.continuar()

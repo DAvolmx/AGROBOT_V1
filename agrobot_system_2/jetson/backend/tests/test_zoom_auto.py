@@ -23,17 +23,16 @@ def test_converge_a_la_fraccion_objetivo():
         t += 1.0
         if n:
             zoom = n
-    assert 2.4 <= zoom <= 3.0                         # 0,55/0,15 = 3,7 -> tope 3,0
-    assert abs(0.15 * zoom - 0.45) < 0.1 or zoom == 3.0
+    assert zoom == 3.0                                # 0,80/0,15 = 5,3 -> tope 3,0
 
 
 def test_zona_muerta_no_toca_nada():
-    assert ZoomAuto().paso("analizando", caja_centrada(0.55), W, H, 2.0, 0.0) is None
-    assert ZoomAuto().paso("analizando", caja_centrada(0.60), W, H, 2.0, 0.0) is None     # +9 %: dentro de la banda
+    assert ZoomAuto().paso("analizando", caja_centrada(0.80), W, H, 2.0, 0.0) is None
+    assert ZoomAuto().paso("analizando", caja_centrada(0.86), W, H, 2.0, 0.0) is None     # +7 %: dentro de la banda
 
 
 def test_planta_demasiado_grande_baja_el_zoom():
-    n = ZoomAuto().paso("analizando", caja_centrada(0.9), W, H, 3.0, 0.0)
+    n = ZoomAuto().paso("analizando", caja_centrada(0.97), W, H, 3.0, 0.0)
     assert n is not None and n < 3.0 and n >= 3.0 * 0.8 - 1e-6
 
 

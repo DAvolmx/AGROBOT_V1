@@ -74,7 +74,10 @@ def zoom_final(lienzo, caja, cfg=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--por-clase", type=int, default=30)
+    ap.add_argument("--objetivos", default="0.55,0.72,0.80,0.85", help="fracciones objetivo de zoom_auto a comparar")
     a = ap.parse_args()
+    objetivos = [float(x) for x in a.objetivos.split(",")]
+    modos = ["sin_zoom"] + [f"zoom_{o}" for o in objetivos] + ["zoom_0.8+recorte"]
     from ultralytics import YOLO
     modelo = YOLO(str(AQUI.parent / "jetson" / "backend" / "models" / "agrobot_plagasx_cls.pt"))
     nombres = {v: k for k, v in modelo.names.items()}
@@ -90,7 +93,7 @@ def main():
     filas = []
     galeria = {}
     for s in ESCALAS:
-        for modo in ("sin_zoom", "con_zoom"):
+        for modo in modos:
             ok = 0
             pp = []
             zs = []
@@ -106,7 +109,15 @@ def main():
                 else:                                       # cámara a 1280×720 (necesaria para el zoom) + ZoomAuto
                     bg = fondo(r2, fondos, 1280, 720)
                     lienzo, caja = pegar(bg, img, s)
-                    z, vista, _ = zoom_final(lienzo, caja)
+                    obj = float(modo.split("_")[1].split("+")[0])
+                    z, vista, cvista = zoom_final(lienzo, caja, {"zoom_fraccion_objetivo": obj})
+                    if modo.endswith("+recorte"):         # además se clasifica el recorte de la caja de la planta (+10 % de margen)
+                        x1, y1, x2, y2 = cvista
+                        mx, my = 0.10 * (x2 - x1), 0.10 * (y2 - y1)
+                        a0, b0 = int(max(0, x1 - mx)), int(max(0, y1 - my))
+                        a1, b1 = int(min(640, x2 + mx)), int(min(480, y2 + my))
+                        if a1 - a0 > 20 and b1 - b0 > 20:
+                            vista = cv2.resize(vista[b0:b1, a0:a1], (640, 480), interpolation=cv2.INTER_CUBIC)
                 p = modelo.predict(vista, verbose=False, device="cpu")[0].probs.data.cpu().numpy()
                 ok += int(int(p.argmax()) == nombres[clase])
                 pp.append(float(p[nombres[clase]]))
@@ -123,11 +134,25 @@ def main():
     # galería: para cada escala, sin zoom / con zoom
     fil = []
     for s in ESCALAS:
-        a1, a2 = galeria[(s, "sin_zoom")], galeria[(s, "con_zoom")]
-        for im, txt in ((a1, f"sin zoom  s={s}"), (a2, f"con zoom  s={s}")):
-            cv2.putText(im, txt, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        fil.append(np.hstack([cv2.resize(a1, (320, 240)), cv2.resize(a2, (320, 240))]))
+        cols = []
+        for modo in modos:
+            im = galeria[(s, modo)].copy()
+            cv2.putText(im, f"{modo} s={s}", (8, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+            cols.append(cv2.resize(im, (320, 240)))
+        fil.append(np.hstack(cols))
     cv2.imwrite(str(dest / "galeria.jpg"), np.vstack(fil))
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(1, 2, figsize=(11, 4))
+    for modo in modos:
+        f = [r for r in filas if r["modo"] == modo]
+        ax[0].plot([r["escala"] for r in f], [100 * r["exactitud"] for r in f], marker="o", label=modo)
+        ax[1].plot([r["escala"] for r in f], [r["zoom_medio"] for r in f], marker="o", label=modo)
+    ax[0].set_xlabel("fracción del ancho que ocupa la planta (1× = 1.0; menor = más lejos)"); ax[0].set_ylabel("exactitud del clasificador (%)")
+    ax[0].set_title("Plagas/enfermedades de col: con y sin zoom automático"); ax[0].legend(); ax[0].grid(alpha=0.3)
+    ax[1].set_xlabel("fracción de la planta"); ax[1].set_ylabel("zoom medio"); ax[1].set_title("Zoom elegido por zoom_auto"); ax[1].grid(alpha=0.3)
+    fig.tight_layout(); fig.savefig(dest / "exactitud_vs_distancia.png", dpi=120); plt.close(fig)
     print("->", dest)
 
 

@@ -137,6 +137,7 @@ class VisionActiva:
         self._dir_busqueda = "izquierda"
         self._muestras: list[tuple[str, float]] = []
         self.ultimo_objetivo: dict | None = None
+        self.pausa_externa = False       # el operador toma el mando: la inspección se PAUSA (no se pierde) y sigue al soltarlo
         self.ultimo_resultado: dict | None = None
         self.motivo_fin: str | None = None
         self._vistas_pend = []
@@ -202,6 +203,8 @@ class VisionActiva:
 
     # ------------------------------------------------------------------ decisión
     def _seguro(self, c) -> tuple[bool, str]:
+        if self.pausa_externa:
+            return False, "mando manual"
         if self._autonomia():
             return False, "autonomía activa"
         if not self._enlace_ok():

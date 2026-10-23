@@ -187,8 +187,10 @@ class PatrolController:
     def iniciar(self) -> tuple[bool, str]:
         if self.activo:
             return False, "la patrulla ya está corriendo"
-        if not self.waypoints:
-            return False, "no hay waypoints grabados — conducí el robot y grabá el recorrido primero"
+        if len(self.waypoints) < 2:
+            # Con un solo punto (el que deja la exploración al arrancar) la «patrulla» era ir y volver al mismo sitio en bucle
+            # (2026-10-23: 98 vueltas sin moverse del sitio). Hacen falta al menos dos puntos de recorrido.
+            return False, "no hay waypoints grabados suficientes (mínimo 2) — conducí el robot y grabá el recorrido primero"
 
         self.activo = True
         self.vueltas = 0

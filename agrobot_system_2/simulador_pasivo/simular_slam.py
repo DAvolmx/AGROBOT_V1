@@ -56,12 +56,12 @@ def correr(nombre, caja, ajustes, grabacion, carpeta, a):
     yaml = yaml_con(ajustes, carpeta / f"slam_{nombre}.yaml")
     ros = f"source /opt/ros/jazzy/setup.bash && source {ROS_WS}/install/setup.bash"
     env = dict(os.environ, ROS_DOMAIN_ID=DOMINIO, ROS_AUTOMATIC_DISCOVERY_RANGE="LOCALHOST")
-    lanz = subprocess.Popen(["bash", "-c", f"{ros} && exec ros2 launch {AQUI / 'slam_ros' / 'replay.launch.py'} caja:={str(caja).lower()} slam_yaml:={yaml}"],
+    lanz = subprocess.Popen(["bash", "-c", f"{ros} && exec ros2 launch {AQUI / 'slam_ros' / 'replay.launch.py'} caja:={str(caja).lower()} slam_yaml:={yaml} laser_girado:={str(not a.laser_robot).lower()}"],
                             env=env, stdout=open(carpeta / f"{nombre}_launch.log", "w"), stderr=subprocess.STDOUT, start_new_session=True)
     try:
         time.sleep(7)
         subprocess.run(["bash", "-c", f"{ros} && exec python3 {AQUI / 'slam_ros' / 'reproducir.py'} {grabacion / 'variables.jsonl'} {salida} "
-                        f"--velocidad {a.velocidad} --desde {a.desde} --hasta {a.hasta}"], env=env, check=True)
+                        f"--velocidad {a.velocidad} --desde {a.desde} --hasta {a.hasta}" + (" --laser-robot" if a.laser_robot else "")], env=env, check=True)
     finally:
         os.killpg(lanz.pid, signal.SIGINT)
         try:
@@ -99,6 +99,38 @@ def medir(npz: Path) -> dict:
     return r
 
 
+def coherencia_avance(npz: Path, grabacion: Path) -> dict:
+    """¿La pose avanza hacia donde el LIDAR dice que se acerca lo de delante? Correlación entre el avance de la pose (SLAM y EKF) en 1 s
+    y lo que se acorta la distancia frontal medida (±15°). Debe salir POSITIVA (≈ +0,8); negativa = odometría con el signo al revés
+    (lo que pasó hasta el 2026-10-23 con rf2o)."""
+    import json as _j
+    t, fr = [], []
+    for l in open(grabacion / "variables.jsonl", errors="ignore"):
+        try:
+            d = _j.loads(l)
+        except ValueError:
+            continue
+        sc = d.get("lidar_scan") or []
+        f = [p["distance_m"] for p in sc if p.get("distance_m", 0) > 0.05 and abs((p["angle_deg"] + 180) % 360 - 180) <= 15]
+        if f and d.get("t_unix"):
+            t.append(d["t_unix"]); fr.append(float(np.median(f)))
+    t, fr = np.array(t), np.array(fr)
+    d = np.load(npz)
+    out = {}
+    for nombre in ("poses", "ekf"):
+        P = d[nombre]
+        if len(P) < 20 or len(t) < 20:
+            continue
+        x, y, th = (np.interp(t, P[:, 0], P[:, i]) for i in (1, 2, 3))
+        k = 5
+        av = np.cos(th[:-k]) * (x[k:] - x[:-k]) + np.sin(th[:-k]) * (y[k:] - y[:-k])
+        dfr = fr[k:] - fr[:-k]
+        m = (np.abs(av) > 0.02) & (np.abs(av) < 0.5) & (np.abs(dfr) < 0.5) & (t[:-k] > P[0, 0]) & (t[k:] < P[-1, 0])
+        if m.sum() > 10:
+            out[f"coherencia_{nombre}"] = round(float(np.corrcoef(av[m], -dfr[m])[0, 1]), 2)
+    return out
+
+
 def dibujar(npz: Path, png: Path, titulo: str):
     import cv2
     d = np.load(npz)
@@ -127,6 +159,7 @@ def main():
     ap.add_argument("--velocidad", type=float, default=2.0)
     ap.add_argument("--desde", type=float, default=0.0)
     ap.add_argument("--hasta", type=float, default=1e9)
+    ap.add_argument("--laser-robot", action="store_true", help="modo antiguo: scans ya en el marco del robot (escondía el vx invertido de rf2o)")
     a = ap.parse_args()
     if a.grabacion:
         grab = Path(a.grabacion).expanduser()
@@ -141,7 +174,7 @@ def main():
         caja, ajustes = CONFIGS[nombre]
         t0 = time.time()
         npz = correr(nombre, caja, ajustes, grab, carpeta, a)
-        resumen[nombre] = {**medir(npz), "segundos": int(time.time() - t0)}
+        resumen[nombre] = {**medir(npz), **coherencia_avance(npz, grab), "segundos": int(time.time() - t0)}
         dibujar(npz, carpeta / f"mapa_{nombre}.png", nombre)
         print(f"[simular_slam] {nombre}: {resumen[nombre]}", flush=True)
     (carpeta / "resumen.json").write_text(json.dumps({"grabacion": str(grab), "configs": resumen}, indent=1, ensure_ascii=False))

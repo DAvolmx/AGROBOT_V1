@@ -3349,7 +3349,15 @@ async def mission_start_handler(request: web.Request):
         explorador.detener()
 
     ok, msg = (False, "patrulla no inicializada")
-    if patrol is not None:
+    if mision_plantas is not None and state.config["autonomia"].get("auto_mision_plantas", True):
+        # Demo (2026-10-23): AUTO = misión de plantas. Antes AUTO exploraba y, al segundo intento, «patrullaba» un único punto.
+        _mision_vision_override.update({"clases_objetivo": ["maceta"], "max_objetivos": 1, "conf_min": 0.30,
+                                        "angulos_barrido_deg": [state.servo_angle, 82, 98, state.servo_angle]})
+        ok, msg = mision_plantas.iniciar()
+        if ok:
+            mision_plantas.arrancar_tarea()
+            msg = "misión de plantas: explora, mapea y escanea las macetas"
+    elif patrol is not None:
         ok, msg = patrol.iniciar()
         # Sin recorrido grabado no hay nada que patrullar: en vez de quedarse parado, el robot
         # explora solo (esquiva y mapea) y deja el recorrido grabado para la siguiente patrulla.
@@ -3497,6 +3505,9 @@ async def asistente_estado_handler(request: web.Request):
 async def mission_stop_handler(request: web.Request):
     # La patrulla primero: parar el actuador antes dejaría el bucle vivo y
     # volvería a mandarle una meta a Nav2 acto seguido.
+    if mision_plantas is not None and mision_plantas.estado not in ("inactiva", "fin"):
+        mision_plantas.detener("operador")
+        _mision_vision_override.clear()
     if patrol is not None:
         patrol.detener()
         patrol.grabacion_auto(False)

@@ -5,6 +5,8 @@ alimentados por simulador_pasivo/slam_ros/reproducir.py con los scans y el IMU g
 Argumentos:
   slam_yaml   archivo de parámetros de slam_toolbox (por defecto el del robot)
   caja        true = filtro de caja que quita el propio chasis del scan (la mejora que se evalúa)
+  laser_girado true (por defecto) = como en el robot real: láser montado a 180° (TF yaw=π) y scans en el marco del láser.
+              Con false (lo que se usó hasta el 2026-10-23) los scans iban ya en el marco del robot y eso ESCONDÍA el vx invertido de rf2o.
 """
 import os
 
@@ -41,11 +43,12 @@ def _nodos(context):
     slam_yaml = LaunchConfiguration("slam_yaml").perform(context)
     cfg = os.path.join(get_package_share_directory("agrobot_navigation"), "config")
     sim = {"use_sim_time": True}
-    tf = lambda nombre, hijo, z: Node(package="tf2_ros", executable="static_transform_publisher", name=nombre, output="log",
-                                      arguments=["--z", z, "--frame-id", "base_link", "--child-frame-id", hijo],
-                                      parameters=[sim])
+    girado = LaunchConfiguration("laser_girado").perform(context).lower() == "true"
+    tf = lambda nombre, hijo, z, yaw="0": Node(package="tf2_ros", executable="static_transform_publisher", name=nombre, output="log",
+                                               arguments=["--z", z, "--yaw", yaw, "--frame-id", "base_link", "--child-frame-id", hijo],
+                                               parameters=[sim])
     return [
-        tf("tf_base_to_laser", "laser", "0.18"),           # los scans grabados ya están en el marco del robot (0° adelante)
+        tf("tf_base_to_laser", "laser", "0.18", "3.141592653589793" if girado else "0"),
         tf("tf_base_to_imu", "imu_link", "0.05"),
         Node(package="laser_filters", executable="scan_to_scan_filter_chain", name="filtro_scan_odom", output="log",
              parameters=[_filtros(caja, 6.0, False)], remappings=[("scan", "/scan"), ("scan_filtered", "/scan_odom")]),
@@ -69,5 +72,6 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("slam_yaml", default_value=os.path.join(cfg, "slam_toolbox_mapping.yaml")),
         DeclareLaunchArgument("caja", default_value="false"),
+        DeclareLaunchArgument("laser_girado", default_value="true"),
         OpaqueFunction(function=_nodos),
     ])

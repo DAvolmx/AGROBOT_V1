@@ -49,7 +49,7 @@ SUELOS = {"baldosa_clara": (0.92, 0.02, 1.0), "baldosa_oscura": (0.85, 0.05, 1.0
 
 def laboratorio(layout: int):
     """Paredes (segmentos), patas (círculos visibles al LIDAR) y macetas (círculo de maceta + copa de hojas)."""
-    W, H = 6.0, 5.0
+    W, H = (3.3, 1.0) if layout == 2 else (6.0, 5.0)
     paredes = [(0, 0, W, 0), (W, 0, W, H), (W, H, 0, H), (0, H, 0, 0)]
     patas = []
 
@@ -66,6 +66,10 @@ def laboratorio(layout: int):
         mesa(3.0, 2.6); silla(3.0, 1.75); silla(1.9, 2.6); silla(4.6, 3.6)
         macetas = [(1.2, 4.1), (4.9, 1.2), (5.0, 4.2)]
         inicio = (0.7, 0.8, 0.6)
+    elif layout == 2:
+        # El entorno del ensayo del 2026-10-23: callejón de 1 m de ancho, 3 macetas en fila a ~1,6 m del robot y pared a ~1,8 m.
+        macetas = [(3.1, 0.2), (3.1, 0.5), (3.1, 0.8)]
+        inicio = (1.5, 0.5, 0.0)
     else:
         mesa(2.2, 3.6); mesa(4.3, 1.6, 1.0, 0.6); silla(2.2, 2.75); silla(3.4, 3.6); silla(4.3, 2.4)
         macetas = [(0.9, 2.2), (3.3, 0.8), (5.1, 3.9)]

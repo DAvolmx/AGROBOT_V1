@@ -207,6 +207,8 @@ DEFAULTS = {
         # Política entrenada en el simulador (politica.pt). Apagada por
         # defecto: se enciende cuando se ha comprobado que mejora.
         "politica_activa": False,
+        # Botón AUTO = misión de plantas en maceta (explorar, mapear, escanear macetas). False = patrulla/exploración de antes.
+        "auto_mision_plantas": True,
         "camara_obstaculos": True,        # el explorador usa también el suelo libre de la cámara (obstáculos bajos que el LIDAR no ve)
     },
     "odometria_webcam": {

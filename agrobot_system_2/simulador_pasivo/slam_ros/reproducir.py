@@ -21,6 +21,7 @@ from sensor_msgs.msg import Imu, LaserScan
 from tf2_ros import Buffer, TransformListener
 
 N_RAYOS = 720
+GIRADO = True          # se pone en main() según --laser-robot
 IMU_VAR_GIRO = math.radians(2.4) ** 2
 
 
@@ -49,7 +50,9 @@ def cargar(ruta, desde, hasta):
                     a, dist = p.get("angle_deg"), p.get("distance_m")
                     if a is None or dist is None:
                         continue
-                    r[int(round(((a + 180.0) % 360.0) * 2)) % N_RAYOS] = dist
+                    # marco del LÁSER como en el robot real (montado a 180°): ángulo del láser = ángulo del robot - 180°
+                    a_laser = a - 180.0 if GIRADO else a
+                    r[int(round(((a_laser + 180.0) % 360.0) * 2)) % N_RAYOS] = dist
                 ev.append((t - float(d.get("lidar_age_s") or 0.0), "scan", r))
     ev.sort(key=lambda x: x[0])
     return ev
@@ -144,7 +147,10 @@ def main():
     ap.add_argument("--velocidad", type=float, default=2.0)
     ap.add_argument("--desde", type=float, default=0.0)
     ap.add_argument("--hasta", type=float, default=1e9)
+    ap.add_argument("--laser-robot", action="store_true", help="scans en el marco del robot (antiguo; esconde el vx invertido de rf2o)")
     a = ap.parse_args()
+    global GIRADO
+    GIRADO = not a.laser_robot
     ev = cargar(a.grabacion, a.desde, a.hasta)
     n_scan = sum(1 for e in ev if e[1] == "scan")
     print(f"[reproducir] {len(ev)} eventos · {n_scan} scans · {ev[-1][0] - ev[0][0]:.0f} s grabados", flush=True)

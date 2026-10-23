@@ -76,6 +76,7 @@ SEND_HZ = 20
 SEND_PERIOD = 1.0 / SEND_HZ
 
 RECONNECT_DELAY_S = 2.0
+SILENCIO_REABRIR_S = 3.0      # sin estado por el cable este tiempo con el puerto abierto = puerto colgado: reabrir
 
 
 def crc8(datos: bytes) -> int:
@@ -120,6 +121,9 @@ class UartActuatorLink:
         # mediante enviar(). Así la C3 deduplica por secuencia y gana siempre la trama más nueva, venga por el cable o por el aire.
         self.esclavo = esclavo
         self._ultimo_estado = 0.0
+        self._abierto_en = 0.0
+        self.reaperturas = 0
+        self._reaperturas_seguidas = 0     # reaperturas sin que llegue ningún estado: espera creciente (no abrir el USB cada 5 s)
         self.recibidas = 0
         self._ultimo_error = None
 
@@ -246,14 +250,29 @@ class UartActuatorLink:
                 self._connected = True
                 self._ultimo_error = None
                 print(f"[serie] abierto {self.port} a {self.baud} baudios", flush=True)
-                tareas = [self._read_loop()] + ([] if self.esclavo else [self._send_loop()])
+                self._abierto_en = time.monotonic()
+                tareas = [self._read_loop(), self._vigia()] + ([] if self.esclavo else [self._send_loop()])
                 await asyncio.gather(*tareas)
             except Exception as exc:
                 if not self._stop.is_set() and str(exc) != self._ultimo_error:     # un aviso por cambio, no uno cada 2 s
                     print(f"[serie] {self.port}: {exc}", flush=True)
                     self._ultimo_error = str(exc)
                 await self._close()
-                await asyncio.sleep(RECONNECT_DELAY_S)
+                # Si el cable sigue mudo tras reabrir, se espera más cada vez (2, 4, 8… hasta 60 s): abrir el USB-JTAG
+                # mueve DTR/RTS y no conviene hacerlo sin parar mientras la C3 trabaja por WiFi.
+                await asyncio.sleep(min(60.0, RECONNECT_DELAY_S * (2 ** min(self._reaperturas_seguidas, 5))))
+
+    async def _vigia(self):
+        """Puerto «abierto» pero mudo → se cierra y se reabre (2026-10-23). Tras un fallo interno de serial_asyncio
+        (AssertionError en _write_ready) o un corte del USB-JTAG del C3, la lectura quedaba bloqueada para siempre y la C3
+        seguía solo por WiFi hasta reiniciar el backend."""
+        while self._connected and not self._stop.is_set():
+            await asyncio.sleep(0.5)
+            ahora = time.monotonic()
+            if ahora - self._abierto_en > SILENCIO_REABRIR_S and ahora - max(self._ultimo_estado, self._abierto_en) > SILENCIO_REABRIR_S:
+                self.reaperturas += 1
+                self._reaperturas_seguidas += 1
+                raise ConnectionError(f"sin estado de la C3 por el cable en {SILENCIO_REABRIR_S:.0f} s — reabriendo el puerto")
 
     async def _send_loop(self):
         while self._connected and not self._stop.is_set():
@@ -302,6 +321,7 @@ class UartActuatorLink:
             "_received_at": time.time(),
         }
         self._ultimo_estado = time.monotonic()
+        self._reaperturas_seguidas = 0
         self.recibidas += 1
         if self._on_status is not None:
             self._on_status(status)

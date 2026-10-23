@@ -1,0 +1,27 @@
+diff --git a/src/CLaserOdometry2D.cpp b/src/CLaserOdometry2D.cpp
+index 210bc04..6070b2b 100644
+--- a/src/CLaserOdometry2D.cpp
++++ b/src/CLaserOdometry2D.cpp
+@@ -87,6 +87,8 @@ void CLaserOdometry2D::init(const sensor_msgs::msg::LaserScan& scan,
+   // Get the initial laser pose assuming laser is fixed with respect the base_link
+   laser_pose_    = robot_initial_pose * laser_pose_on_robot_;
+   laser_oldpose_ = laser_oldpose_;
++  robot_pose_    = robot_initial_pose;
++  robot_oldpose_ = robot_initial_pose;   // AgroBot: sin esto el primer vx (marco del robot) sale con un salto
+ 
+ 
+   // Init rf2o module (internal)
+@@ -985,7 +987,12 @@ void CLaserOdometry2D::PoseUpdate()
+   //-------------------------------------------------------------------------------------
+   double time_inc_sec = (current_scan_time - last_odom_time).seconds();
+   last_odom_time = current_scan_time;
+-  lin_speed = acu_trans(0,2) / time_inc_sec;
++  // AgroBot 2026-10-23: acu_trans está en el marco del LÁSER, que en este robot va girado 180° (TF yaw=π), así que vx salía
++  // con el signo invertido y el EKF creía que el robot retrocedía al avanzar. Se usa el desplazamiento en el marco del robot.
++  {
++    const Pose3d delta = robot_oldpose_.inverse() * robot_pose_;
++    lin_speed = delta.translation()(0) / time_inc_sec;
++  }
+   //double lin_speed = sqrt( mrpt::math::square(robot_oldpose.x()-robot_pose.x()) + mrpt::math::square(robot_oldpose.y()-robot_pose.y()) )/time_inc_sec;
+ 
+   double ang_inc = rf2o::getYaw(robot_pose_.rotation()) -

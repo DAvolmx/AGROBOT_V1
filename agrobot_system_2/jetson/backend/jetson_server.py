@@ -2262,6 +2262,7 @@ def _crear_vision_activa():
     def clasificar(ruta):
         """Segunda opinión sobre la foto: especie con CLIP sobre el recorte de la maceta (¿es una col?) y PLAGASX (enfermedad de col)."""
         out = {}
+        img, caja = None, None
         try:
             import especie_clip
             img = cv2.imread(ruta)
@@ -2275,7 +2276,20 @@ def _crear_vision_activa():
         except Exception as exc:
             out["especie_error"] = f"{type(exc).__name__}: {exc}"
         mod = _plagasx_clasificador()
-        r = mod.predict(ruta, verbose=False, device="cpu")[0]
+        entrada = ruta
+        try:
+            # Se clasifica el RECORTE de la planta (caja de la maceta +10 %) llevado a 640x480: validado con hojas reales de col a varias
+            # distancias (validar_zoom_plagas.py): con zoom 0,8 + recorte la exactitud es la mayor a todas las escalas (30-36 %, sin zoom 1-34 %).
+            if img is not None and caja is not None:
+                x1, y1, x2, y2 = (float(v) for v in caja)
+                mx, my = 0.10 * (x2 - x1), 0.10 * (y2 - y1)
+                a0, b0, a1, b1 = int(max(0, x1 - mx)), int(max(0, y1 - my)), int(min(img.shape[1], x2 + mx)), int(min(img.shape[0], y2 + my))
+                if a1 - a0 > 40 and b1 - b0 > 40:
+                    entrada = cv2.resize(img[b0:b1, a0:a1], (640, 480), interpolation=cv2.INTER_CUBIC)
+                    out["recorte"] = True
+        except Exception:
+            entrada = ruta
+        r = mod.predict(entrada, verbose=False, device="cpu")[0]
         p = r.probs.data.cpu().numpy()
         orden = p.argsort()[::-1][:3]
         out.update({"modelo": "plagasx_cls", "top": [{"clase": mod.names[int(i)], "prob": round(float(p[i]), 3)} for i in orden]})

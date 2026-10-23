@@ -140,6 +140,31 @@ def main():
             shutil.copy(z / "galeria.jpg", DEST / "figs" / "galeria_zoom.jpg")
             D.md.append("\n![galería](figs/galeria_zoom.jpg)\n")
             D.h.append('<figure><img src="data:image/jpeg;base64,' + base64.b64encode((z / "galeria.jpg").read_bytes()).decode() + '"><figcaption>Lo que ve el clasificador, de lejos a cerca: sin zoom y con zoom automático (varios objetivos).</figcaption></figure>')
+    # ---------------- 3b. servo bajo
+    sv = ultimo("~/.agrobot/informes/servo_bajo_*")
+    D.titulo(2, "3b. Servo de la cámara hacia abajo con macetas bajas")
+    if sv and (sv / "resultado.json").exists():
+        r = cargar(sv / "resultado.json")
+        D.p(f"Sobre las {r['fotos']} fotos reales de la prueba de las 05:41, el modelo de macetas ve alguna en {r['con_maceta']}; en {r['con_maceta_baja']} "
+            f"({r['pct_baja_de_las_que_tienen_maceta']} %) la maceta está cortada por el borde inferior o con el centro en el 38 % de abajo con el criterio inicial: son las que el robot "
+            "pierde de vista justo antes de tocarlas. El criterio final es más estricto (cortada ≥ 96 % o centro ≥ 70 %, 2 decisiones seguidas, tope 66°): el servo baja el 27,5 % del tiempo, "
+            "unas 6 veces por minuto, y vuelve al reposo (98°) a los 4 s sin macetas. Solo actúa en autonomía y no con el operador al mando.")
+        if (sv / "servo.png").exists():
+            D.figura(sv / "servo.png", "Ángulo de servo propuesto sobre la grabación y cuadros con maceta baja (criterio inicial)")
+        if (sv / "ejemplos_macetas_bajas.jpg").exists():
+            shutil.copy(sv / "ejemplos_macetas_bajas.jpg", DEST / "figs" / "macetas_bajas.jpg")
+            D.md.append("\n![macetas bajas](figs/macetas_bajas.jpg)\n")
+            D.h.append('<figure><img src="data:image/jpeg;base64,' + base64.b64encode((sv / "ejemplos_macetas_bajas.jpg").read_bytes()).decode() + '"><figcaption>Cuadros reales con maceta baja: el servo baja de 98° a 62° en cuanto se repite.</figcaption></figure>')
+    fotos = sorted(glob.glob(os.path.expanduser("~/.agrobot/vision_activa/fotos/*.jpg")))[::8][:6]
+    if fotos:
+        import cv2
+        tiles = [cv2.resize(cv2.imread(f), (320, 240)) for f in fotos]
+        while len(tiles) % 3:
+            tiles.append(np.zeros_like(tiles[0]))
+        grid = cv2.vconcat([cv2.hconcat(tiles[i:i + 3]) for i in range(0, len(tiles), 3)])
+        cv2.imwrite(str(DEST / "figs" / "capturas_mision.jpg"), grid)
+        D.md.append("\n![capturas](figs/capturas_mision.jpg)\n")
+        D.h.append('<figure><img src="data:image/jpeg;base64,' + base64.b64encode((DEST / "figs" / "capturas_mision.jpg").read_bytes()).decode() + '"><figcaption>Capturas reales de la cámara durante la inspección de macetas (visión activa).</figcaption></figure>')
     # ---------------- 4. entrenamiento
     ent = Path(a.entrenamiento) if a.entrenamiento else ultimo("~/.agrobot/aprendizaje/intensivo_*")
     D.titulo(2, "4. Entrenamiento intensivo (simulación calibrada, interior 70 % · exterior 30 %)")

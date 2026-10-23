@@ -11,12 +11,14 @@ Lógica pura (sin red ni reloj propio): `paso()` recibe lo observado y devuelve 
 from __future__ import annotations
 
 REPOSO_DEG = 98
-MIN_DEG = 62                    # tope hacia abajo
+MIN_DEG = 66                    # tope hacia abajo (66° ≈ 30° bajo el horizonte)
 PASO_BAJA_DEG = 6               # por decisión (cada ~0,5 s)
 PASO_SUBE_DEG = 3
 PASO_REPOSO_DEG = 4
-CORTADA = 0.93                  # y2/h a partir de aquí la caja toca el borde inferior
-CENTRO_BAJO = 0.62              # y_centro/h a partir de aquí la maceta está «baja» en la imagen
+CORTADA = 0.96                  # y2/h a partir de aquí la caja toca el borde inferior
+CENTRO_BAJO = 0.70              # y_centro/h a partir de aquí la maceta está «baja» en la imagen
+PERSISTENCIA = 2                # decisiones seguidas con maceta baja antes de bajar el servo (sobre la grabación real: 0,93/0,62 sin persistencia
+                                # dejaba el servo abajo el 49 % del tiempo; 0,96/0,70 con persistencia 3, el 6 %)
 CENTRO_ALTO = 0.38
 
 
@@ -31,7 +33,9 @@ def maceta_alta(caja_xyxy, h: float) -> bool:
 
 
 class ServoBajo:
-    def __init__(self, reposo_s: float = 4.0, min_deg: int = MIN_DEG, reposo_deg: int = REPOSO_DEG):
+    def __init__(self, reposo_s: float = 4.0, min_deg: int = MIN_DEG, reposo_deg: int = REPOSO_DEG, persistencia: int = PERSISTENCIA):
+        self.persistencia = persistencia
+        self._n_baja = 0
         self.reposo_s = reposo_s
         self.min_deg = min_deg
         self.reposo_deg = reposo_deg
@@ -39,9 +43,13 @@ class ServoBajo:
 
     def paso(self, cajas: list, h: float, servo_deg: float, ahora: float):
         """cajas: lista de xyxy de macetas; h: alto de la imagen; servo_deg: ángulo actual; ahora: segundos."""
+        baja = bool(cajas) and any(maceta_baja(c, h) for c in cajas)
+        self._n_baja = self._n_baja + 1 if baja else 0
         if cajas:
             self._t_visto = ahora
-            if any(maceta_baja(c, h) for c in cajas):
+            if baja:
+                if self._n_baja < self.persistencia:
+                    return None                                 # aún puede ser un cuadro suelto
                 nuevo = max(self.min_deg, servo_deg - PASO_BAJA_DEG)
             elif all(maceta_alta(c, h) for c in cajas) and servo_deg < self.reposo_deg:
                 nuevo = min(self.reposo_deg, servo_deg + PASO_SUBE_DEG)

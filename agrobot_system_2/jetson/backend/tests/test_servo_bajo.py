@@ -7,16 +7,17 @@ def test_caja_cortada_por_abajo_es_baja():
     assert maceta_baja([100, 500, 200, 719], H)
     assert maceta_baja([100, 400, 200, 700], H)          # centro 550/720 = 76 %
     assert not maceta_baja([100, 200, 200, 420], H)       # centro 43 %
+    assert not maceta_baja([100, 330, 200, 600], H)       # centro 65 %: antes contaba, ahora no
 
 
 def test_baja_el_servo_y_respeta_el_tope():
-    s = ServoBajo()
+    s = ServoBajo(persistencia=1)
     a = 98
     for t in range(10):
         n = s.paso([[100, 500, 200, 719]], H, a, float(t))
         if n is not None:
             a = n
-    assert a == 62
+    assert a == 66
 
 
 def test_sube_si_la_maceta_esta_alta_y_el_servo_estaba_abajo():
@@ -36,3 +37,11 @@ def test_vuelve_al_reposo_tras_unos_segundos_sin_macetas():
 def test_maceta_a_media_altura_no_mueve_nada():
     s = ServoBajo()
     assert s.paso([[100, 250, 200, 450]], H, 80, 1.0) is None
+
+
+def test_un_cuadro_suelto_no_baja_el_servo():
+    s = ServoBajo()                                       # persistencia 2
+    assert s.paso([[100, 500, 200, 719]], H, 98, 0.0) is None
+    assert s.paso([], H, 98, 0.5) is None                 # se pierde: se reinicia la cuenta
+    assert s.paso([[100, 500, 200, 719]], H, 98, 1.0) is None
+    assert s.paso([[100, 500, 200, 719]], H, 98, 1.5) == 92

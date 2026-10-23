@@ -19,7 +19,7 @@ DEFECTOS = {
     "conf_min": 0.35,           # la col marchita sale con 0,42-0,48 en la cámara del robot (2026-10-23); la persistencia frena falsos
     "persistencia": 3,                 # cuadros seguidos viendo la maceta antes de ir a por ella
     "distancia_max_m": 2.5,            # solo se va a por macetas a menos de esto (por cámara)
-    "radio_ya_vista_m": 0.9,           # una maceta a menos de esto de una ya inspeccionada es la misma
+    "radio_ya_vista_m": 0.28,          # una maceta a menos de esto de una ya inspeccionada es la misma (0,9 tapaba macetas en fila a 30 cm, 2026-10-23)
     "pausa_tras_planta_s": 6.0,        # tras inspeccionar, se ignoran detecciones un rato (la que acaba de ver sigue en imagen)
     "led_mantener_s": 1.5,
 }
@@ -72,6 +72,8 @@ class MisionPlantas:
         try:
             if self.vision.estado != "inactiva":
                 self.vision.cancelar("misión detenida")
+            if hasattr(self.vision, "filtro_objetivo"):
+                self.vision.filtro_objetivo = None
             self.expl.detener()
             self._grabar(False)
         finally:
@@ -120,6 +122,8 @@ class MisionPlantas:
             if self._racha >= c["persistencia"]:
                 m = max(nuevas, key=lambda q: q["conf"])
                 self.expl.detener()
+                if hasattr(self.vision, "filtro_objetivo"):
+                    self.vision.filtro_objetivo = lambda q, c=c: not self._ya_vista(self._posicion_estimada(q), c)
                 ok, msg = self.vision.iniciar()
                 if not ok:
                     self._ev({"tipo": "aviso", "msg": f"visión activa no arrancó: {msg}"})
@@ -137,6 +141,8 @@ class MisionPlantas:
 
         if self.estado == INSPECCIONANDO and self.vision.estado == "inactiva":
             self._grabar(False)
+            if hasattr(self.vision, "filtro_objetivo"):
+                self.vision.filtro_objetivo = None
             if getattr(self.vision, "objetivos_hechos", 1) == 0:
                 # la visión terminó SIN analizar (perdió la maceta): no es una planta escaneada, y ultimo_resultado sería el de la anterior
                 self._ev({"tipo": "inspeccion_fallida", "motivo": getattr(self.vision, "motivo_fin", None)})
@@ -158,6 +164,14 @@ class MisionPlantas:
                 # La posición sale de la CAJA de la cámara (rumbo + distancia), no del hueco del LIDAR: si al acercarse se interpuso una pata
                 # de silla, el LIDAR mide la pata y la planta quedaba mal ubicada (simulación 2026-10-22: la misma planta escaneada dos veces).
                 pos = self._posicion_estimada({"yaw_deg": ult.get("yaw_deg", 0.0), "dist_m": ult["dist_m"]})
+            if self._ya_vista(pos, c):
+                # Ya estaba en la lista: la visión acabó en una planta escaneada antes. No cuenta como nueva.
+                self._ev({"tipo": "planta_repetida", "x": round(pos[0], 2), "y": round(pos[1], 2)})
+                self._t_ignorar = ahora + c["pausa_tras_planta_s"]
+                self._racha = 0
+                self.expl.iniciar()
+                self.estado = EXPLORANDO
+                return
             esp = (res.get("diagnostico") or {}).get("especie") or {}
             self.plantas.append({"n": len(self.plantas) + 1, "x": None if pos is None else round(pos[0], 2),
                                  "y": None if pos is None else round(pos[1], 2), "clase": res.get("clase"),

@@ -90,6 +90,7 @@ class VisionActiva:
     def __init__(self, *, get_cajas, get_servo, set_servo, conducir, ocupado, parar, distancias, edad_scan, get_config,
                  on_event=None, capturar=None, clasificar=None, girar=None, get_pose=None, enlace_ok=None, autonomia_activa=None, reloj=time.monotonic,
                  carpeta: Path | None = None):
+        self.filtro_objetivo = None        # (m{yaw_deg, dist_m}) -> bool: False = no es objetivo (lo pone la misión de plantas)
         self._get_cajas = get_cajas        # () -> (cajas[{class, confidence, xyxy}], instante_unix, ancho_px, alto_px, hfov_efectivo_deg) | None
         self._get_servo = get_servo        # () -> ángulo actual del servo
         self._set_servo = set_servo        # (ángulo)
@@ -227,6 +228,11 @@ class VisionActiva:
                 self.aviso = ("el modelo activo no localiza (sus cajas ocupan toda la imagen): para centrar y acercarse usa "
                               "'Interior (macetas)' o 'Col (planta y cogollo)'")
                 continue
+            if self.filtro_objetivo is not None:
+                # la misión descarta las macetas ya escaneadas (2026-10-23: con 3 macetas en fila volvía a la del centro)
+                yaw_b, _ = angulos_de_caja(b["xyxy"], ancho, alto, hfov, c["camara_yaw_offset_deg"])
+                if not self.filtro_objetivo({"yaw_deg": yaw_b, "dist_m": b.get("dist_m")}):
+                    continue
             if mejor is None or area > mejor[0]:
                 mejor = (area, b)
         if mejor is None:

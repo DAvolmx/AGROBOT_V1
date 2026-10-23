@@ -49,6 +49,13 @@ SUELOS = {"baldosa_clara": (0.92, 0.02, 1.0), "baldosa_oscura": (0.85, 0.05, 1.0
 
 def laboratorio(layout: int):
     """Paredes (segmentos), patas (círculos visibles al LIDAR) y macetas (círculo de maceta + copa de hojas)."""
+    if layout == 3:
+        # La sala REAL del ensayo (foto del operador, 2026-10-23): callejón de ~1 m entre cama y mesa que se abre en L al llegar a la
+        # pared del fondo; 3 macetas en fila pegadas a esa pared (~35 cm entre ellas), a ~1,6 m del robot; pared a ~1,8 m.
+        poli = [(0, 0.8), (1.2, 0.8), (1.2, 0.0), (2.05, 0.0), (2.05, 2.0), (1.2, 2.0), (1.2, 1.8), (0, 1.8)]
+        paredes = [(*poli[i], *poli[(i + 1) % len(poli)]) for i in range(len(poli))]
+        return {"W": 2.05, "H": 2.0, "paredes": paredes, "poligono": poli, "patas": [(0.25, 0.84, 0.03), (1.1, 0.84, 0.03)],
+                "macetas": [(1.92, 1.0), (1.92, 1.35), (1.92, 1.7)], "inicio": (0.35, 1.3, 0.0)}
     W, H = (3.3, 1.0) if layout == 2 else (6.0, 5.0)
     paredes = [(0, 0, W, 0), (W, 0, W, H), (W, H, 0, H), (0, H, 0, 0)]
     patas = []
@@ -117,12 +124,31 @@ def choca(mundo, cx, cy, psi):
         u, v = c * (x - cx) + s * (y - cy), -s * (x - cx) + c * (y - cy)
         if abs(u) <= hl + r and abs(v) <= hw + r and (abs(u) <= hl or abs(v) <= hw or math.hypot(abs(u) - hl, abs(v) - hw) <= r):
             return True
+    poli = mundo.get("poligono")
     for sx in (-1, 1):
         for sy in (-1, 1):
             px, py = cx + c * sx * hl - s * sy * hw, cy + s * sx * hl + c * sy * hw
-            if not (0 < px < mundo["W"] and 0 < py < mundo["H"]):
+            if poli is None:
+                if not (0 < px < mundo["W"] and 0 < py < mundo["H"]):
+                    return True
+            elif not _dentro(poli, px, py):
+                return True
+    if poli is not None:                                   # esquina entrante de la L metida en la huella
+        for (x, y) in poli:
+            u, v = c * (x - cx) + s * (y - cy), -s * (x - cx) + c * (y - cy)
+            if abs(u) <= hl and abs(v) <= hw:
                 return True
     return False
+
+
+def _dentro(poli, x, y):
+    """Punto dentro de un polígono (rayo par/impar)."""
+    dentro = False
+    for i in range(len(poli)):
+        (x0, y0), (x1, y1) = poli[i], poli[(i + 1) % len(poli)]
+        if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+            dentro = not dentro
+    return dentro
 
 
 class Demo:
@@ -361,7 +387,10 @@ def dibujar(r, mundo, ruta):
     k = 100
     img = np.full((int(mundo["H"] * k) + 20, int(mundo["W"] * k) + 20, 3), 255, np.uint8)
     P = lambda x, y: (int(x * k) + 10, int((mundo["H"] - y) * k) + 10)
-    cv2.rectangle(img, P(0, mundo["H"]), P(mundo["W"], 0), (0, 0, 0), 2)
+    if mundo.get("poligono"):
+        cv2.polylines(img, [np.array([P(x, y) for x, y in mundo["poligono"]], np.int32)], True, (0, 0, 0), 2)
+    else:
+        cv2.rectangle(img, P(0, mundo["H"]), P(mundo["W"], 0), (0, 0, 0), 2)
     for (x, y, rr) in mundo["patas"]:
         cv2.circle(img, P(x, y), max(2, int(rr * k)), (60, 60, 60), -1)
     for (x, y) in mundo["macetas"]:

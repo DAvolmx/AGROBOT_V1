@@ -200,7 +200,7 @@ class ExploradorReactivo:
         if accion in ("izquierda", "derecha"):
             cfg = self._get_config() or {}
             d = self._distancias() or {}
-            margen = float(cfg.get("margen_giro_m", 0.10))
+            margen = float(cfg.get("margen_giro_m", 0.14))   # al girar, la esquina del chasis barre ~12 cm más allá del costado (sala en L, 2026-10-23)
             atras = self._hueco(d, "atras")
             if d.get("cerca") is not None and d["cerca"] < margen and atras > max(0.30, float(cfg.get("retroceso_libre_cm", 30)) / 100.0):
                 self.estado = f"algo a {d['cerca'] * 100:.0f} cm del costado: retrocedo antes de girar"

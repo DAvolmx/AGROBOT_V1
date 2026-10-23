@@ -4881,3 +4881,22 @@ al 80 %/100 %, watchdog del loop). Robot en el pasillo.
   `simular_slam.py` sobre la grabación del 05:10: los saltos de pose (26-30) aparecen con todas las configuraciones; la de hoy
   (scans cada 0,1 s, mapa cada 0,5 s) es la mejor (2 manchas, divergencia 0,28 m) -> no se revierte. Nuevas configs `giro_ancho`, `busca_ancha`.
 
+### 2026-10-23 (proyecto de 7 h) — Simulador calibrado, entrenamiento intensivo, zoom automático, servo bajo, SLAM
+- **Simulador calibrado con pulsos reales** (`calibrar_pulsos_reales.py` → `calibracion_pulsos_20261023.json`): robot de 12,6 kg, delanteras 3,5×, rigidez lateral 18,5;
+  reproduce avance 9 cm y retroceso -14 cm por pulso (real 9,1 / -14,2); subestima el giro de los arcos (~⅔) y NO reproduce la asimetría izquierda/derecha.
+  Añadidos al simulador: freno activo, compensación del giro, eficiencia avance/retroceso y de lados (`Hip.efic_*`, `lado_*`, `lateral`, `pivot_fric`). Con numba (`~/.agrobot/numba_pkg`,
+  `PYTHONPATH`) los episodios van 6-8× más rápido. `entorno_calibrado.py`: escenarios interior (5) y exterior (3).
+- **Entrenamiento intensivo** (`entrenar_intensivo.py`, CEM, 89 generaciones, interior 70 % / exterior 30 %): en semillas NUNCA vistas el mejor candidato logra 70 % de éxito y
+  0,49 contactos/episodio contra 56 % y 0,77 de la config de hoy (y 58 % / 0,66 la de esta mañana); en el peor hardware 81 % vs 62 %. NADA desplegado: `tools/aplicar_resultado_entrenamiento.py`
+  (vista previa por defecto, `--aplicar`, `--revertir`; `escala_velocidad` no se toca por su acople con el margen de parada).
+- **Zoom automático** (`zoom_auto.py`, `camera.mejor_nitido`, lazo `_bucle_zoom_auto`): objetivo 0,80; la clasificación de plagas se hace sobre el RECORTE de la planta
+  (`clasificar` en jetson_server.py). Validado con hojas reales (`validar_zoom_plagas.py`): 30-36 % a todas las escalas vs 1-34 % sin zoom. La cámara no tiene control de enfoque.
+- **Servo bajo** (`servo_bajo.py`): criterio estricto validado con 1.578 fotos reales (`validar_servo_bajo.py`): servo abajo el 27,5 % del tiempo.
+- **Mando asistido**: la inspección de visión activa se PAUSA (`vision_activa.pausa_externa`) en vez de cancelarse; ya no se pierde al corregir.
+- **SLAM**: corrector ML reentrenado con las 4 grabaciones de hoy (`construir_real_slam_hoy.py`, `entrenar_slam_local.py`): NO mejora al ICP crudo; sigue apagado. Paquete Kaggle en `tools/kaggle/slam_hoy/`.
+- **Reporte**: `docs/REPORTE_SIMULACION_20261023/` (`generar_reporte.py`).
+- **Entrenamiento ronda 2 (2026-10-23 11:17)**: partiendo del mejor de la ronda 1; candidato `top5` (carpeta `~/.agrobot/aprendizaje/intensivo_20261023_1015/informe.json`).
+  Validación en 156 episodios nuevos: 80,1 % de éxito y 0,26 contactos/ep (HOY 53,2 % / 0,89; AYER 53,8 % / 0,79); CONFIRMACIÓN sin sesgo con otras semillas: 78,2 % / 0,29 vs 56,4 % / 0,78 (HOY)
+  y 62,2 % / 0,60 (AYER); con hardware flojo 74,4 % vs 43,6 % y 41,0 %. Por escenario: exterior huerta 25→100 %, camino de plantas 0→83 %, curva 75→100 %, callejón 46→79 %;
+  SIN mejora el eslalon (37,5 %: el robot se aparta de la maceta de un lado y cae sobre la del otro) y poca en campo de rocas (42 %). NO desplegado: `tools/aplicar_resultado_entrenamiento.py`.
+

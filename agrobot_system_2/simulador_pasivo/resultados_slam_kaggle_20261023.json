@@ -1,0 +1,94 @@
+{
+ "peso_real": 20.0,
+ "retenida": 2,
+ "sesiones": {
+  "retenida_2": {
+   "muestras": 380,
+   "recorrido_m": 11.6,
+   "base": {
+    "ATE_m": 0.111,
+    "RPE1m_m": 0.086,
+    "RPE1m_deg": 2.34,
+    "error_final_m": 0.226
+   },
+   "existente": {
+    "ATE_m": 1.957,
+    "RPE1m_m": 1.951,
+    "RPE1m_deg": 89.75,
+    "error_final_m": 3.309
+   },
+   "sim+real": {
+    "ATE_m": 0.372,
+    "RPE1m_m": 0.155,
+    "RPE1m_deg": 2.97,
+    "error_final_m": 1.02
+   }
+  },
+  "entrenamiento_0": {
+   "muestras": 1320,
+   "recorrido_m": 22.3,
+   "base": {
+    "ATE_m": 0.438,
+    "RPE1m_m": 0.447,
+    "RPE1m_deg": 5.46,
+    "error_final_m": 0.681
+   },
+   "existente": {
+    "ATE_m": 2.488,
+    "RPE1m_m": 2.183,
+    "RPE1m_deg": 98.81,
+    "error_final_m": 4.599
+   },
+   "sim+real": {
+    "ATE_m": 0.822,
+    "RPE1m_m": 0.403,
+    "RPE1m_deg": 8.01,
+    "error_final_m": 1.298
+   }
+  },
+  "entrenamiento_3": {
+   "muestras": 1133,
+   "recorrido_m": 23.0,
+   "base": {
+    "ATE_m": 0.169,
+    "RPE1m_m": 0.086,
+    "RPE1m_deg": 2.14,
+    "error_final_m": 0.156
+   },
+   "existente": {
+    "ATE_m": 1.686,
+    "RPE1m_m": 2.135,
+    "RPE1m_deg": 114.32,
+    "error_final_m": 1.763
+   },
+   "sim+real": {
+    "ATE_m": 0.571,
+    "RPE1m_m": 0.154,
+    "RPE1m_deg": 2.85,
+    "error_final_m": 1.908
+   }
+  },
+  "entrenamiento_4": {
+   "muestras": 4719,
+   "recorrido_m": 97.1,
+   "base": {
+    "ATE_m": 0.463,
+    "RPE1m_m": 0.119,
+    "RPE1m_deg": 3.1,
+    "error_final_m": 2.917
+   },
+   "existente": {
+    "ATE_m": 2.499,
+    "RPE1m_m": 2.063,
+    "RPE1m_deg": 93.21,
+    "error_final_m": 10.387
+   },
+   "sim+real": {
+    "ATE_m": 1.988,
+    "RPE1m_m": 0.19,
+    "RPE1m_deg": 3.98,
+    "error_final_m": 6.659
+   }
+  }
+ }
+}

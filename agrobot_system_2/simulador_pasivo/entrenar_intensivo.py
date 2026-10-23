@@ -123,6 +123,9 @@ def main():
     ap.add_argument("--pob", type=int, default=20)
     ap.add_argument("--final-min", type=float, default=35.0)
     ap.add_argument("--gens-max", type=int, default=10_000)
+    ap.add_argument("--inicio", default=None, help="informe.json de una ronda anterior: arranca desde su mejor candidato")
+    ap.add_argument("--sd", type=float, default=0.22)
+    ap.add_argument("--val-semillas", type=int, default=16, help="semillas de interior en la validación final (exterior = la mitad)")
     a = ap.parse_args()
     t0 = time.time()
     fin_busqueda = t0 + a.horas * 3600 - a.final_min * 60
@@ -136,8 +139,11 @@ def main():
         log.write(s + "\n")
         log.flush()
 
-    mu = a_unidad(HOY)
-    sd = np.full(len(CLAVES), 0.22)
+    previo = None
+    if a.inicio:
+        previo = json.loads(Path(a.inicio).read_text())["mejor"]["params"]
+    mu = a_unidad(previo or HOY)
+    sd = np.full(len(CLAVES), a.sd)
     rng = np.random.default_rng(20261023)
     hist, archivo = [], []
     gen = 0
@@ -145,7 +151,7 @@ def main():
         # referencia de partida (la config de hoy en las semillas de la gen 0) para ver cuánto se mejora
         while time.time() < fin_busqueda and gen < a.gens_max:
             gen += 1
-            pob = [de_unidad(mu)] + ([HOY] if gen == 1 else []) + [de_unidad(mu + sd * rng.standard_normal(len(CLAVES))) for _ in range(a.pob)]
+            pob = [de_unidad(mu)] + ([HOY] + ([previo] if previo else []) if gen == 1 else []) + [de_unidad(mu + sd * rng.standard_normal(len(CLAVES))) for _ in range(a.pob)]
             pob = pob[:a.pob]
             si = [100 + gen * 7 + k for k in range(3)]         # semillas nuevas cada generación (con numba un episodio dura ~1 s)
             se = [200 + gen * 7 + k for k in range(2)]
@@ -176,12 +182,15 @@ def main():
             if k not in vistos:
                 vistos.add(k)
                 cand.append(m["params"])
-            if len(cand) == 4:
+            if len(cand) == 6:
                 break
         cand.append(de_unidad(mu))
         nombres = [f"top{i+1}" for i in range(len(cand) - 1)] + ["media_final", "HOY", "AYER"]
         todos = cand + [HOY, AYER]
-        si, se = list(range(5000, 5016)), list(range(6000, 6008))
+        if previo:
+            nombres.append("ronda1")
+            todos.append(previo)
+        si, se = list(range(5000, 5000 + a.val_semillas)), list(range(6000, 6000 + a.val_semillas // 2))
         val = evaluar(pool, todos, si, se)
         filas = [{"nombre": n, "params": p, **resumen(r)} for n, p, r in zip(nombres, todos, val)]
         for f in filas:

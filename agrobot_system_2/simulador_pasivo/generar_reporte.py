@@ -53,7 +53,8 @@ class Doc:
 
     def figura(self, ruta, pie=""):
         nombre = Path(ruta).name
-        shutil.copy(ruta, DEST / "figs" / nombre)
+        if Path(ruta).resolve() != (DEST / "figs" / nombre).resolve():
+            shutil.copy(ruta, DEST / "figs" / nombre)
         self.md.append(f"\n![{pie}](figs/{nombre})\n*{pie}*\n")
         self.h.append(f'<figure><img src="{img_b64(ruta)}"><figcaption>{html.escape(pie)}</figcaption></figure>')
 
@@ -67,6 +68,7 @@ th{background:#e8f5ec}figure{margin:14px 0}img{max-width:100%;border:1px solid #
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--entrenamiento", default=None)
+    ap.add_argument("--previa", default=None, help="carpeta de la ronda anterior (se dibuja su curva antes de la actual)")
     a = ap.parse_args()
     (DEST / "figs").mkdir(parents=True, exist_ok=True)
     D = Doc()
@@ -133,7 +135,7 @@ def main():
                 f = [q for q in r if q["escala"] == s and q["modo"] == m][0]
                 fila.append(f"{100 * f['exactitud']:.0f} % (z={f['zoom_medio']})" if m != "sin_zoom" else f"{100 * f['exactitud']:.0f} %")
             filas.append(fila)
-        D.tabla(["tamaño de la planta (fracción del ancho)"] + modos, filas, "Exactitud del clasificador (3 clases, 90 imágenes por celda). El zoom ayuda sobre todo cuando la planta ocupa menos del 35 % de la imagen.")
+        D.tabla(["tamaño de la planta (fracción del ancho)"] + modos, filas, f"Exactitud del clasificador (3 clases, {r[0]['n']} imágenes por celda). El zoom ayuda sobre todo cuando la planta ocupa menos del 35 % de la imagen; clasificar además el recorte de la planta gana en todas las escalas.")
         if (z / "exactitud_vs_distancia.png").exists():
             D.figura(z / "exactitud_vs_distancia.png", "Exactitud vs distancia con y sin zoom automático")
         if (z / "galeria.jpg").exists():
@@ -172,6 +174,12 @@ def main():
     hist = (inf or cargar(ent / "historial.json") or {}).get("historial") if ent else None
     if hist:
         fig, ax = plt.subplots(figsize=(8.5, 3.8))
+        off = 0
+        if a.previa:
+            hp = (cargar(Path(a.previa) / "informe.json") or cargar(Path(a.previa) / "historial.json") or {}).get("historial") or []
+            ax.plot([h["gen"] for h in hp], [h["elite"] for h in hp], color="gray", label="ronda 1 (élite)")
+            off = len(hp)
+            hist = [dict(h, gen=h["gen"] + off) for h in hist]
         g = [h["gen"] for h in hist]
         ax.plot(g, [h["mejor"] for h in hist], label="mejor de la generación"); ax.plot(g, [h["elite"] for h in hist], label="élite")
         ax.plot(g, [h["media"] for h in hist], label="media", alpha=0.6)
@@ -180,14 +188,14 @@ def main():
             ax.scatter([x for x, _ in hoy], [y for _, y in hoy], color="k", label="config de hoy (referencia)", zorder=5)
         ax.set_xlabel("generación"); ax.set_ylabel("puntuación (menos = mejor)"); ax.set_title("Curva de aprendizaje"); ax.legend(); ax.grid(alpha=0.3)
         fig.tight_layout(); fig.savefig(DEST / "figs" / "aprendizaje.png", dpi=110); plt.close(fig)
-        D.figura(DEST / "figs" / "aprendizaje.png", f"{len(hist)} generaciones de {20} candidatos, cada una con semillas nuevas")
+        D.figura(DEST / "figs" / "aprendizaje.png", f"{len(hist)} generaciones en total, cada una con semillas nuevas (24 candidatos)")
     if inf and inf.get("validacion"):
         filas = []
         for f in inf["validacion"]:
             t, i, e = f["todo"], f["interior"], f["exterior"]
             filas.append([f["nombre"], t["exito_pct"], t["contactos_por_ep"], t["puntos"], i["exito_pct"], i["contactos_por_ep"], e["exito_pct"], e["contactos_por_ep"]])
         D.tabla(["config", "éxito % (todo)", "contactos/ep", "puntos", "éxito % interior", "contactos int.", "éxito % exterior", "contactos ext."], filas,
-                "Validación en semillas nunca vistas (8 de interior × 5 escenarios, 5 de exterior × 3). HOY = lo flasheado esta mañana; AYER = sin freno activo ni compensación.")
+                f"Validación en semillas nunca vistas ({inf['validacion'][0]['interior']['n']} episodios de interior, {inf['validacion'][0]['exterior']['n']} de exterior por configuración). HOY = lo flasheado esta mañana; AYER = sin freno activo ni compensación; ronda1 = el mejor de la primera ronda.")
         m = inf["mejor"]
         from entrenar_intensivo import HOY
         D.tabla(["parámetro", "hoy", f"mejor ({m['nombre']})"], [[k, HOY[k], m["params"][k]] for k in HOY if k in m["params"]])
@@ -200,13 +208,46 @@ def main():
                     "Estrés: robot más flojo (más masa, más rozamiento, menos agarre).")
     else:
         D.p("<i>El entrenamiento aún no terminó: este reporte se regenera al acabar.</i>")
+    conf = cargar(ent / "confirmacion.json") if ent else None
+    if conf:
+        D.titulo(3, "Confirmación sin sesgo (otro juego de semillas)")
+        filas = []
+        for k, nom in (("normal", "hardware calibrado"), ("hardware_flojo", "hardware más flojo")):
+            for n, r in conf[k].items():
+                t = r["todo"]
+                filas.append([nom, n, t["n"], t["exito_pct"], t["contactos_por_ep"], t["sin_contacto_pct"], t["puntos"]])
+        D.tabla(["entorno", "config", "episodios", "éxito %", "contactos/ep", "% sin contacto", "puntos"], filas,
+                "El candidato salió de varios validados (su validación es algo optimista): esta tabla usa semillas que no vio nadie. La mejora se confirma.")
     extra = DEST / "figs"
     for png in sorted((HOME / "informes" / "episodios").glob("*.png")) if (HOME / "informes" / "episodios").exists() else []:
         D.figura(png, f"Episodio simulado: {png.stem}")
+    sl = cargar(HOME / "slam" / "modelo_hoy" / "resultados.json")
+    D.titulo(2, "4b. SLAM: corrector de odometría reentrenado con los datos de hoy")
+    if sl:
+        filas = []
+        for ses, v in sl["sesiones"].items():
+            for k in ("base", "existente", "sim+real"):
+                filas.append([ses, k, v[k]["ATE_m"], v[k]["RPE1m_m"], v[k]["RPE1m_deg"], v[k]["error_final_m"]])
+        D.tabla(["sesión real", "variante", "ATE (m)", "RPE 1 m (m)", "RPE 1 m (°)", "error final (m)"], filas,
+                "Pose integrada (ICP + corrección) contra la pose del SLAM como pseudo-referencia. «base» = ICP crudo; «existente» = pesos del 21-oct (solo simulación); «sim+real» = reentrenado hoy. "
+                "NO mejora al ICP crudo con datos reales, así que `slam.correccion_ml_activa` sigue apagado. Paquete para repetirlo en Kaggle: tools/kaggle/slam_hoy/.")
+    kg = cargar(AQUI / "resultados_slam_kaggle_20261023.json")
+    if kg:
+        filas = []
+        for ses, v in kg["sesiones"].items():
+            for k in ("base", "sim+real"):
+                filas.append([ses, k, v[k]["ATE_m"], v[k]["RPE1m_m"], v[k]["RPE1m_deg"], v[k]["error_final_m"]])
+        D.tabla(["sesión real", "variante (Kaggle, GPU, 150 épocas, 272k simulados)", "ATE (m)", "RPE 1 m (m)", "RPE 1 m (°)", "error final (m)"], filas,
+                "Entrenamiento en Kaggle (kernel privado davidgomez32/agrobot-slam-hoy-entrenar): con más épocas y todo el dataset simulado el corrector empeora aún más al ICP crudo "
+                "(sobreajuste a la simulación). Conclusión: no activar; el SLAM se mejora por parámetros de slam_toolbox y por mover el robot con menos sacudidas, no con este corrector.")
     D.titulo(2, "5. Qué se cambió hoy (resumen)")
     D.p("Firmware fusión con USB, 100 % continuo, freno activo y compensación del giro · mando asistido que PAUSA (el dashboard no sale de autónomo) · servo hacia abajo con macetas bajas · "
         "detección trasera con cono de 90° · bucle de escaneos de la misión corregido · zoom automático y cuadro más nítido al analizar · simulador calibrado con pulsos reales · "
         "mapa desfasado respaldado y reseteado. Detalle en MANIFEST_1.md.")
+    D.titulo(2, "5b. Para la salida a pruebas")
+    D.p("1) <code>sudo systemctl start agrobot-ros agrobot-backend</code> (estaban parados). 2) <code>python3 tools/aplicar_resultado_entrenamiento.py --entorno interior</code> muestra qué cambiaría el mejor candidato "
+        "(antes → después) sin tocar nada; con <code>--aplicar</code> lo aplica y guarda el estado anterior (<code>--revertir</code> lo deshace). 3) Probar primero con las ruedas en el aire y luego en espacio libre; "
+        "tras unos giros, <code>python3 tools/medir_giro.py</code> propone el siguiente <code>comp_neg</code>/<code>comp_pos</code>. 4) Empaquetar los datos con <code>tools/empaquetar_prueba.py</code>.")
     D.titulo(2, "6. Límites honestos")
     D.p("El simulador reproduce el avance y el retroceso de los pulsos reales pero subestima el giro de los arcos (~⅔ del real) y NO reproduce que el giro a la izquierda retroceda más; "
         "por eso <code>comp_neg</code>/<code>comp_pos</code> se calibran con el robot (<code>tools/medir_giro.py</code>). La validación del zoom usa fotos de hoja de col de bases públicas y no hojas de tu cultivo. "

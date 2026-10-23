@@ -21,9 +21,12 @@ def api(ruta, datos=None, metodo=None):
     return json.load(urllib.request.urlopen(req, timeout=10))
 
 
-def jetson(p, entorno):
+def jetson(p, entorno, con_velocidad=False):
     i = entorno == "interior"
-    return {"autonomia": {"escala_velocidad": round(p["escala_int" if i else "escala_ext"], 3), "avance_libre_cm": round(p["avance_libre_int" if i else "avance_libre_ext"]),
+    # La velocidad (escala_velocidad) va ACOPLADA al deslizamiento/margen de parada (perfiles_entorno.py: el margen de 12+20 cm solo vale a ~0,2 m/s);
+    # cambiarla sola quita distancia de frenado. Por eso NO se aplica salvo --con-velocidad (y entonces hay que revisar el perfil a mano).
+    vel = {"escala_velocidad": round(p["escala_int" if i else "escala_ext"], 3)} if con_velocidad else {}
+    return {"autonomia": {**vel, "avance_libre_cm": round(p["avance_libre_int" if i else "avance_libre_ext"]),
                           "sendero_tolerancia_cm": round(p["sendero_tol_cm"])},
             "control": {"suavidad_duty": round(p["suavidad_duty"], 3), "suavidad_periodo_s": round(p["suavidad_periodo_s"], 3)},
             "slam": {"cono_frontal_deg": round(p["cono_int" if i else "cono_ext"])}}
@@ -34,6 +37,7 @@ def main():
     ap.add_argument("--informe", default=None)
     ap.add_argument("--entorno", default="interior", choices=["interior", "exterior"])
     ap.add_argument("--aplicar", action="store_true")
+    ap.add_argument("--con-velocidad", action="store_true", help="aplica también escala_velocidad (acoplada al margen de parada: ver perfiles_entorno.py)")
     ap.add_argument("--revertir", default=None)
     a = ap.parse_args()
     if a.revertir:
@@ -48,7 +52,9 @@ def main():
     p = mejor["params"]
     print(f"informe: {inf} · candidato {mejor['nombre']} · entorno {a.entorno}")
     lim_nuevos = {LIM[k]: round(p[k]) for k in LIM}
-    j = jetson(p, a.entorno)
+    j = jetson(p, a.entorno, a.con_velocidad)
+    if not a.con_velocidad:
+        print(f"(escala_velocidad propuesta {p['escala_int' if a.entorno == 'interior' else 'escala_ext']:.2f} NO se aplica: va acoplada al margen de parada; usa --con-velocidad bajo tu criterio)")
     try:
         lim_ahora = api("/api/c3/limites")["limites"]
         cfg = api("/api/params")

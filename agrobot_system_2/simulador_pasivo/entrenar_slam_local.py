@@ -21,6 +21,8 @@ import torch.nn as nn
 HOME = Path(os.environ.get("AGROBOT_SLAM_DIR", Path.home() / ".agrobot" / "slam"))
 BACKEND = Path(os.environ.get("AGROBOT_PESOS", Path(__file__).resolve().parent.parent / "jetson" / "backend" / "models" / "slam_correccion"))
 SALIDA = Path(os.environ.get("AGROBOT_SALIDA", HOME / "modelo_hoy"))
+SIM = Path(os.environ.get("AGROBOT_SIM", HOME / "dataset_calibrado.npz"))       # en Kaggle: /kaggle/input/agrobot-slam-correction/dataset.npz
+REAL = Path(os.environ.get("AGROBOT_REAL", HOME / "real_hoy.npz"))
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -140,8 +142,8 @@ def main():
     ap.add_argument("--epocas", type=int, default=60)
     ap.add_argument("--sim-max", type=int, default=120_000)
     a = ap.parse_args()
-    sim = np.load(HOME / "dataset_calibrado.npz", allow_pickle=False)
-    real = np.load(HOME / "real_hoy.npz", allow_pickle=False)
+    sim = np.load(SIM, allow_pickle=False)
+    real = np.load(REAL, allow_pickle=False)
     rng = np.random.default_rng(0)
     isim = np.sort(rng.choice(len(sim["features"]), min(a.sim_max, len(sim["features"])), replace=False)) if a.sim_max > 0 else np.array([], dtype=int)
     Xs, Ys = sim["features"][isim].astype(np.float32), sim["targets_inc"][isim].astype(np.float32)

@@ -16,7 +16,7 @@ import time
 DEFECTOS = {
     "max_plantas": 3,
     "tiempo_max_s": 900.0,
-    "conf_min": 0.45,
+    "conf_min": 0.35,           # la col marchita sale con 0,42-0,48 en la cámara del robot (2026-10-23); la persistencia frena falsos
     "persistencia": 3,                 # cuadros seguidos viendo la maceta antes de ir a por ella
     "distancia_max_m": 2.5,            # solo se va a por macetas a menos de esto (por cámara)
     "radio_ya_vista_m": 0.9,           # una maceta a menos de esto de una ya inspeccionada es la misma
@@ -158,8 +158,10 @@ class MisionPlantas:
                 # La posición sale de la CAJA de la cámara (rumbo + distancia), no del hueco del LIDAR: si al acercarse se interpuso una pata
                 # de silla, el LIDAR mide la pata y la planta quedaba mal ubicada (simulación 2026-10-22: la misma planta escaneada dos veces).
                 pos = self._posicion_estimada({"yaw_deg": ult.get("yaw_deg", 0.0), "dist_m": ult["dist_m"]})
+            esp = (res.get("diagnostico") or {}).get("especie") or {}
             self.plantas.append({"n": len(self.plantas) + 1, "x": None if pos is None else round(pos[0], 2),
                                  "y": None if pos is None else round(pos[1], 2), "clase": res.get("clase"),
+                                 "especie": esp.get("especie"), "p_col": esp.get("p_col"),
                                  "vistas": len(res.get("vistas", [])), "motivo_fin_vision": getattr(self.vision, "motivo_fin", None)})
             self._ev({"tipo": "planta_inspeccionada", **self.plantas[-1]})
             if len(self.plantas) >= c["max_plantas"]:

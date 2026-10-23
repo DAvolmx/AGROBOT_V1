@@ -1846,13 +1846,46 @@ def _crear_mision_plantas():
                                       get_config=lambda: state.config.get("mision_plantas", {}), on_event=evento)
 
 
+async def camara_cajas_handler(request: web.Request):
+    """GET /api/camara/cajas — lo que el robot detecta AHORA (clase, confianza, caja y distancia por cámara a la cara delantera)."""
+    if camera is None or camera.ultimo_frame() is None:
+        return web.json_response({"error": "cámara sin imagen"}, status=503)
+    f = camera.ultimo_frame()
+    with camera._lock:
+        lista, ts = list(camera._cajas), camera._cajas_ts
+    h, w = f[0].shape[:2]
+    especies = {}
+    if request.query.get("especie"):
+        import especie_clip
+        for k, b in enumerate(lista):
+            if b.get("class") == "maceta":
+                try:
+                    especies[k] = await asyncio.to_thread(especie_clip.clasificar, f[0], b["xyxy"])
+                except Exception as exc:
+                    especies[k] = {"error": str(exc)}
+    return web.json_response({"edad_s": None if ts is None else round(time.time() - ts, 2), "servo": state.servo_angle,
+                              "lidar": lidar_reactive.distancias(state.config["slam"]),
+                              "cajas": [{"clase": b["class"], "conf": round(float(b["confidence"]), 3), "xyxy": list(b["xyxy"]),
+                                         "dist_cara_m": _dist_caja_m(b["xyxy"], w, h), **({"especie": especies[k]} if k in especies else {})}
+                                        for k, b in enumerate(lista)]})
+
+
+async def camara_cruda_handler(request: web.Request):
+    """GET /api/camara/cruda.jpg — el último fotograma SIN cajas dibujadas."""
+    f = camera.ultimo_frame() if camera is not None else None
+    if f is None or cv2 is None:
+        return web.json_response({"error": "cámara sin imagen"}, status=503)
+    ok, buf = cv2.imencode(".jpg", f[0], [cv2.IMWRITE_JPEG_QUALITY, 92])
+    return web.Response(body=buf.tobytes(), content_type="image/jpeg")
+
+
 async def mision_plantas_handler(request: web.Request):
     """GET/POST /api/mision_plantas {"activa": true|false} — la misión de la demo: explorar, mapear y escanear plantas en maceta."""
     if request.method == "GET":
         return web.json_response(mision_plantas.estado_dict() if mision_plantas else {"estado": "no disponible"})
     body = await request.json()
     if body.get("activa"):
-        _mision_vision_override.update({"clases_objetivo": ["maceta"], "max_objetivos": 1, "conf_min": 0.40,
+        _mision_vision_override.update({"clases_objetivo": ["maceta"], "max_objetivos": 1, "conf_min": 0.30,
                                         "angulos_barrido_deg": [state.servo_angle, 82, 98, state.servo_angle]})
         ok, msg = mision_plantas.iniciar()
         if ok:
@@ -1903,12 +1936,26 @@ def _crear_vision_activa():
         return str(ruta)
 
     def clasificar(ruta):
-        """Segunda opinión sobre la foto con el clasificador PLAGASX (CPU: es pequeño y el robot está parado en este paso)."""
+        """Segunda opinión sobre la foto: especie con CLIP sobre el recorte de la maceta (¿es una col?) y PLAGASX (enfermedad de col)."""
+        out = {}
+        try:
+            import especie_clip
+            img = cv2.imread(ruta)
+            with camera._lock:
+                macetas = [b for b in camera._cajas if b.get("class") == "maceta"]
+            caja = None
+            if macetas and img is not None:                      # la maceta más centrada en la imagen
+                w = img.shape[1]
+                caja = min(macetas, key=lambda b: abs((b["xyxy"][0] + b["xyxy"][2]) / 2 - w / 2))["xyxy"]
+            out["especie"] = especie_clip.clasificar(img, caja)
+        except Exception as exc:
+            out["especie_error"] = f"{type(exc).__name__}: {exc}"
         mod = _plagasx_clasificador()
         r = mod.predict(ruta, verbose=False, device="cpu")[0]
         p = r.probs.data.cpu().numpy()
         orden = p.argsort()[::-1][:3]
-        return {"modelo": "plagasx_cls", "top": [{"clase": mod.names[int(i)], "prob": round(float(p[i]), 3)} for i in orden]}
+        out.update({"modelo": "plagasx_cls", "top": [{"clase": mod.names[int(i)], "prob": round(float(p[i]), 3)} for i in orden]})
+        return out
 
     def evento(e):
         print(f"[vision_activa] {e}", flush=True)
@@ -3822,6 +3869,11 @@ async def start_background(app: web.Application):
     app["camera"] = camera
     _crear_vision_activa()
     _crear_mision_plantas()
+    try:
+        import especie_clip
+        especie_clip.precargar()          # CLIP tarda en cargar: que esté listo antes de la primera planta
+    except Exception as exc:
+        print(f"[especie] {exc}", flush=True)
 
     app["stats_task"] = asyncio.create_task(stats_loop())
 
@@ -4294,6 +4346,8 @@ def create_app() -> web.Application:
     app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
     app.router.add_get("/api/giro_cerrado", giro_cerrado_handler)
     app.router.add_post("/api/giro_cerrado", giro_cerrado_handler)
+    app.router.add_get("/api/camara/cajas", camara_cajas_handler)
+    app.router.add_get("/api/camara/cruda.jpg", camara_cruda_handler)
     app.router.add_get("/api/mision_plantas", mision_plantas_handler)
     app.router.add_post("/api/mision_plantas", mision_plantas_handler)
     app.router.add_get("/api/vision_activa", vision_activa_get_handler)

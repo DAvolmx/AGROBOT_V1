@@ -1128,6 +1128,7 @@ input[type="text"], select { font-family: inherit; }
               <span class="k" style="color:var(--warn-ink);">⚠️ Sensores sin inicializar (se envía 0.0)</span>
               <span class="v mono" id="env-missing" style="color:var(--warn-ink);">—</span>
             </div>
+            <div id="env-sim-row" style="display:none; font-size:12px; color:var(--ink-soft); margin:-8px 0 10px;">ⓘ SCD40 en reparación: CO₂, temperatura y humedad simulados</div>
             <div style="margin-bottom:16px;">
               <div style="font-size:15.5px; color:var(--ink-soft);">MPU6050 VELOCIDAD ANGULAR (°/s)</div>
               <div class="stat-grid ejes" style="margin-top:6px;">
@@ -2750,6 +2751,7 @@ input[type="text"], select { font-family: inherit; }
     $("k-hum-dash").textContent = `${amb("humidity", (d.humidity ?? 0).toFixed(1))}%`;
     $("env-missing-row").style.display = caidos.length ? "flex" : "none";
     if (caidos.length) $("env-missing").textContent = caidos.join(", ");
+    $("env-sim-row").style.display = (d._sensors_simulated || []).length ? "block" : "none";
 
     $("v-gyro-x").textContent = (d.gyroX ?? 0).toFixed(1);
     $("v-gyro-y").textContent = (d.gyroY ?? 0).toFixed(1);

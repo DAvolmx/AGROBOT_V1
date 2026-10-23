@@ -36,6 +36,9 @@ DEFAULTS = {
         # Gravedad (ax, ay, az en g) medida con el robot quieto y NIVELADO (POST /api/calibracion/imu_nivel).
         # None = sin calibrar. Ver imu_nivel.py.
         "imu_gravedad_nivel": None,
+        # SCD40 quemado (2026-10-23): rellena CO₂/temperatura/humedad con valores simulados, marcados en
+        # `_sensors_simulated` (ver ambiente_simulado.py). Apagar en cuanto haya un sensor nuevo.
+        "ambiente_simulado": False,
     },
     "hardware": {
         "camera_enabled": True,

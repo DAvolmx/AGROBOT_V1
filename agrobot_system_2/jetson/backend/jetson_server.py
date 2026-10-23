@@ -367,6 +367,8 @@ sesgo_giro = SesgoGiroscopio()
 
 
 from lora_sensor_codec import SampleGate
+from ambiente_simulado import AmbienteSimulado
+ambiente_simulado = AmbienteSimulado()
 lora_sample_gate=SampleGate()
 
 class EnvTelemetryProtocol(asyncio.DatagramProtocol):
@@ -429,6 +431,8 @@ class EnvTelemetryProtocol(asyncio.DatagramProtocol):
             print(f"[lora] el nodo LoRa V3 se reinició (#{enlace_lora.reinicios} desde que "
                   f"arrancó el backend): si se repite, revisa su alimentación", flush=True)
         payload = normalize_env(payload)
+        if state.config["calibration"].get("ambiente_simulado"):
+            payload = ambiente_simulado.aplicar(payload)
         # Corrección de bias del giroscopio (calibración). Se aplica ACÁ, lo
         # más cerca posible de la entrada, para que todo lo de aguas abajo
         # (pose casera, EKF de ROS, dashboard) vea el mismo dato corregido.

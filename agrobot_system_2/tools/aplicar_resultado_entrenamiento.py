@@ -77,7 +77,12 @@ def main():
     print("\nguardado el estado anterior en", ruta)
     for k, v in lim_nuevos.items():
         for _ in range(6):
-            r = api("/api/c3/limites", {"nombre": k, "valor": v}) if True else None
+            try:
+                r = api("/api/c3/limites", {"nombre": k, "valor": v})
+            except urllib.error.HTTPError as e:
+                r = {"error": e.read().decode()}
+                if e.code == 400:   # regla del firmware (p. ej. minp > adel): reintentar no sirve
+                    break
             if r.get("ok"):
                 break
             time.sleep(1.5)

@@ -7,7 +7,8 @@ Qué hace:
   · `muestra()` — cada orden manual se compara con la de la autonomía, se clasifica y se guarda en JSONL con la
                   pose y las distancias del LIDAR (máx. 5 por segundo).
   · `sugerencias()` — con varias correcciones del mismo tipo propone ajustes (margen de parada, cono lateral,
-                  velocidad). NUNCA los aplica solo: el operador pulsa «Aplicar».
+                  velocidad). Los que vuelven al robot MÁS cauto (`AUTO_SEGURAS`) se aprenden solos con `auto_aplicables()`
+                  (un paso cada `ENFRIAMIENTO_S`); los que lo hacen menos cauto los aplica el operador con «Aplicar».
 
 Sin dependencias del servidor: se prueba en tests/test_asistido.py.
 """
@@ -22,6 +23,8 @@ PERIODO_MUESTRA_S = 0.2          # máx. 5 muestras por segundo
 UMBRAL_V = 0.02                  # m/s por debajo de lo cual se considera «parado»
 UMBRAL_W = 0.05                  # rad/s por debajo de lo cual se considera «sin girar»
 MIN_EVENTOS = 4                  # correcciones del mismo tipo para sugerir algo
+ENFRIAMIENTO_S = 600.0           # entre dos ajustes aprendidos solos
+AUTO_SEGURAS = ("margen_mas", "velocidad_menos", "cono_lateral_mas")   # solo hacia más cautela
 CADUCA_S = 300.0                 # sin órdenes manuales durante tanto, la intervención se da por terminada
 
 TIPOS = {
@@ -61,6 +64,8 @@ class Asistido:
         self._ultima = 0.0
         self.ultima_orden = 0.0             # última orden manual (aunque la muestra se descarte por frecuencia)
         self.recientes: list[dict] = []     # las últimas muestras (para el panel)
+        self.aprendido_hasta = self._leer_marca()   # las correcciones anteriores a esto ya se tradujeron en un ajuste
+        self._t_aprendido = float("-inf")
 
     # ---- ciclo de vida ----
     def tomar(self, modo: str, auto_cmd=(0.0, 0.0), meta: dict | None = None):
@@ -139,9 +144,35 @@ class Asistido:
         return {"total": len(ev), "por_tipo": {t: {"n": cont.get(t, 0), "texto": txt} for t, txt in TIPOS.items() if cont.get(t, 0)},
                 "por_modo": dict(Counter(e.get("modo") or "—" for e in ev))}
 
+    # ---- aprendizaje automático ----
+    def _leer_marca(self) -> float:
+        try:
+            return float(json.loads((self.carpeta / "aprendido.json").read_text()).get("hasta", 0.0))
+        except (OSError, ValueError, AttributeError):
+            return 0.0
+
+    def auto_aplicables(self, cfg: dict) -> list[dict]:
+        """Sugerencias que el robot puede aprender solo: una por vez, solo las que lo hacen más cauto, con enfriamiento."""
+        ahora = self.reloj()
+        if ahora - self._t_aprendido < ENFRIAMIENTO_S:
+            return []
+        return [x for x in self.sugerencias(cfg) if x["id"] in AUTO_SEGURAS][:1]
+
+    def marcar_aprendido(self, sug: dict):
+        """Tras aplicar `sug`: sus correcciones no vuelven a contar y queda el rastro (aprendido.log) para revertir."""
+        ahora = self.reloj()
+        self.aprendido_hasta = self._t_aprendido = ahora
+        try:
+            self.carpeta.mkdir(parents=True, exist_ok=True)
+            (self.carpeta / "aprendido.json").write_text(json.dumps({"hasta": ahora}))
+            with (self.carpeta / "aprendido.log").open("a") as fh:
+                fh.write(json.dumps({"t": round(ahora, 2), **sug}, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+
     def sugerencias(self, cfg: dict, eventos: list[dict] | None = None) -> list[dict]:
         """Ajustes propuestos a partir de las correcciones. `cfg` = la config del backend (secciones slam/autonomia)."""
-        ev = self.leer() if eventos is None else eventos
+        ev = [e for e in (self.leer() if eventos is None else eventos) if e.get("t", 0) > self.aprendido_hasta]
         slam, auto = cfg.get("slam", {}), cfg.get("autonomia", {})
         sug: list[dict] = []
 

@@ -80,3 +80,27 @@ def test_segundos_sin_orden_y_reanudar_automatico(tmp_path):
     t[0] += 0.05
     a.muestra(0.1, 0, None, None)                 # descartada por frecuencia, pero cuenta como actividad
     assert abs(a.segundos_sin_orden()) < 1e-6
+
+
+def test_aprende_solo_lo_cauto_y_no_repite(tmp_path):
+    a, t = _a(tmp_path)
+    a.tomar("patrulla", auto_cmd=(0.2, 0.0))
+    for _ in range(5):
+        t[0] += 0.3
+        a.muestra(0, 0, None, {"adelante": 0.5})
+    cfg = {"slam": {"margen_parada_cm": 26}, "autonomia": {}}
+    (s,) = a.auto_aplicables(cfg)
+    assert s["id"] == "margen_mas"
+    a.marcar_aprendido(s)
+    assert a.sugerencias(cfg) == [] and a.auto_aplicables(cfg) == []     # esas correcciones ya cuentan como aprendidas
+    assert Asistido(tmp_path, reloj=lambda: t[0]).aprendido_hasta == a.aprendido_hasta   # y sobrevive al reinicio
+
+
+def test_no_aprende_solo_lo_que_lo_hace_menos_cauto(tmp_path):
+    a, t = _a(tmp_path)
+    a.tomar("patrulla", auto_cmd=(0.0, 0.0))
+    for _ in range(5):
+        t[0] += 0.3
+        a.muestra(0.2, 0, None, {"adelante": 0.9})
+    cfg = {"slam": {"margen_parada_cm": 26}, "autonomia": {}}
+    assert [x["id"] for x in a.sugerencias(cfg)] == ["margen_menos"] and a.auto_aplicables(cfg) == []

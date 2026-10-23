@@ -1877,12 +1877,27 @@ def _asistido_reanuda_s() -> float:
         return 2.5
 
 
+async def _aprender_de_correcciones():
+    """Las correcciones con los botones enseñan al robot: si se repiten, aplica solo el ajuste que lo hace MÁS cauto
+    (parar antes, ir más despacio, mirar más a los lados). Los que lo harían menos cauto quedan como sugerencia manual."""
+    if not (state.config.get("autonomia") or {}).get("asistido_aprende", True):
+        return
+    for sug in asistido.auto_aplicables(state.config):
+        state.config = config_store.update_section(sug["seccion"], {sug["clave"]: sug["propuesto"]})
+        asistido.marcar_aprendido(sug)
+        print(f"[asistido] aprendido: {sug['seccion']}.{sug['clave']} {sug['actual']} -> {sug['propuesto']} ({sug['texto']})", flush=True)
+        await state.broadcast({"type": "config_update", "data": state.config})
+        await state.broadcast({"type": "toast", "data": {"kind": "info", "title": "Aprendí de tus correcciones",
+                                                          "message": f"{sug['clave']}: {sug['actual']} → {sug['propuesto']}. {sug['texto']}"}})
+
+
 async def _vigia_asistido():
     """Un toque de mando para corregir NO saca al robot del modo autónomo: pasados `autonomia.asistido_reanuda_s` segundos
     sin órdenes manuales (0 = nunca, hay que pulsar «Reanudar») la autonomía interrumpida vuelve sola."""
     while True:
         try:
             await asyncio.sleep(0.4)
+            await _aprender_de_correcciones()
             espera = _asistido_reanuda_s()
             if asistido.activa and espera > 0 and asistido.segundos_sin_orden() >= espera and not conductor.activo:
                 ok, msg, modo = await _reanudar_autonomia()
@@ -2197,11 +2212,11 @@ async def camara_cruda_handler(request: web.Request):
 
 
 def _ajustes_vision_mision() -> dict:
-    """Visión activa durante la misión de plantas. Distancia 0,65 m, 3 retrocesos y 3 giros: lo mejor del barrido en la sala real en L
+    """Visión activa durante la misión de plantas. Distancia 0,42 m (2026-10-23, el operador veía paradas a ~75 cm con 0,65+0,08; el zoom ya encuadra), antes 0,65 m, 3 retrocesos y 3 giros: lo mejor del barrido en la sala real en L
     (simular_demo.py layout 3, 2026-10-23: 17/18 plantas y 1 roce en 6 simulaciones; con 0,45 m y 2 retrocesos rozaba esquinas y macetas)."""
     return {"clases_objetivo": ["maceta"], "max_objetivos": 1, "conf_min": 0.30,
             "angulos_barrido_deg": [state.servo_angle, 82, 98, state.servo_angle],
-            "distancia_inspeccion_m": 0.65, "retroceso_tras_analisis": 3, "giros_tras_analisis": 3}
+            "distancia_inspeccion_m": 0.42, "tol_distancia_m": 0.04, "retroceso_tras_analisis": 3, "giros_tras_analisis": 3}
 
 
 async def mision_plantas_handler(request: web.Request):

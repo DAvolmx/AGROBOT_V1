@@ -14,7 +14,7 @@ import math
 import time
 
 DEFECTOS = {
-    "max_plantas": 3,
+    "max_plantas": 12,                 # una por una: ve una, la escanea, la marca y sigue con la siguiente hasta agotar el recorrido o el tiempo
     "tiempo_max_s": 900.0,
     "conf_min": 0.35,           # la col marchita sale con 0,42-0,48 en la cámara del robot (2026-10-23); la persistencia frena falsos
     "persistencia": 3,                 # cuadros seguidos viendo la maceta antes de ir a por ella

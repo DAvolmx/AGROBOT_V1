@@ -645,7 +645,6 @@ input[type="text"], select { font-family: inherit; }
     <button class="nav-btn" data-tab="tab-hw"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.7a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.4 2.7a7.6 7.6 0 0 0-2.6 1.5l-2.4-.7-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.7a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.4-2.7a7.6 7.6 0 0 0 2.6-1.5l2.4.7 2-3.4-2-1.6Z"/></svg></span>Config. Hardware</button>
     <button class="nav-btn" data-tab="tab-params"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h9M17 6h3M4 12h3M9 12h11M4 18h13M19 18h1"/><circle cx="14.5" cy="6" r="2"/><circle cx="6.5" cy="12" r="2"/><circle cx="16.5" cy="18" r="2"/></svg></span>Parámetros</button>
     <button class="nav-btn" data-tab="tab-sistema"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg></span>Sistema</button>
-    <a class="nav-btn" href="/training.html" target="_blank" style="text-decoration:none; color:inherit; margin-top:8px; border-top:1px solid var(--line); padding-top:14px;"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>Entrenamiento</a>
     <a class="nav-btn" href="/etiquetar.html" target="_blank" style="text-decoration:none; color:inherit;"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2.5"/><rect x="7.5" y="8" width="8" height="7" rx="1"/></svg></span>Etiquetar plagas</a>
   </div>
   <button class="nav-colapsar" id="btn-colapsar" title="Colapsar barra lateral">
@@ -851,7 +850,45 @@ input[type="text"], select { font-family: inherit; }
             <span><kbd>L</kbd></span><span>LED de escaneo</span>
           </div>
           <p class="hint" style="margin-top:10px;">Servo: 25°–160°. El zoom es solo para inspeccionar con el robot quieto; vuelve a 1× al iniciar exploración o patrulla.</p>
-        </div></div>
+        </div>
+        <div id="as-mando" class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+            <h3 style="margin:0;">Mando sobre la autonomía</h3>
+            <span class="pill" id="as-pill"><span class="dot"></span><span id="as-pill-text">manual</span></span>
+          </div>
+          <p class="hint" id="as-explica" style="margin:8px 0 10px; line-height:1.5;">Si mueves el robot con los botones o el teclado mientras
+            explora, patrulla o navega, la autonomía se <b>pausa</b> y cada corrección tuya queda registrada para ajustar al robot.</p>
+          <label class="hint" style="display:flex; gap:8px; align-items:center; margin:0 0 10px; flex-wrap:wrap;">Reanudar sola tras
+            <input type="number" id="as-reanuda-s" min="0" max="30" step="0.5" style="width:70px;"> s sin tocar los controles <span>(0 = solo con el botón)</span></label>
+          <div id="as-botones" style="display:none; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button class="btn primary" id="as-reanudar">▶ Reanudar la autonomía</button>
+            <button class="btn" id="as-soltar">Quedarme en manual</button>
+          </div>
+          <div id="as-recientes" class="mono" style="font-size:12.5px; color:var(--ink-soft); line-height:1.6;"></div>
+        </div>
+        <div id="as-aprende" class="card">
+          <h3 style="margin:0 0 8px;">Qué aprende de tus correcciones</h3>
+          <div id="as-resumen" class="hint" style="line-height:1.6;">Sin correcciones todavía.</div>
+          <div id="as-sugerencias" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;"></div>
+          <p class="hint" style="margin-top:10px;">Los ajustes se proponen, no se aplican solos. Se guardan en <span class="mono">~/.agrobot/aprendizaje/intervenciones/</span>.</p>
+        </div>
+        <div id="as-conos" class="card">
+          <h3 style="margin:0 0 8px;">Conos, márgenes y velocidad</h3>
+          <div style="display:grid; grid-template-columns:1fr 90px; gap:6px 10px; align-items:center; font-size:14px;">
+            <label for="ac-cono-frontal">Cono frontal (°)</label><input type="number" id="ac-cono-frontal" min="5" max="90">
+            <label for="ac-cono-lateral">Cono lateral (°)</label><input type="number" id="ac-cono-lateral" min="10" max="120">
+            <label for="ac-margen">Margen de parada (cm)</label><input type="number" id="ac-margen" min="5" max="80">
+            <label for="ac-desliz">Deslizamiento (cm)</label><input type="number" id="ac-desliz" min="0" max="150">
+            <label for="ac-vel">Vel. máx (m/s)</label><input type="number" id="ac-vel" step="0.05" min="0.1" max="1.5">
+            <label for="ac-omega">Omega máx (rad/s)</label><input type="number" id="ac-omega" step="0.1" min="0.3" max="4">
+          </div>
+          <button class="btn primary" id="ac-guardar" style="margin-top:10px;">Aplicar</button>
+        </div>
+        <div id="as-sendero" class="card">
+          <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" id="as-sendero-on"> <b>Vista del sendero</b> en vivo (1 por segundo)</label>
+          <img id="as-sendero-img" alt="" style="width:100%; border-radius:8px; display:none; margin-top:8px; background:#000;">
+        </div>
+        </div>
         <div class="asist-col"><div id="as-map"></div><div id="as-radar"></div></div>
       </div>
     </div>
@@ -1032,6 +1069,8 @@ input[type="text"], select { font-family: inherit; }
           <button class="map-tool" data-herr="ver">✋ Mover</button>
           <button class="map-tool" data-herr="surco">〰 Surco</button>
           <button class="map-tool" data-herr="punto">🌱 Punto de escaneo</button>
+          <button class="map-tool" data-herr="pose" title="Clic donde está realmente el robot: corrige la pose del SLAM y queda registrado">📍 Corregir pose</button>
+          <button class="map-tool" data-herr="meta" title="Clic para mandar una meta a Nav2">🎯 Meta Nav2</button>
           <span class="map-sep"></span>
           <button class="map-tool" id="map-terminar">✔ Terminar surco</button>
           <button class="map-tool" id="map-deshacer">↶ Deshacer</button>
@@ -1589,11 +1628,89 @@ input[type="text"], select { font-family: inherit; }
       if (btn.dataset.tab === "tab-nav") resizeMap();
       if (btn.dataset.tab === "tab-asistido") {
         montarAsistido();
+        refrescarAsistido();
         resizeMap(); resizeRadarDash(); dibujarRadarSiVisible();
       }
       ajustarVideo();
     });
   });
+
+  // ---------------------------------------------------------------
+  // Manejo asistido: mando manual sobre la autonomía + aprendizaje de las correcciones
+  // (sustituye al antiguo dashboard de entrenamiento: /training.html redirige aquí).
+  // ---------------------------------------------------------------
+  const NOMBRE_MODO = { exploracion: "exploración", patrulla: "patrulla", mision: "misión de plantas", nav2: "Nav2",
+                        vision_activa: "visión activa", paso_robotico: "paso robótico" };
+  function pintarAsistido(d) {
+    if (!d) return;
+    const pill = $("as-pill"), txt = $("as-pill-text");
+    const auto = d.autonomia_activa, pausada = d.activa;
+    pill.className = "pill " + (pausada ? "warn" : auto ? "ok" : "");
+    txt.textContent = pausada ? `${NOMBRE_MODO[d.modo_previo] || d.modo_previo} en pausa (mando tuyo)` +
+                                (d.reanuda_en_s !== null && d.reanuda_en_s !== undefined ? ` · vuelve en ${d.reanuda_en_s.toFixed(1)} s` : "")
+                    : auto ? `autonomía: ${NOMBRE_MODO[auto] || auto}` : "manual";
+    $("as-botones").style.display = pausada ? "flex" : "none";
+    if (document.activeElement !== $("as-reanuda-s") && d.reanuda_s !== undefined) $("as-reanuda-s").value = d.reanuda_s;
+    $("as-recientes").innerHTML = (d.recientes || []).slice().reverse().map((e) =>
+      `${new Date(e.t * 1000).toLocaleTimeString()} · <b>${e.tipo}</b> · tú v=${e.v} ω=${e.w} · auto v=${e.auto_v} ω=${e.auto_w}`).join("<br>");
+    const r = d.resumen || { total: 0, por_tipo: {} };
+    $("as-resumen").innerHTML = r.total
+      ? `<b>${r.total}</b> correcciones registradas:<br>` + Object.values(r.por_tipo).map((t) => `· ${t.n} × ${t.texto}`).join("<br>")
+      : "Sin correcciones todavía. Conduce durante una exploración o patrulla y aquí aparecerá lo que se aprende.";
+    $("as-sugerencias").innerHTML = (d.sugerencias || []).map((s) =>
+      `<div style="border:1px solid var(--line); border-radius:8px; padding:8px 10px;">${s.texto}<br>
+       <span class="mono" style="font-size:12.5px;">${s.seccion}.${s.clave}: ${s.actual} → <b>${s.propuesto}</b></span>
+       <button class="btn" style="margin-left:8px;" data-aplicar="${s.id}">Aplicar</button></div>`).join("");
+    document.querySelectorAll("[data-aplicar]").forEach((b) => b.onclick = async () => {
+      try { await postJSON("/api/asistido/aplicar", { id: b.dataset.aplicar }); cargarConosAsistido(); refrescarAsistido(); }
+      catch (e) { toast("error", "No se aplicó", e.message); }
+    });
+  }
+  async function refrescarAsistido() {
+    try { pintarAsistido(await (await fetch("/api/asistido")).json()); } catch (_) {}
+  }
+  $("as-reanudar").addEventListener("click", async () => {
+    try { const d = await postJSON("/api/asistido/reanudar", {}); toast("success", "Autonomía reanudada", d.msg || d.modo); }
+    catch (e) { toast("warning", "No se pudo reanudar", e.message); }
+    refrescarAsistido();
+  });
+  $("as-reanuda-s").addEventListener("change", async (e) => {
+    const v = Math.max(0, Math.min(30, parseFloat(e.target.value) || 0));
+    try { await postJSON("/api/params/autonomia", { asistido_reanuda_s: v }); toast("success", "Mando asistido", v ? `la autonomía vuelve sola a los ${v} s` : "solo se reanuda con el botón"); }
+    catch (err) { toast("error", "No se guardó", err.message); }
+  });
+  $("as-soltar").addEventListener("click", async () => { await postJSON("/api/asistido/soltar", {}).catch(() => {}); refrescarAsistido(); });
+  async function cargarConosAsistido() {
+    try {
+      const c = await (await fetch("/api/params")).json();
+      const m = [["ac-cono-frontal", c.slam && c.slam.cono_frontal_deg], ["ac-cono-lateral", c.slam && c.slam.cono_lateral_deg],
+                 ["ac-margen", c.slam && c.slam.margen_parada_cm], ["ac-desliz", c.slam && c.slam.deslizamiento_cm],
+                 ["ac-vel", c.control && c.control.max_v_mps], ["ac-omega", c.control && c.control.max_omega_rps]];
+      m.forEach(([id, v]) => { if (v !== undefined && v !== null) $(id).value = v; });
+    } catch (_) {}
+  }
+  $("ac-guardar").addEventListener("click", async () => {
+    try {
+      await postJSON("/api/params/slam", { cono_frontal_deg: parseInt($("ac-cono-frontal").value), cono_lateral_deg: parseInt($("ac-cono-lateral").value),
+                                           margen_parada_cm: parseInt($("ac-margen").value), deslizamiento_cm: parseInt($("ac-desliz").value) });
+      await postJSON("/api/params/control", { max_v_mps: parseFloat($("ac-vel").value), max_omega_rps: parseFloat($("ac-omega").value) });
+      toast("success", "Configuración aplicada", "conos, márgenes y velocidad");
+    } catch (e) { toast("error", "No se aplicó", e.message); }
+  });
+  let senderoTimer = null;
+  function pedirVistaSendero() {
+    const img = $("as-sendero-img");
+    img.onload = img.onerror = () => { if ($("as-sendero-on").checked) senderoTimer = setTimeout(pedirVistaSendero, 1000); };
+    img.src = `/api/sendero/vista.jpg?t=${Date.now()}`;
+  }
+  $("as-sendero-on").addEventListener("change", (e) => {
+    clearTimeout(senderoTimer);
+    $("as-sendero-img").style.display = e.target.checked ? "block" : "none";
+    if (e.target.checked) pedirVistaSendero();
+  });
+  setInterval(() => { if ($("tab-asistido").classList.contains("active")) refrescarAsistido(); }, 1000);
+  cargarConosAsistido();
+
   // Abrir directo con  http://<jetson>:8080/#asistido  (después de `load`: el mapa y el radar ya existen).
   window.addEventListener("load", () => {
     if (location.hash === "#asistido") document.querySelector('.nav-btn[data-tab="tab-asistido"]').click();
@@ -1703,6 +1820,7 @@ input[type="text"], select { font-family: inherit; }
       case "lidar_scan": lastScan = msg.data; dibujarRadarSiVisible(); break;
       case "map": setMap(msg.data); break;
       case "scan_mapa": nuevoScanMapa(msg.data); break;
+      case "asistido": refrescarAsistido(); break;
       case "drive_mode": mostrarDriveMode(msg.data.modo); break;
       case "entorno": pintarEntorno(msg.data); break;
       case "lidar_distancias": pintarDistancias(msg.data); break;
@@ -2068,6 +2186,8 @@ input[type="text"], select { font-family: inherit; }
     ver: "Arrastrá para mover el mapa · rueda o +/− para acercar",
     surco: "Clic para añadir puntos al surco · doble clic o «Terminar» para cerrarlo",
     punto: "Clic donde está la planta a escanear 🌱",
+    pose: "Clic donde está REALMENTE el robot: se corrige la pose del SLAM (mantiene el rumbo actual)",
+    meta: "Clic para mandar una meta de navegación a Nav2",
   };
   function elegirHerramienta(h) {
     if (herramientaMapa === "surco" && h !== "surco") terminarSurco();
@@ -2144,6 +2264,13 @@ input[type="text"], select { font-family: inherit; }
       const [x, y] = pixelAMundo(...posEvento(e));
       if (herramientaMapa === "surco") (surcoActual = surcoActual || []).push({ x, y });
       else if (herramientaMapa === "punto") puntosEscaneo.push({ x, y });
+      else if (herramientaMapa === "pose") {
+        postJSON("/api/training/correct_pose", { x, y, theta_deg: lastPose.theta_deg || 0 })
+          .then(() => { toast("success", "Pose corregida", `x=${x.toFixed(2)} y=${y.toFixed(2)}`); refrescarAsistido(); })
+          .catch((err) => toast("error", "No se corrigió la pose", err.message));
+      } else if (herramientaMapa === "meta") {
+        postJSON("/api/nav/set_goal", { x, y, theta_deg: 0 }).catch((err) => toast("error", "Nav2 no aceptó la meta", err.message));
+      }
       actualizarResumenTrazado(); drawMap();
     });
     mapCanvas.addEventListener("dblclick", (e) => { if (herramientaMapa === "surco") { e.preventDefault(); terminarSurco(); } });

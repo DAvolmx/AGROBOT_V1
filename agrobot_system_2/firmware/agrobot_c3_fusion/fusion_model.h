@@ -28,18 +28,19 @@ struct Lim {            // % de duty (rampas en %/s; periodo en ms; refuerzo y d
   float dif_del = 0;    // % del giro que hacen las delanteras (0 = solo longitudinales)
   float periodo = 100;  // ms de la rafaga (0 = PWM continuo)
   float refuerzo = 100; // % de anti-hundimiento (100 = apagado)
+  float freno_ms = 80;  // FRENO ACTIVO (ambos pines a HIGH) al parar de verdad; 0 = rueda libre como antes
 };
-constexpr int N_LIM = 10;
+constexpr int N_LIM = 11;
 inline float clip(float x, float a, float b) { return x < a ? a : x > b ? b : x; }
 
 inline bool limValido(const Lim &L) {
   return L.adel >= 10 && L.adel <= 100 && L.atras >= 10 && L.atras <= 100 &&
-         L.pivote >= 30 && L.pivote <= 100 && L.minp >= 0 && L.minp <= 90 &&
+         L.pivote >= 30 && L.pivote <= 100 && L.minp >= 0 && L.minp <= 100 &&
          L.minp <= L.adel && L.minp <= L.atras && L.acel >= 20 && L.acel <= 600 &&
          L.frena >= 50 && L.frena <= 1000 && L.tras >= 100 && L.tras <= 200 &&
          L.dif_del >= 0 && L.dif_del <= 100 &&
          (L.periodo == 0 || (L.periodo >= 40 && L.periodo <= 400)) &&
-         L.refuerzo >= 100 && L.refuerzo <= 130;
+         L.refuerzo >= 100 && L.refuerzo <= 130 && L.freno_ms >= 0 && L.freno_ms <= 400;
 }
 
 struct Out { float d[4]; };   // duty firmado (%), ANTES de aplicar la inversion de cada rueda

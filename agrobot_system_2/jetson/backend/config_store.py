@@ -142,6 +142,7 @@ DEFAULTS = {
         "avance_libre_cm": 100,      # para lanzar un pulso de avance
         "lado_libre_cm": 60,         # para considerar un lado como salida
         "retroceso_libre_cm": 50,    # para poder retroceder
+        "asistido_reanuda_s": 2.5,   # segundos sin órdenes manuales tras los que la autonomía interrumpida se reanuda sola (0 = nunca)
         "escaneo_periodo_s": 120,    # cada cuánto se para a barrer con la cámara
         # El barrido lo hace el BACKEND moviendo el servo paso a paso (como
         # el slider), no el flag de escaneo del firmware: así la duración y el

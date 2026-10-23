@@ -47,6 +47,8 @@ class MisionPlantas:
         self._t0 = 0.0
         self._tarea = None
         self.motivo_fin = None
+        self.pausado = False
+        self._t_pausa = 0.0
 
     def cfg(self):
         c = dict(DEFECTOS)
@@ -66,8 +68,57 @@ class MisionPlantas:
         self._ev({"tipo": "mision_inicio"})
         return True, "ok"
 
+    def pausar(self):
+        """Mando manual encima: la misión sigue EN MARCHA (la interfaz no pasa a manual); el explorador y la visión se paran."""
+        if self.estado in (INACTIVA, FIN) or self.pausado:
+            return
+        self.pausado, self._t_pausa = True, self.reloj()
+        try:
+            if self.vision.estado != "inactiva":
+                self.vision.cancelar("mando manual")
+        finally:
+            if hasattr(self.expl, "pausar"):
+                self.expl.pausar()
+            else:
+                self.expl.detener()
+
+    def continuar(self):
+        if not self.pausado:
+            return
+        self.pausado = False
+        self._t0 += self.reloj() - self._t_pausa        # el rato en pausa no gasta el tiempo máximo
+        self._racha = 0
+        self._t_ignorar = self.reloj() + 1.0
+        if hasattr(self.expl, "continuar"):
+            self.expl.continuar()
+        else:
+            self._reiniciar_expl()
+
+    def _reiniciar_expl(self):
+        """Reinicia el explorador SIN el barrido inmediato: tras inspeccionar una maceta (o fallar) volver a escanear en seguida
+        provocaba un bucle de escaneos de 8 s que el siguiente reconocimiento interrumpía (2026-10-23)."""
+        previo = getattr(self.expl, "escaneo_al_iniciar", True)
+        self.expl.escaneo_al_iniciar = False
+        try:
+            return self.expl.iniciar()
+        finally:
+            self.expl.escaneo_al_iniciar = previo
+
+    def reanudar(self):
+        """Vuelve a explorar tras un mando manual conservando las plantas ya inspeccionadas."""
+        if self.estado != FIN or self.motivo_fin != "mando manual":
+            return False, "no hay una misión interrumpida por el mando manual"
+        ok, msg = self._reiniciar_expl()
+        if not ok and not getattr(self.expl, "activo", False):
+            return False, f"no arrancó la exploración: {msg}"
+        self._racha, self.motivo_fin = 0, None
+        self._t_ignorar = self.reloj() + 2.0
+        self.estado = EXPLORANDO
+        self._ev({"tipo": "mision_reanudada", "plantas": len(self.plantas)})
+        return True, "ok"
+
     def detener(self, motivo="detenida"):
-        if self.estado == INACTIVA:
+        if self.estado in (INACTIVA, FIN):
             return
         try:
             if self.vision.estado != "inactiva":
@@ -79,6 +130,7 @@ class MisionPlantas:
         finally:
             self._poner_led(False)
             self.estado = FIN
+            self.pausado = False
             self.motivo_fin = motivo
             self._ev({"tipo": "mision_fin", "motivo": motivo, "plantas": len(self.plantas)})
 
@@ -101,7 +153,7 @@ class MisionPlantas:
                                        for q in self.plantas if q.get("x") is not None)
 
     def paso(self):
-        if self.estado in (INACTIVA, FIN):
+        if self.estado in (INACTIVA, FIN) or self.pausado:
             return
         c = self.cfg()
         ahora = self.reloj()
@@ -115,7 +167,7 @@ class MisionPlantas:
 
         if self.estado == EXPLORANDO:
             if not getattr(self.expl, "activo", True):                  # el explorador se paró solo (p. ej. sin LIDAR): reintentar
-                self.expl.iniciar()
+                self._reiniciar_expl()
             candidatas = [m for m in macetas if (m.get("dist_m") is None or m["dist_m"] <= c["distancia_max_m"])]
             nuevas = [m for m in candidatas if not self._ya_vista(self._posicion_estimada(m), c)]
             self._racha = self._racha + 1 if (nuevas and ahora >= self._t_ignorar) else 0
@@ -127,7 +179,7 @@ class MisionPlantas:
                 ok, msg = self.vision.iniciar()
                 if not ok:
                     self._ev({"tipo": "aviso", "msg": f"visión activa no arrancó: {msg}"})
-                    self.expl.iniciar()
+                    self._reiniciar_expl()
                     self._racha = 0
                     return
                 if hasattr(self.vision, "arrancar_tarea"):
@@ -148,7 +200,7 @@ class MisionPlantas:
                 self._ev({"tipo": "inspeccion_fallida", "motivo": getattr(self.vision, "motivo_fin", None)})
                 self._t_ignorar = ahora + c["pausa_tras_planta_s"]
                 self._racha = 0
-                self.expl.iniciar()
+                self._reiniciar_expl()
                 self.estado = EXPLORANDO
                 return
             res = getattr(self.vision, "ultimo_resultado", None) or {}
@@ -169,7 +221,7 @@ class MisionPlantas:
                 self._ev({"tipo": "planta_repetida", "x": round(pos[0], 2), "y": round(pos[1], 2)})
                 self._t_ignorar = ahora + c["pausa_tras_planta_s"]
                 self._racha = 0
-                self.expl.iniciar()
+                self._reiniciar_expl()
                 self.estado = EXPLORANDO
                 return
             esp = (res.get("diagnostico") or {}).get("especie") or {}
@@ -183,7 +235,7 @@ class MisionPlantas:
                 return
             self._t_ignorar = ahora + c["pausa_tras_planta_s"]
             self._racha = 0
-            self.expl.iniciar()
+            self._reiniciar_expl()
             self.estado = EXPLORANDO
 
     async def _bucle(self):

@@ -1,4 +1,4 @@
-"""Montecarlo del firmware C3 «suave» v4 con un robot PESADO y DELANTERAS FLOJAS.
+"""Montecarlo del firmware C3 «suave» v4 con un robot PESADO, DELANTERAS FUERTES y TRASERAS FLOJAS.
 
 Uso:  python3 montecarlo_firmware_pesado.py [--n 300] [--draws 3] [--procs 4]
 Salida: ~/.agrobot/aprendizaje/mc_pesado_<fecha>.json y docs/MC_FIRMWARE_PESADO_<fecha>.md
@@ -6,7 +6,8 @@ NO despliega ni flashea nada.
 
 Modelo del robot (hipótesis, NO medidas salvo la masa total ~12 kg):
   · masa del chasis 14-24 kg (se mide 12 kg: se prueba más pesado a propósito);
-  · delanteras flojas: front_drive_bias 0.3-0.9 (el sim base usaba 1-2, delanteras MÁS fuertes);
+  · DELANTERAS FUERTES, TRASERAS FLOJAS (corrección del operador, 2026-10-23): front_drive_bias 1.5-3.5.
+    (La primera ronda del 2026-10-18 supuso lo contrario, 0.3-0.9: sus resultados no valen para este robot);
   · zona muerta 25/40/55 % (un robot pesado necesita más duty para arrancar), mu y rodadura como siempre.
 Firmwares comparados: v3 (skid-steer, ráfagas), suave (pegado y de fábrica) y FUSION (v3 + suave).
 
@@ -74,8 +75,8 @@ def entorno(seed, extremo=False):
     """Hardware pesado de la semilla. extremo = el peor caso plausible (etapa de estrés)."""
     r = np.random.default_rng(31_000 + seed)
     if extremo:
-        return dict(masa=24.0, bias=0.3, dead=55.0, mu=0.65, drag=0.22)
-    return dict(masa=float(r.uniform(14, 24)), bias=float(r.uniform(0.3, 0.9)),
+        return dict(masa=24.0, bias=3.5, dead=55.0, mu=0.65, drag=0.22)   # traseras lo más flojas posible
+    return dict(masa=float(r.uniform(14, 24)), bias=float(r.uniform(1.5, 3.5)),
                 dead=float(r.choice([25.0, 40.0, 55.0])), mu=float(r.choice([0.65, 0.8, 0.95])),
                 drag=float(r.choice([0.13, 0.17, 0.22])))
 
@@ -212,7 +213,7 @@ def main():
         print("[4/5] barrido de un parametro cada vez alrededor del elegido", flush=True)
         informe["barrido_un_parametro"] = barrido_uno(pool, mejor["config"], BARR)
 
-        print("[5/5] estres: masa 24 kg, delanteras 0.3, zona muerta 55 %", flush=True)
+        print("[5/5] estres: masa 24 kg, traseras al minimo, zona muerta 55 %", flush=True)
         rest = evaluar(pool, [mejor["config"]] + list(REF.values()), list(range(400, 408)), extremo=True)
         informe["estres"] = {n: {"total": resumen(r), "por_escenario": por_esc(r)}
                              for n, r in zip(["elegido", *REF], rest)}

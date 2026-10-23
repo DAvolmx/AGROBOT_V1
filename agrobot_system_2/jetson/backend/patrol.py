@@ -86,6 +86,7 @@ class PatrolController:
         self._tarea: asyncio.Task | None = None
         self._ultima_deteccion_escaneada = 0.0
         self._escaneando = False
+        self.pausado = False
         self._meta_cancelada = False
         self.auto_activa = False
         self._auto_ultima = None
@@ -209,8 +210,20 @@ class PatrolController:
         self._tarea = asyncio.create_task(self._bucle())
         return True, f"patrulla iniciada sobre {len(self.waypoints)} waypoints"
 
+    def pausar(self):
+        """Mando manual encima: sigue «activa» pero suelta la meta y no manda nada hasta `continuar()`."""
+        if self.activo and not self.pausado:
+            self.pausado = True
+            self._cancel_nav_goal()
+            self._meta_cancelada = True       # al volver, el bucle reenvía la meta (igual que tras un escaneo)
+            self.estado = "en pausa (mando manual)"
+
+    def continuar(self):
+        self.pausado = False
+
     def detener(self):
         self.activo = False
+        self.pausado = False
         if self._tarea is not None:
             self._tarea.cancel()
             self._tarea = None
@@ -340,6 +353,10 @@ class PatrolController:
         while self.activo:
             await asyncio.sleep(TICK_S)
 
+            if self.pausado:
+                inicio = time.monotonic()
+                continue
+
             if self._escaneando:
                 inicio = time.monotonic()
                 continue
@@ -404,6 +421,10 @@ class PatrolController:
         inicio = time.monotonic()
         while self.activo:
             await asyncio.sleep(REACTIVE_TICK_S)
+
+            if self.pausado:
+                inicio = time.monotonic()
+                continue
 
             if self._escaneando:
                 inicio = time.monotonic()

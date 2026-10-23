@@ -55,6 +55,7 @@ from patrol import PatrolController
 from pulse_drive import ConductorPulsos, ACCIONES, MODOS
 from mapas import GestorMapas, ErrorMapa
 from scan_mapa import scan_a_mapa
+from asistido import Asistido
 from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
 from explorador import ExploradorReactivo
 from sendero import SeguidorSendero
@@ -1051,6 +1052,9 @@ async def ws_handler(request: web.Request):
                 except (ValueError, TypeError):
                     actuator_proto.emergency_stop()
                     continue
+                if (v or omega):
+                    _tomar_mando("ws")
+                    _registrar_orden_manual(v, omega, "ws")
                 if conductor is not None:
                     conductor.parar()
                 if enlace_c3 is not None and enlace_c3.connected:
@@ -1201,6 +1205,13 @@ async def _bucle_zupt():
         except Exception as exc:
             print(f"[zupt] falló: {type(exc).__name__}: {exc}")
         await asyncio.sleep(1.0 / ZUPT_HZ)
+
+
+def _autonomia_sin_mision() -> bool:
+    """Patrulla o exploración en marcha, SIN contar `mission_active`. La visión activa la usa como candado: la misión de plantas
+    detiene el explorador y entonces arranca la visión; con `mission_active` dentro del candado la visión NUNCA arrancaba en
+    misión («exploración/patrulla activa: páralas primero») y el robot se quedaba en un bucle de escaneos (2026-10-23)."""
+    return bool((patrol is not None and patrol.activo) or (explorador is not None and explorador.activo))
 
 
 def _autonomia_activa() -> bool:
@@ -1682,7 +1693,7 @@ async def evasion_get_handler(request: web.Request):
     return web.json_response(evasion_estado)
 
 
-def _parada_total(origen: str, remote: bool = True, emergencia: bool = True) -> list[str]:
+def _parada_total(origen: str, remote: bool = True, emergencia: bool = True, aviso: bool = True) -> list[str]:
     """PARADA DE EMERGENCIA (o, con emergencia=False, el STOP de la sección de manejo: misma parada,
     pero se avisa como «Parada» informativa y no cuenta como emergencia): detiene TODO lo que puede mover el robot.
 
@@ -1717,13 +1728,169 @@ def _parada_total(origen: str, remote: bool = True, emergencia: bool = True) -> 
     state.mission_active = False
     print(f"[{'emergencia' if emergencia else 'parada'}] PARADA TOTAL ({origen}): {', '.join(hecho)}", flush=True)
     _schedule(state.broadcast({"type": "mission_state", "data": {"active": False}}))
-    _schedule(state.broadcast({"type": "toast", "data": {
-        "kind": "error" if emergencia else "info",
-        "title": "PARADA DE EMERGENCIA" if emergencia else "Parada de manejo",
-        "message": f"Todo detenido ({origen})."}}))
+    if aviso:
+        _schedule(state.broadcast({"type": "toast", "data": {
+            "kind": "error" if emergencia else "info",
+            "title": "PARADA DE EMERGENCIA" if emergencia else "Parada de manejo",
+            "message": f"Todo detenido ({origen})."}}))
     if remote:
         _schedule(c3_setup.stop())
     return hecho
+
+
+# =============================================
+# ===== MANEJO ASISTIDO (mando manual sobre la autonomía) =====
+# =============================================
+asistido = Asistido(Path.home() / ".agrobot" / "aprendizaje" / "intervenciones")
+
+
+def _modo_auto_activo() -> str | None:
+    """Qué autonomía está moviendo el robot ahora (None = ninguna). Orden: la más «alta» primero."""
+    if mision_plantas is not None and mision_plantas.estado in ("explorando", "inspeccionando"):
+        return "mision"
+    if patrol is not None and patrol.activo:
+        return "patrulla"
+    if explorador is not None and explorador.activo:
+        return "exploracion"
+    if ros_bridge.available and ros_bridge.estado_meta() in ("enviada", "en_curso"):
+        return "nav2"
+    if vision_activa is not None and getattr(vision_activa, "estado", "inactiva") not in ("inactiva", "pausa"):
+        return "vision_activa"
+    if paso_robotico is not None and paso_robotico.estado.get("activo"):
+        return "paso_robotico"
+    return None
+
+
+def _distancias_lidar() -> dict:
+    try:
+        return lidar_reactive.distancias(state.config["slam"])
+    except Exception:
+        return {}
+
+
+def _tomar_mando(origen: str) -> str | None:
+    """El operador da una orden manual: si hay autonomía en marcha se PAUSA (queda registrado qué hacía y qué ordenaba)
+    y el mando pasa a él. Devuelve el modo interrumpido, o None si no había autonomía que interrumpir."""
+    modo = _modo_auto_activo()
+    if modo is None:
+        return None
+    st = state.actuator_status or {}
+    meta = (state.config.get("navigation") or {}).get("last_goal") if modo == "nav2" else None
+    asistido.soltar()                                  # una intervención nueva sustituye a una vieja sin reanudar
+    asistido.tomar(modo, (st.get("v_cmd") or 0.0, st.get("omega_cmd") or 0.0), meta)
+    if modo == "mision" and mision_plantas is not None:
+        mision_plantas.detener("mando manual")         # con esta etiqueta la misión se puede REANUDAR conservando las plantas
+    _parada_total(f"mando manual ({origen})", remote=False, emergencia=False, aviso=False)
+    _schedule(state.broadcast({"type": "asistido", "data": asistido.estado()}))
+    _schedule(state.broadcast({"type": "toast", "data": {
+        "kind": "info", "title": "Mando manual",
+        "message": f"Autonomía «{modo}» en pausa. Reanúdala desde Manejo asistido cuando quieras."}}))
+    return modo
+
+
+def _registrar_orden_manual(v: float, w: float, origen: str):
+    if asistido.activa:
+        asistido.muestra(v, w, current_pose(), _distancias_lidar(), origen)
+
+
+async def asistido_estado_handler(request: web.Request):
+    """GET /api/asistido — estado del mando, resumen de correcciones y ajustes sugeridos."""
+    ev = asistido.leer()
+    espera = _asistido_reanuda_s()
+    reanuda_en = (max(0.0, round(espera - asistido.segundos_sin_orden(), 1)) if asistido.activa and espera > 0 else None)
+    return web.json_response({**asistido.estado(), "autonomia_activa": _modo_auto_activo(),
+                              "reanuda_s": espera, "reanuda_en_s": reanuda_en,
+                              "resumen": asistido.resumen(ev), "sugerencias": asistido.sugerencias(state.config, ev)})
+
+
+async def _reanudar_autonomia() -> tuple[bool, str, str | None]:
+    """Devuelve el mando a la autonomía interrumpida (sin barrido inmediato y, en la misión, conservando las plantas)."""
+    modo = asistido.modo_previo
+    if not asistido.activa or modo is None:
+        return False, "no hay ninguna autonomía interrumpida", None
+    meta = asistido.meta_previa
+    if _modo_auto_activo() is not None:
+        return False, "ya hay una autonomía en marcha", modo
+    conductor.parar()
+    ok, msg = False, "este modo no se puede reanudar solo"
+    if modo == "exploracion" and explorador is not None:
+        explorador.escaneo_al_iniciar = False
+        try:
+            ok, msg = explorador.iniciar()
+        finally:
+            explorador.escaneo_al_iniciar = True
+    elif modo == "patrulla" and patrol is not None:
+        ok, msg = patrol.iniciar()
+    elif modo == "mision" and mision_plantas is not None:
+        ok, msg = mision_plantas.reanudar()
+        if ok:
+            mision_plantas.arrancar_tarea()
+    elif modo == "nav2" and meta:
+        ok = ros_bridge.send_nav_goal(float(meta["x"]), float(meta["y"]), float(meta.get("theta_deg", 0.0)))
+        msg = "meta reenviada a Nav2" if ok else "Nav2 no respondió"
+    if ok:
+        asistido.soltar()
+        state.mission_active = modo in ("exploracion", "mision", "patrulla")
+    await state.broadcast({"type": "asistido", "data": asistido.estado()})
+    return bool(ok), msg, modo
+
+
+async def asistido_reanudar_handler(request: web.Request):
+    """POST /api/asistido/reanudar — devuelve el mando a la autonomía que se interrumpió."""
+    ok, msg, modo = await _reanudar_autonomia()
+    return web.json_response({"ok": ok, "modo": modo, "msg": msg}, status=200 if ok else 409)
+
+
+def _asistido_reanuda_s() -> float:
+    try:
+        return float((state.config.get("autonomia") or {}).get("asistido_reanuda_s", 2.5))
+    except (TypeError, ValueError):
+        return 2.5
+
+
+async def _vigia_asistido():
+    """Un toque de mando para corregir NO saca al robot del modo autónomo: pasados `autonomia.asistido_reanuda_s` segundos
+    sin órdenes manuales (0 = nunca, hay que pulsar «Reanudar») la autonomía interrumpida vuelve sola."""
+    while True:
+        try:
+            await asyncio.sleep(0.4)
+            espera = _asistido_reanuda_s()
+            if asistido.activa and espera > 0 and asistido.segundos_sin_orden() >= espera and not conductor.activo:
+                ok, msg, modo = await _reanudar_autonomia()
+                if ok:
+                    print(f"[asistido] reanudo «{modo}» tras {espera:g} s sin órdenes manuales", flush=True)
+                    await state.broadcast({"type": "toast", "data": {"kind": "info", "title": "Autonomía reanudada",
+                                                                      "message": f"«{modo}» sigue donde se quedó."}})
+                elif modo is None or "no se puede reanudar" in msg:
+                    asistido.soltar()               # nada que reanudar: se acaba la intervención en vez de reintentar siempre
+                    await state.broadcast({"type": "asistido", "data": asistido.estado()})
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[asistido] vigía falló: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(2.0)
+
+
+async def asistido_soltar_handler(request: web.Request):
+    """POST /api/asistido/soltar — se queda en manual: la autonomía interrumpida NO se reanuda."""
+    modo = asistido.soltar()
+    await state.broadcast({"type": "asistido", "data": asistido.estado()})
+    return web.json_response({"ok": True, "modo_descartado": modo})
+
+
+async def asistido_aplicar_handler(request: web.Request):
+    """POST /api/asistido/aplicar {"id": ...} — aplica UNA sugerencia (nunca se aplican solas)."""
+    body = await request.json()
+    sug = {s["id"]: s for s in asistido.sugerencias(state.config)}.get(body.get("id"))
+    if sug is None:
+        return web.json_response({"error": "esa sugerencia ya no está vigente"}, status=404)
+    data = config_store.update_section(sug["seccion"], {sug["clave"]: sug["propuesto"]})
+    state.config = data
+    await state.broadcast({"type": "config_update", "data": state.config})
+    await state.broadcast({"type": "toast", "data": {
+        "kind": "success", "title": "Ajuste aplicado",
+        "message": f"{sug['seccion']}.{sug['clave']}: {sug['actual']} → {sug['propuesto']}"}})
+    return web.json_response({"ok": True, "aplicado": sug})
 
 
 async def emergencia_handler(request: web.Request):
@@ -1901,14 +2068,21 @@ async def camara_cruda_handler(request: web.Request):
     return web.Response(body=buf.tobytes(), content_type="image/jpeg")
 
 
+def _ajustes_vision_mision() -> dict:
+    """Visión activa durante la misión de plantas. Distancia 0,65 m, 3 retrocesos y 3 giros: lo mejor del barrido en la sala real en L
+    (simular_demo.py layout 3, 2026-10-23: 17/18 plantas y 1 roce en 6 simulaciones; con 0,45 m y 2 retrocesos rozaba esquinas y macetas)."""
+    return {"clases_objetivo": ["maceta"], "max_objetivos": 1, "conf_min": 0.30,
+            "angulos_barrido_deg": [state.servo_angle, 82, 98, state.servo_angle],
+            "distancia_inspeccion_m": 0.65, "retroceso_tras_analisis": 3, "giros_tras_analisis": 3}
+
+
 async def mision_plantas_handler(request: web.Request):
     """GET/POST /api/mision_plantas {"activa": true|false} — la misión de la demo: explorar, mapear y escanear plantas en maceta."""
     if request.method == "GET":
         return web.json_response(mision_plantas.estado_dict() if mision_plantas else {"estado": "no disponible"})
     body = await request.json()
     if body.get("activa"):
-        _mision_vision_override.update({"clases_objetivo": ["maceta"], "max_objetivos": 1, "conf_min": 0.30,
-                                        "angulos_barrido_deg": [state.servo_angle, 82, 98, state.servo_angle]})
+        _mision_vision_override.update(_ajustes_vision_mision())
         ok, msg = mision_plantas.iniciar()
         if ok:
             mision_plantas.arrancar_tarea()
@@ -1993,7 +2167,7 @@ def _crear_vision_activa():
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]), edad_scan=lidar_reactive.edad_scan_s,
         get_config=lambda: {**state.config.get("vision_activa", {}), **_mision_vision_override}, on_event=evento, capturar=capturar, clasificar=clasificar, girar=lambda g: conductor.girar_grados(g, _gyro_dps),
         get_pose=ros_bridge.pose_en_mapa, enlace_ok=lambda: enlace_c3 is not None and enlace_c3.connected,
-        autonomia_activa=_autonomia_activa, reloj=time.time)
+        autonomia_activa=_autonomia_sin_mision, reloj=time.time)
 
 
 async def giro_cerrado_handler(request: web.Request):
@@ -2115,12 +2289,11 @@ async def drive_handler(request: web.Request):
 
     if accion not in ACCIONES:
         return web.json_response({"error": f"acción desconocida: {accion!r}"}, status=400)
-    if patrol is not None and patrol.activo:
-        return web.json_response(
-            {"error": "la patrulla autónoma está en marcha — detenela para manejar a mano"},
-            status=409)
+    # El operador toma el mando: si hay autonomía (patrulla, exploración, misión, Nav2...) se PAUSA y queda registrada
+    # la corrección (antes la patrulla devolvía 409 y había que detenerla a mano).
+    _tomar_mando("botones")
 
-    # El operador toma el mando: la evasión y el paso robótico se cancelan.
+    # La evasión y el paso robótico se cancelan.
     _detener_evasion()
     if paso_robotico is not None and paso_robotico.estado.get("activo"):
         paso_robotico.detener()
@@ -2133,6 +2306,9 @@ async def drive_handler(request: web.Request):
     if not await _c3_ready_for_drive():
         return web.json_response({"error":"C3 sin enlace"},status=409)
     accepted = conductor.ordenar(accion,v_max=v,omega_max=1.5,maniobra=False)
+    if accepted:
+        _registrar_orden_manual(v if accion == "adelante" else -v if accion == "atras" else 0.0,
+                                1.5 if accion == "izquierda" else -1.5 if accion == "derecha" else 0.0, "botones")
     return web.json_response({"ok":accepted,"accion":accion,"duracion_s":.3,
                               "error":None if accepted else "pulso en curso; no se acumula"},
                               status=200 if accepted else 409)
@@ -3352,8 +3528,7 @@ async def mission_start_handler(request: web.Request):
     ok, msg = (False, "patrulla no inicializada")
     if mision_plantas is not None and state.config["autonomia"].get("auto_mision_plantas", True):
         # Demo (2026-10-23): AUTO = misión de plantas. Antes AUTO exploraba y, al segundo intento, «patrullaba» un único punto.
-        _mision_vision_override.update({"clases_objetivo": ["maceta"], "max_objetivos": 1, "conf_min": 0.30,
-                                        "angulos_barrido_deg": [state.servo_angle, 82, 98, state.servo_angle]})
+        _mision_vision_override.update(_ajustes_vision_mision())
         ok, msg = mision_plantas.iniciar()
         if ok:
             mision_plantas.arrancar_tarea()
@@ -3830,6 +4005,7 @@ async def start_background(app: web.Application):
         print(f"[grabador] no arrancó: {type(exc).__name__}: {exc}", flush=True)
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
+    app["vigia_asistido_task"] = asyncio.create_task(_vigia_asistido())
     app["zupt_task"] = asyncio.create_task(_bucle_zupt())
     app["modo_seguro_task"] = asyncio.create_task(_bucle_modo_seguro())
     global entorno
@@ -4139,6 +4315,7 @@ async def training_correct_pose_handler(request: web.Request):
     body = await request.json()
     x, y = float(body["x"]), float(body["y"])
     theta = float(body.get("theta_deg", 0.0))
+    asistido.evento_pose(x, y, theta, current_pose())
     ros_bridge.publish_initial_pose(x, y, theta)
     _training_data["corrections"].append({
         "ts": time.time(), "x": x, "y": y, "theta_deg": theta})
@@ -4482,6 +4659,14 @@ def create_app() -> web.Application:
     app.router.add_post("/api/training/generate_route", training_generate_route_handler)
     app.router.add_get("/api/training/data", training_data_handler)
     app.router.add_post("/api/training/log_correction", training_log_correction_handler)
+    app.router.add_get("/api/asistido", asistido_estado_handler)
+    app.router.add_post("/api/asistido/reanudar", asistido_reanudar_handler)
+    app.router.add_post("/api/asistido/soltar", asistido_soltar_handler)
+    app.router.add_post("/api/asistido/aplicar", asistido_aplicar_handler)
+
+    async def _training_redirige(request):          # el dashboard de entrenamiento ya no existe: vive en Manejo asistido
+        raise web.HTTPFound("/#asistido")
+    app.router.add_get("/training.html", _training_redirige)
 
     # --- RUTAS DE COMUNICACIÓN AUTOMÁTICA ---
     app.router.add_get("/api/comunicacion/estado", comunicacion_estado_handler)

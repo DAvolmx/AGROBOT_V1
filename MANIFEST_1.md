@@ -15,7 +15,7 @@
 > Cualquier LLM o persona que retome este proyecto debe poder reconstruir
 > el estado completo del sistema leyendo solo este archivo.
 
-Última actualización: 2026-10-02
+Última actualización: 2026-10-23
 
 ---
 
@@ -4846,3 +4846,22 @@ al 80 %/100 %, watchdog del loop). Robot en el pasillo.
 - **Percepción:** `entrenar_col.py`, `coliflor_dataset.py`, `coliflor_entrenar.py`, `entorno_entrenar.py`, sesiones de entrenamiento.
 - **Resultados honestos:** ningún modelo de manejo cumple aún los 5 criterios (éxito ≥90 % en el peor pasillo); la física del
   simulador es hipótesis. No se desplegó nada. Pesos (.pt) y `build/` del firmware NO se versionan.
+
+### 2026-10-23 — Firmware FUSIÓN, mando asistido, bucle de escaneos y freno activo
+- **Firmware `agrobot_c3_fusion` (v5)** (`firmware/agrobot_c3_fusion/`, `agrobot_c3_fusion_unico/`; modelo `fusion_model.h` con test
+  contra el port de Python `simulador_pasivo/test_fusion_firmware.py`): v3 (tensión completa) + suave (rampas, deadman, config UDP) +
+  **canal USB (CDC) con eco** (el backend lo usa como vía principal, `control.c3_usb`), BLE apagado, WiFi 17 dBm sin modem-sleep.
+  11 límites por UDP (`c3_pines.LIMITES`): adel, atras, pivote, minp (hasta 100), acel, frena, tras, dif_del, periodo, refuerzo, freno_ms.
+  Valores en el robot: minp 100 (100 % continuo: con menos solo vibra), dif_del 100, frena 1000, freno_ms 80 (freno ACTIVO tras 200 ms
+  con orden cero; el troceo de la Jetson no lo dispara). Antes: el firmware suave pegado tenía pivote/minp/tras = 150 (fuera de rango).
+- **Hardware correcto:** delanteras FUERTES, traseras débiles (la ronda Montecarlo del 18-oct supuso lo contrario y no vale).
+  `montecarlo_firmware_pesado.py`, `entrenar_fusion_5h.py`, `simular_config_hoy.py`.
+- **Manejo asistido** (`asistido.py`, endpoints `/api/asistido*`): el mando manual durante la autonomía la pausa y registra la corrección
+  (`~/.agrobot/aprendizaje/intervenciones/*.jsonl`); sugerencias de ajuste que NUNCA se aplican solas. `training.html` eliminado
+  (redirige a `/#asistido`); las funciones de entrenamiento viven en la pestaña «Manejo asistido». `autonomia.asistido_reanuda_s` = 2,5.
+- **Bucle de escaneos en misión (corregido):** `vision_activa` se bloqueaba con `_autonomia_activa()` (incluye `mission_active`); ahora
+  `_autonomia_sin_mision()`; `explorador.escaneo_al_iniciar` y `MisionPlantas.reanudar/pausar/continuar` (tests `test_mision_reanudar.py`).
+  `Explorador/Patrol/Mision` ganan `pausar()/continuar()` (aún sin conectar al servidor en este commit).
+- **Seguridad:** `safety.anticolision_disparo_m` 0,12 → 0,20 (con 100 % el robot rueda 35-40 cm tras un pulso). Pendiente: servo hacia
+  abajo con macetas bajas, detección trasera, compensación del giro a la izquierda (retrocede ~9 cm por toque; derecha +2,5 cm).
+

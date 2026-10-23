@@ -28,9 +28,10 @@ PRUEBA_MAX_PCT = 100
 LIM_REPLY_MAGIC = 0xC7
 # Limites de fuerza/suavidad del firmware "suave" (= suave_model.h). nombre: (min, max, defecto)
 LIMITES = {"adel": (10, 100, 80), "atras": (10, 100, 60), "pivote": (30, 100, 100),
-           "minp": (0, 90, 50), "acel": (20, 600, 120), "frena": (50, 1000, 300), "tras": (100, 200, 130),
+           "minp": (0, 100, 50), "acel": (20, 600, 120), "frena": (50, 1000, 300), "tras": (100, 200, 130),
            # solo los entiende el firmware FUSION (agrobot_c3_fusion); el suave no responde a estos ids
-           "dif_del": (0, 100, 0), "periodo": (0, 400, 100), "refuerzo": (100, 130, 100)}
+           "dif_del": (0, 100, 0), "periodo": (0, 400, 100), "refuerzo": (100, 130, 100),
+           "freno_ms": (0, 400, 80)}
 LIM_IDS = list(LIMITES)
 
 

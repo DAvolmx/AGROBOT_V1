@@ -437,7 +437,7 @@ class CameraWorker:
             if mod_mac is not None:
                 try:
                     kw = {} if self._device is None else {"device": self._device}
-                    rm = mod_mac(frame, imgsz=int(cfg.get("maceta_imgsz", 480)), conf=float(cfg.get("maceta_conf", 0.40)), verbose=False, **kw)[0]
+                    rm = mod_mac(frame, imgsz=int(cfg.get("maceta_imgsz", 640)), conf=float(cfg.get("maceta_conf", 0.40)), verbose=False, **kw)[0]
                     for box in rm.boxes:
                         x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
                         cajas.append({"class": "maceta", "confidence": float(box.conf[0]), "xyxy": (x1, y1, x2, y2)})

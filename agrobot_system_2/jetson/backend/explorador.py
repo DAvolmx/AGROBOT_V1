@@ -84,6 +84,8 @@ FRENTE_CALLEJON_M = 0.45
 
 
 class ExploradorReactivo:
+    escaneo_al_iniciar = True       # False: iniciar() NO lanza el barrido inmediato (reinicios de la misión / reanudar)
+
     def __init__(self, *, distancias, get_pose, conducir, parar,
                  escanear, on_event, grabar_recorrido, edad_scan, get_config,
                  seguidor=None, aprendizaje=None, sensores=None, politica=None,
@@ -108,6 +110,7 @@ class ExploradorReactivo:
         self._rumbo_objetivo = rumbo_objetivo
 
         self.activo = False
+        self.pausado = False                # mando manual encima: sigue «activo» pero no decide ni mueve
         self.estado = "detenido"
         self.pulsos = 0
         self.giros = 0
@@ -153,14 +156,33 @@ class ExploradorReactivo:
         self.pulsos_politica = 0
         self._memoria.clear()
         self._forzar_lado, self._compromiso = None, 0
-        self._ultimo_escaneo = 0.0        # primer barrido nada más arrancar
+        # primer barrido nada más arrancar... salvo que quien reinicia (misión tras inspeccionar, reanudar tras un mando manual)
+        # diga lo contrario: si no, cada reinicio lanzaba un barrido de 8 s y la misión entraba en un BUCLE DE ESCANEOS (2026-10-23)
+        self._ultimo_escaneo = 0.0 if self.escaneo_al_iniciar else time.monotonic()
         self._ref_pose, self._ref_t = None, time.monotonic()
         self._grabar_recorrido(True)      # deja el rastro del recorrido
         self._tarea = asyncio.create_task(self._bucle())
         return True, "explorando: avanza, esquiva y mapea"
 
+    def pausar(self):
+        """El operador toma el mando un momento: el modo autónomo SIGUE activo (la interfaz no cambia a manual)
+        pero el explorador no decide ni manda nada hasta `continuar()`."""
+        if self.activo and not self.pausado:
+            self.pausado = True
+            self._t_pausa = time.monotonic()
+            self._parar()
+
+    def continuar(self):
+        if self.pausado:
+            self.pausado = False
+            dt = time.monotonic() - getattr(self, "_t_pausa", time.monotonic())
+            self._ref_t += dt                # el rato en pausa no cuenta como atasco
+            self._ref_pose = None
+            self._ultimo_escaneo = max(self._ultimo_escaneo, time.monotonic() - 1.0)   # sin barrido inmediato al volver
+
     def detener(self):
         self.activo = False
+        self.pausado = False
         if self._tarea is not None:
             self._tarea.cancel()
             self._tarea = None
@@ -200,7 +222,7 @@ class ExploradorReactivo:
         if accion in ("izquierda", "derecha"):
             cfg = self._get_config() or {}
             d = self._distancias() or {}
-            margen = float(cfg.get("margen_giro_m", 0.14))   # al girar, la esquina del chasis barre ~12 cm más allá del costado (sala en L, 2026-10-23)
+            margen = float(cfg.get("margen_giro_m", 0.18))   # al girar, la esquina del chasis barre ~12 cm más allá del costado; 0,18 = barrido sala en L 2026-10-23
             atras = self._hueco(d, "atras")
             if d.get("cerca") is not None and d["cerca"] < margen and atras > max(0.30, float(cfg.get("retroceso_libre_cm", 30)) / 100.0):
                 self.estado = f"algo a {d['cerca'] * 100:.0f} cm del costado: retrocedo antes de girar"
@@ -428,6 +450,10 @@ class ExploradorReactivo:
         try:
             while self.activo:
                 await asyncio.sleep(TICK_S)
+
+                if self.pausado:
+                    self.estado = "en pausa (mando manual)"
+                    continue
 
                 if time.monotonic() - self._ultimo_escaneo >= self._get_config()["escaneo_periodo_s"]:
                     self.estado = "escaneando"   # SCAN_SWEEP del firmware: 10 s

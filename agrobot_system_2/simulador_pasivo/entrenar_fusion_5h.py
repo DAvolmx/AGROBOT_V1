@@ -1,4 +1,4 @@
-"""Ronda larga (por defecto 5 h) de entrenamiento del firmware FUSION con robot pesado y delanteras flojas.
+"""Ronda larga (por defecto 5 h) de entrenamiento del firmware FUSION con robot pesado y delanteras FUERTES y traseras flojas.
 
 Método: búsqueda por entropía cruzada (CEM) sobre los 17 parámetros (10 del firmware + 7 del controlador
 de pasillo), con ENTORNOS NUEVOS en cada generación (no se sobreajusta a unas semillas). Luego, con el
@@ -105,7 +105,7 @@ def main():
             say(f"  {f['nombre']:13s} {f['total']}")
         mejor = min(filas[:len(cand)], key=lambda f: f["total"]["puntos"])
         say("mejor validado:", mejor["nombre"], mejor["total"])
-        say("== estrés (24 kg, delanteras 0.3, zona muerta 55 %) ==")
+        say("== estrés (24 kg, traseras mínimas, zona muerta 55 %) ==")
         est = M.evaluar(pool, [mejor["config"], refs["SUAVE_PEGADO"], refs["ELEGIDO_MC"]], list(range(3000, 3008)), extremo=True)
         estres = {n: {"total": M.resumen(r), "por_escenario": M.por_esc(r)} for n, r in zip(["mejor", "SUAVE_PEGADO", "ELEGIDO_MC"], est)}
         for n, v in estres.items():

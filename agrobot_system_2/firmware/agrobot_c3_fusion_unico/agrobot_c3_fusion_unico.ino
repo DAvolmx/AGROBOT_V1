@@ -17,10 +17,13 @@
  * Compila con: ESP32C3 Dev Module, esp32 3.x. Sube con la potencia de motores DESCONECTADA.
  * Fuente de verdad del modelo: fusion_model.h (probado contra el simulador de Python).
  */
+#define ENLACE_BLE 0        // 2026-10-23: como el firmware que corria (maxfrente): BLE apagado, el CABLE USB es la via principal
+#if ENLACE_BLE
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#endif
 #include "esp_system.h"
 #include "esp_task_wdt.h"
 #include <Preferences.h>
@@ -55,18 +58,19 @@ struct Lim {            // % de duty (rampas en %/s; periodo en ms; refuerzo y d
   float dif_del = 0;    // % del giro que hacen las delanteras (0 = solo longitudinales)
   float periodo = 100;  // ms de la rafaga (0 = PWM continuo)
   float refuerzo = 100; // % de anti-hundimiento (100 = apagado)
+  float freno_ms = 80;  // FRENO ACTIVO (ambos pines a HIGH) al parar de verdad; 0 = rueda libre como antes
 };
-constexpr int N_LIM = 10;
+constexpr int N_LIM = 11;
 inline float clip(float x, float a, float b) { return x < a ? a : x > b ? b : x; }
 
 inline bool limValido(const Lim &L) {
   return L.adel >= 10 && L.adel <= 100 && L.atras >= 10 && L.atras <= 100 &&
-         L.pivote >= 30 && L.pivote <= 100 && L.minp >= 0 && L.minp <= 90 &&
+         L.pivote >= 30 && L.pivote <= 100 && L.minp >= 0 && L.minp <= 100 &&
          L.minp <= L.adel && L.minp <= L.atras && L.acel >= 20 && L.acel <= 600 &&
          L.frena >= 50 && L.frena <= 1000 && L.tras >= 100 && L.tras <= 200 &&
          L.dif_del >= 0 && L.dif_del <= 100 &&
          (L.periodo == 0 || (L.periodo >= 40 && L.periodo <= 400)) &&
-         L.refuerzo >= 100 && L.refuerzo <= 130;
+         L.refuerzo >= 100 && L.refuerzo <= 130 && L.freno_ms >= 0 && L.freno_ms <= 400;
 }
 
 struct Out { float d[4]; };   // duty firmado (%), ANTES de aplicar la inversion de cada rueda
@@ -136,6 +140,7 @@ struct Refuerzo {
 
 void iniciarWatchdogLoop();
 struct CmdFrame;
+struct StatusFrame;
 
 #define ENLACE_WIFI 1
 #if ENLACE_WIFI
@@ -176,11 +181,13 @@ const unsigned long GAP_MS = 25;           // pausa con la rueda libre antes de 
 const unsigned long DEADMAN_MS_FW = 500;  // sin ordenes en este tiempo = ruedas libres (ademas del failsafe de loop)
 
 // ===== SEGURIDAD =====
-const unsigned long CMD_TIMEOUT_MS = 500;
+// 2026-10-21 (como maxfrente): por WiFi 1200 ms (huecos del aire), por el cable USB 400 ms (enlace fiable).
+const unsigned long CMD_TIMEOUT_MS = 1200;
+const unsigned long CMD_TIMEOUT_USB_MS = 400;
 unsigned long lastCmdMillis = 0;
 
 #define SECUENCIA_VALIDA(seq_nuevo, seq_anterior) \
-  (((uint16_t)(seq_nuevo - seq_anterior)) != 0)
+  (((int16_t)((uint16_t)(seq_nuevo - seq_anterior))) > 0)   /* solo una trama MAS NUEVA (WiFi lento + cable) */
 
 // ===== SERVO + LED (canal 5: los canales 0..3 son de las ruedas) =====
 const int SERVO_LEDC_CANAL   = 5;
@@ -192,7 +199,7 @@ bool servoListo = false;
 bool scanning = false;
 unsigned long scanStartMillis = 0;
 const unsigned long SCAN_SWEEP_MS = 10000;
-const int SERVO_MIN_ANGLE  = 25, SERVO_MAX_ANGLE  = 110, SERVO_PARK_ANGLE = 98;
+const int SERVO_MIN_ANGLE  = 25, SERVO_MAX_ANGLE  = 160, SERVO_PARK_ANGLE = 98;
 int  currentServoAngle = SERVO_PARK_ANGLE;
 bool ledOn = false;
 
@@ -274,9 +281,10 @@ const uint8_t CMD_MAGIC = 0xA5, STATUS_MAGIC = 0x5A;
 #define ST_RECIEN    0x10
 #define ST_VIA_WIFI  0x20
 #define ST_WIFI_OK   0x40
-#define ST_BLE_OK    0x80
+#define ST_BLE_OK    0x80   // con BLE apagado este bit significa «cable USB activo» (ST_USB_OK)
+#define ST_USB_OK    0x80
 const unsigned long ARRANQUE_RECIENTE_MS = 15000;
-const uint8_t VIA_BLE = 1, VIA_WIFI = 2;
+const uint8_t VIA_BLE = 1, VIA_WIFI = 2, VIA_USB = 3;
 
 static uint8_t crc8(const uint8_t *datos, size_t n) {
   uint8_t crc = 0x00;
@@ -294,6 +302,7 @@ static uint8_t crc8(const uint8_t *datos, size_t n) {
 #define BLE_CMD_CHAR_UUID    "a0e1b001-7f3c-4a5e-9d21-6b8e2c4f1a00"
 #define BLE_STATUS_CHAR_UUID "a0e1b002-7f3c-4a5e-9d21-6b8e2c4f1a00"
 
+#if ENLACE_BLE
 BLEServer *pServer = nullptr;
 BLECharacteristic *pStatusChar = nullptr;
 bool bleConnected = false, bleWasConnected = false;
@@ -301,13 +310,16 @@ bool bleConnected = false, bleWasConnected = false;
 portMUX_TYPE bleMux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool blePending = false;
 CmdFrame bleInbox;
+#else
+bool bleConnected = false, bleWasConnected = false;
+#endif
 
 float lastV = 0, lastOmega = 0;
 float vAplicada = 0.0f, omegaAplicada = 0.0f;
 uint8_t lastServo = 0;
 bool lastLed = false;
 uint16_t lastSeq = 0;
-unsigned long tramasMalas = 0, tramasBle = 0, tramasWifi = 0, tramasViejas = 0;
+unsigned long tramasMalas = 0, tramasBle = 0, tramasWifi = 0, tramasViejas = 0, tramasUsb = 0;
 uint8_t viaUltima = 0;
 bool inFailsafe = false;
 
@@ -322,7 +334,11 @@ const wifi_power_t WIFI_POTENCIAS[] = {WIFI_POWER_8_5dBm, WIFI_POWER_13dBm,
                                        WIFI_POWER_17dBm, WIFI_POWER_19_5dBm};
 const uint8_t WIFI_N_POTENCIAS = sizeof(WIFI_POTENCIAS) / sizeof(WIFI_POTENCIAS[0]);
 const uint8_t WIFI_INTENTOS_POR_POTENCIA = 3;
-uint8_t wifiPotenciaIdx = 0, wifiIntentos = 0;
+// 2026-10-21 (maxfrente): arrancaba en el indice 0 (8,5 dBm) y ahi se quedaba asociada: el AP la veia a -86/-89 dBm.
+// Se arranca en 17 dBm (indice 2). Si la placa se reinicia al conectar (bateria baja), bajar a 1 (13 dBm).
+const uint8_t WIFI_POTENCIA_INICIAL_IDX = 2;
+const bool    WIFI_SIN_AHORRO = true;   // sin modem-sleep: menos latencia y menos tramas perdidas
+uint8_t wifiPotenciaIdx = WIFI_POTENCIA_INICIAL_IDX, wifiIntentos = 0;
 WiFiUDP udpC3;
 bool wifiListo = false, udpAbierto = false;
 IPAddress ipJetson;
@@ -331,6 +347,7 @@ IPAddress ipJetson;
 volatile bool reabrirAnuncio = false;
 esp_reset_reason_t motivoReinicio = ESP_RST_UNKNOWN;
 
+#if ENLACE_BLE
 const uint16_t BLE_INTERVALO_MIN = 12;
 const uint16_t BLE_INTERVALO_MAX = 24;
 const uint16_t BLE_SUPERVISION   = 400;
@@ -370,6 +387,7 @@ class CmdWriteCallback : public BLECharacteristicCallbacks {
     portEXIT_CRITICAL(&bleMux);
   }
 };
+#endif
 
 
 // ===== MOTORES: PWM por hardware, rampas, delanteras solo longitudinales =====
@@ -421,8 +439,22 @@ static void soltarYa() {
 
 // ---- tarea de motores (cada 10 ms): rampas + PWM de hardware + deadman ----
 static int8_t mPin[4] = {-1, -1, -1, -1};
+// FRENO ACTIVO (2026-10-23): el TA6586 frena con ambos pines a HIGH. Se frena al PARAR de verdad, no en cada hueco del troceo
+// de la Jetson (suavidad_duty: ventanas apagadas de ~130 ms): hace falta FRENO_ESPERA_MS seguidos con orden cero. Un corte
+// de emergencia/failsafe frena al instante. Sin frenar el robot a 100 % seguia rodando 35-40 cm tras cada pulso.
+const uint32_t FRENO_ESPERA_MS = 200;
+static uint32_t mFrenoHasta[4] = {};
+static uint32_t mCeroDesde[4] = {};
+static bool mFrenado[4] = {};
 static float mCur[4] = {};
 static uint32_t mZeroAt[4] = {};
+
+static void soltarRueda(int i);
+static void frenarRueda(int i, uint32_t now, uint32_t ms) {   // ambos pines a HIGH = freno del puente
+  soltarRueda(i);
+  digitalWrite(pinFI[i], HIGH); digitalWrite(pinBI[i], HIGH);
+  mFrenoHasta[i] = now + ms;
+}
 
 static void soltarRueda(int i) {      // ambos pines a LOW = rueda libre
   if (mPin[i] >= 0) { ledcWriteChannel(i, 0); ledcDetach(mPin[i]); mPin[i] = -1; }
@@ -446,15 +478,32 @@ void motorTask(void *) {
     portEXIT_CRITICAL(&mux);
 
     for (int i = 0; i < 4; i++) {
+      // --- freno activo en curso: se mantiene mientras no haya orden de moverse y no haya vencido ---
+      if (mFrenoHasta[i]) {
+        bool sigue = (int32_t)(mFrenoHasta[i] - now) > 0 && want[i] == 0 && !hwFault && !hold;
+        if (!sigue) { soltarRueda(i); mFrenoHasta[i] = 0; mZeroAt[i] = now; }
+        else { mCur[i] = 0; portENTER_CRITICAL(&mux); actual[i] = 0; portEXIT_CRITICAL(&mux); continue; }
+      }
+      if (want[i] != 0) { mCeroDesde[i] = 0; mFrenado[i] = false; }
+      else if (mCeroDesde[i] == 0) mCeroDesde[i] = now ? now : 1;
       if (inmediato) {
         mCur[i] = 0;
-        if (!libre[i]) { soltarRueda(i); libre[i] = true; mZeroAt[i] = now; }
+        if (!libre[i]) {
+          if (L.freno_ms > 0 && !hwFault && !hold) { frenarRueda(i, now, (uint32_t)L.freno_ms); mFrenado[i] = true; }
+          else soltarRueda(i);
+          libre[i] = true; mZeroAt[i] = now;
+        }
       } else {
         float t = want[i];
         if (mCur[i] == 0 && t != 0 && (uint32_t)(now - mZeroAt[i]) < GAP_MS) t = 0;   // pausa al invertir
         mCur[i] = fusion::rampa(mCur[i], t, 0.01f, L);
         if (mCur[i] == 0) {
           if (!libre[i]) { soltarRueda(i); libre[i] = true; mZeroAt[i] = now; }
+          // parada de verdad (orden cero sostenida): frena un momento en vez de dejar la rueda libre
+          if (L.freno_ms > 0 && !mFrenado[i] && want[i] == 0 && mCeroDesde[i] && (uint32_t)(now - mCeroDesde[i]) >= FRENO_ESPERA_MS
+              && !hwFault && !hold && mFrenoHasta[i] == 0) {
+            frenarRueda(i, now, (uint32_t)L.freno_ms); mFrenado[i] = true;
+          }
         } else {
           int pin = mCur[i] > 0 ? pinFI[i] : pinBI[i];   // el sentido lo da la envolvente
           if (mPin[i] != pin) {                       // arranque o cambio de sentido
@@ -497,7 +546,7 @@ const unsigned long TEST_MS = 400;     // la prueba se corta sola si el dashboar
 
 static float *limCampo(fusion::Lim &L, int id) {
   float *c[fusion::N_LIM] = {&L.adel, &L.atras, &L.pivote, &L.minp, &L.acel, &L.frena, &L.tras,
-                             &L.dif_del, &L.periodo, &L.refuerzo};
+                             &L.dif_del, &L.periodo, &L.refuerzo, &L.freno_ms};
   return id >= 0 && id < fusion::N_LIM ? c[id] : nullptr;
 }
 
@@ -584,7 +633,7 @@ bool aplicarComando(const CmdFrame &c, uint8_t via) {
   lastCmdMillis = ahora;
   lastSeq   = c.seq;
   viaUltima = via;
-  if (via == VIA_WIFI) tramasWifi++; else tramasBle++;
+  if (via == VIA_WIFI) tramasWifi++; else if (via == VIA_USB) tramasUsb++; else tramasBle++;
 
   lastV     = (constrain((int)c.v_pct,     -100, 100) / 100.0f) * V_MAX;
   lastOmega = (constrain((int)c.omega_pct, -100, 100) / 100.0f) * OMEGA_MAX;
@@ -606,6 +655,7 @@ bool aplicarComando(const CmdFrame &c, uint8_t via) {
   return true;
 }
 
+#if ENLACE_BLE
 void procesarBLE() {
   if (!blePending) return;
   CmdFrame c;
@@ -615,6 +665,7 @@ void procesarBLE() {
   portEXIT_CRITICAL(&bleMux);
   aplicarComando(c, VIA_BLE);
 }
+#endif
 
 #if ENLACE_WIFI
 // Respuesta de rueda: [0xC6][rueda][fi][bi][invertida][ok][version][crc]
@@ -761,19 +812,25 @@ void gestionarWifi() {
     WiFi.disconnect();
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     WiFi.setTxPower(WIFI_POTENCIAS[wifiPotenciaIdx]);
+    if (WIFI_SIN_AHORRO) WiFi.setSleep(false);
   }
 }
 #endif
 
-void enviarEstado() {
-  bool porBle  = bleConnected && pStatusChar != nullptr;
+// ===== CABLE USB (CDC) Jetson <-> C3: mismas tramas binarias de 8 bytes que el WiFi (CmdFrame / StatusFrame) =====
+// Canal fiable: no depende del aire. Cada trama valida se contesta AL INSTANTE con un estado (eco de la secuencia).
+// Por el puerto serie solo viajan tramas binarias (nada de texto tras el arranque); se resincroniza por byte de inicio + CRC.
+unsigned long ultimoCmdUsb = 0;
+uint8_t usbBuf[sizeof(CmdFrame)];
+uint8_t usbN = 0;
+bool usbActivo() { return ultimoCmdUsb != 0 && millis() - ultimoCmdUsb < 1500; }
+
+void armarEstado(StatusFrame &st) {
 #if ENLACE_WIFI
   bool porWifi = wifiListo && udpAbierto;
 #else
   bool porWifi = false;
 #endif
-
-  StatusFrame st;
   st.magic     = STATUS_MAGIC;
   st.v_pct     = (int8_t)constrain((int)lroundf(lastV     / V_MAX     * 100.0f), -100, 100);
   st.omega_pct = (int8_t)constrain((int)lroundf(lastOmega / OMEGA_MAX * 100.0f), -100, 100);
@@ -786,14 +843,63 @@ void enviarEstado() {
   if (millis() < ARRANQUE_RECIENTE_MS)     st.flags |= ST_RECIEN;
   if (viaUltima == VIA_WIFI)               st.flags |= ST_VIA_WIFI;
   if (porWifi)                             st.flags |= ST_WIFI_OK;
+#if ENLACE_BLE
   if (bleConnected)                        st.flags |= ST_BLE_OK;
+#else
+  if (usbActivo())                         st.flags |= ST_USB_OK;
+#endif
   st.seq_echo = lastSeq;
   st.crc = crc8((uint8_t *)&st, sizeof(st) - 1);
+}
 
+void enviarEstadoUsb() {
+  StatusFrame st;
+  armarEstado(st);
+  Serial.write((const uint8_t *)&st, sizeof(st));
+}
+
+void procesarUsb() {
+  int presupuesto = 96;
+  while (presupuesto-- > 0 && Serial.available() > 0) {
+    uint8_t b = (uint8_t)Serial.read();
+    if (usbN == 0 && b != CMD_MAGIC) continue;           // basura o texto: se espera el byte de inicio
+    usbBuf[usbN++] = b;
+    if (usbN < sizeof(CmdFrame)) continue;
+    CmdFrame c;
+    memcpy(&c, usbBuf, sizeof(c));
+    if (crc8(usbBuf, sizeof(c) - 1) == c.crc) {
+      usbN = 0;
+      ultimoCmdUsb = millis();
+      aplicarComando(c, VIA_USB);
+      enviarEstadoUsb();                                  // eco inmediato (latencia de ida y vuelta medible)
+    } else {
+      tramasMalas++;
+      uint8_t resto = 0;                                  // resincroniza: busca otro inicio dentro de lo que quedo
+      for (uint8_t i = 1; i < sizeof(CmdFrame); i++) {
+        if (usbBuf[i] == CMD_MAGIC) { memmove(usbBuf, usbBuf + i, sizeof(CmdFrame) - i); resto = sizeof(CmdFrame) - i; break; }
+      }
+      usbN = resto;
+    }
+  }
+}
+
+void enviarEstado() {
+#if ENLACE_BLE
+  bool porBle = bleConnected && pStatusChar != nullptr;
+#endif
+#if ENLACE_WIFI
+  bool porWifi = wifiListo && udpAbierto;
+#else
+  bool porWifi = false;
+#endif
+  StatusFrame st;
+  armarEstado(st);
+#if ENLACE_BLE
   if (porBle) {
     pStatusChar->setValue((uint8_t *)&st, sizeof(st));
     pStatusChar->notify();
   }
+#endif
 #if ENLACE_WIFI
   if (porWifi) {
     udpC3.beginPacket(ipJetson, JETSON_UDP_PUERTO);
@@ -801,6 +907,7 @@ void enviarEstado() {
     udpC3.endPacket();
   }
 #endif
+  if (usbActivo()) enviarEstadoUsb();                    // latido del estado por el cable aunque no lleguen ordenes
 }
 
 void setup() {
@@ -818,6 +925,7 @@ void setup() {
   motivoReinicio = esp_reset_reason();
 
   Serial.begin(115200);
+  Serial.setTxTimeoutMs(0);                       // si la Jetson no lee el USB, escribir no debe frenar el lazo
   unsigned long t0Serial = millis();
   while (!Serial && millis() - t0Serial < 1500) delay(10);
   delay(200);
@@ -836,6 +944,7 @@ void setup() {
   servoEscribir(SERVO_PARK_ANGLE);
   currentServoAngle = SERVO_PARK_ANGLE;
 
+#if ENLACE_BLE
   BLEDevice::init("AGROBOT-C3");
   BLEDevice::setPower(ESP_PWR_LVL_P9);
   pServer = BLEDevice::createServer();
@@ -861,13 +970,17 @@ void setup() {
   pAdv->setMaxPreferred(0x12);
   BLEDevice::startAdvertising();
   Serial.println("BLE activo");
+#else
+  Serial.println("BLE apagado (WiFi + cable USB)");
+#endif
 
 #if ENLACE_WIFI
   WiFi.setHostname("agrobot-c3");
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  WiFi.setTxPower(WIFI_POTENCIAS[0]);
+  WiFi.setTxPower(WIFI_POTENCIAS[wifiPotenciaIdx]);
+  if (WIFI_SIN_AHORRO) WiFi.setSleep(false);
   Serial.println("WiFi asociando...");
 #endif
 
@@ -891,12 +1004,16 @@ unsigned long ultimoEstadoBle = 0;
 const unsigned long ESTADO_PERIODO_BLE_MS = 100;
 
 void loop() {
+  procesarUsb();
+#if ENLACE_BLE
   procesarBLE();
+#endif
 #if ENLACE_WIFI
   procesarWifi();
   gestionarWifi();
 #endif
 
+#if ENLACE_BLE
   static unsigned long ultimoRearme = 0;
   if (!bleConnected && (reabrirAnuncio || millis() - ultimoRearme > 5000)) {
     reabrirAnuncio = false;
@@ -905,8 +1022,10 @@ void loop() {
     pServer->startAdvertising();
   }
   bleWasConnected = bleConnected;
+#endif
 
-  if (!inFailsafe && millis() - lastCmdMillis > CMD_TIMEOUT_MS) {
+  const unsigned long timeoutActual = (viaUltima == VIA_USB) ? CMD_TIMEOUT_USB_MS : CMD_TIMEOUT_MS;
+  if (!inFailsafe && millis() - lastCmdMillis > timeoutActual) {
     enterFailsafe("sin comando");
   }
 
@@ -920,15 +1039,7 @@ void loop() {
     refuerzo.muestra((fabsf(a[0]) + fabsf(a[1]) + fabsf(a[2]) + fabsf(a[3])) / 4.f, L);
   }
 
-  // Log cada 500ms
-  static unsigned long ultimaTraza = 0;
-  if (millis() - ultimaTraza >= 500) {
-    ultimaTraza = millis();
-    float a[4]; bool fault;
-    portENTER_CRITICAL(&mux); for (int i = 0; i < 4; i++) a[i] = actual[i]; fault = hwFault; portEXIT_CRITICAL(&mux);
-    Serial.printf("[fusion] v=%.2f w=%.2f fs=%d fault=%d | R1 %+4.0f R2 %+4.0f L1 %+4.0f L2 %+4.0f\n",
-                  lastV, lastOmega, (int)inFailsafe, (int)fault, a[0], a[1], a[2], a[3]);
-  }
+  // (la traza de texto cada 500 ms se quito: el puerto serie lleva tramas binarias hacia la Jetson)
 
   if (millis() - ultimoEstadoBle >= ESTADO_PERIODO_BLE_MS) {
     ultimoEstadoBle = millis();

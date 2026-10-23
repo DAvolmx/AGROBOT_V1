@@ -1841,8 +1841,21 @@ def _crear_mision_plantas():
     global mision_plantas
     import mision_plantas as mp
 
+    async def guardar_mapa_mision():
+        """Al terminar la misión se guarda solo el mapa del SLAM con las plantas encontradas (para mostrarlo y recargarlo después)."""
+        nombre = time.strftime("mision_%Y%m%d_%H%M")
+        try:
+            info = await mapas.guardar(nombre, patrol.waypoints if patrol else [], True)
+            (mapas.carpeta / nombre / "plantas.json").write_text(json.dumps(mision_plantas.estado_dict(), indent=1, ensure_ascii=False))
+            await state.broadcast({"type": "toast", "data": {"kind": "success", "title": "Mapa de la misión guardado",
+                                                             "message": f"«{info['nombre']}» con {len(mision_plantas.plantas)} planta(s)."}})
+        except Exception as exc:
+            print(f"[mision_plantas] no se pudo guardar el mapa: {exc}", flush=True)
+
     def evento(e):
         print(f"[mision_plantas] {e}", flush=True)
+        if e.get("tipo") == "mision_fin":
+            _schedule(guardar_mapa_mision())
         _schedule(state.broadcast({"type": "mision_plantas", "data": e}))
         titulos = {"planta_detectada": "Planta detectada", "planta_inspeccionada": "Planta escaneada", "mision_fin": "Misión terminada"}
         if e.get("tipo") in titulos:

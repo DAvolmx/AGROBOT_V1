@@ -1900,7 +1900,7 @@ input[type="text"], select { font-family: inherit; }
   // celda en cada pose (8 Hz), y con el mapa grande y con zoom no alcanzaba.
   const mapaLienzo = document.createElement("canvas");
   let vista = { zoom: 1, dx: 0, dy: 0 };
-  let surcosMapa = [], surcoActual = null, puntosEscaneo = [], herramientaMapa = "ver";
+  let surcosMapa = [], surcoActual = null, puntosEscaneo = [], herramientaMapa = "ver", plantasMision = [];
 
   function setMap(m) {
     if (m.data_b64 && !m.data) {          // 1 byte/celda: -1 llega como 255
@@ -1998,6 +1998,14 @@ input[type="text"], select { font-family: inherit; }
     if (surcoActual) trazar(surcoActual, "#1a9850", 3, []);
     ctx.font = "18px serif"; ctx.textAlign = "center";
     puntosEscaneo.forEach((p) => { const [x, y] = aPixel(p.x, p.y); ctx.fillText("🌱", x, y + 6); });
+    // Plantas que encontró la misión (posición estimada en el mapa del SLAM): 🥬 col, 🪴 otra planta.
+    ctx.font = "bold 11px sans-serif";
+    plantasMision.filter((p) => p.x != null).forEach((p) => {
+      const [x, y] = aPixel(p.x, p.y);
+      ctx.font = "20px serif"; ctx.fillText(p.especie === "col" ? "🥬" : "🪴", x, y + 7);
+      ctx.font = "bold 11px sans-serif"; ctx.fillStyle = "#1a6b3a"; ctx.fillText(`P${p.n}`, x + 14, y - 8);
+    });
+    ctx.font = "18px serif";
     ctx.textAlign = "left";
 
     // Puntos del recorrido sobre el mapa. El índice actual va resaltado.
@@ -2451,6 +2459,7 @@ input[type="text"], select { font-family: inherit; }
   setInterval(async () => {
     try {
       const d = await (await fetch("/api/mision_plantas")).json();
+      if (d && Array.isArray(d.plantas)) plantasMision = d.plantas;
       if (d && d.estado && d.estado !== "inactiva")
         $("mision-estado").textContent = `Misión: ${d.estado} · plantas escaneadas: ${(d.plantas || []).length}` + (d.vision && d.vision !== "inactiva" ? ` · visión: ${d.vision}` : "") + (d.motivo_fin ? ` · ${d.motivo_fin}` : "");
     } catch (_) {}

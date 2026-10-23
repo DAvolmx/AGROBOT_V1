@@ -171,7 +171,7 @@
     ],
     "max_giros_busqueda": 2,
     "giros_tras_analisis": 4,
-    "max_pulsos_objetivo": 10,
+    "max_pulsos_objetivo": 30,
     "max_objetivos": 1,
     "perder_objetivo_s": 4.0,
     "tiempo_max_s": 600.0,

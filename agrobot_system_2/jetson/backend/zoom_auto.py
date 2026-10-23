@@ -5,7 +5,7 @@ Contexto: la cámara es de foco fijo (UVC sin control de enfoque) y el zoom es D
 con la cámara a 1280×720: detalle real). «Enfocar» aquí = (1) llevar la planta al centro —lo hace la visión activa girando el robot y
 con el tilt del servo— y (2) acercarla a la imagen con el zoom, midiendo la nitidez para quedarse con el mejor cuadro.
 
-Regla (`paso`): mientras la visión activa está CENTRANDO/ACERCANDO/ENCUADRANDO/ANALIZANDO/ESCANEANDO y hay una caja objetivo,
+Regla (`paso`): mientras la visión activa está ENCUADRANDO/ANALIZANDO/ESCANEANDO (ya llegó a la planta) y hay una caja objetivo,
   zoom_deseado = zoom_actual · fracción_objetivo / fracción_actual    (fracción = lado mayor de la caja / lado de la imagen)
 con zonas muertas para no temblar, pasos limitados (sube ×1,3, baja ×0,8 por decisión), tope `zoom_max` y la condición de que la caja
 siga ENTERA dentro del recorte tras el zoom. Al salir de esos estados vuelve a 1× (SLAM, sendero y exploración esperan el campo completo).
@@ -13,7 +13,7 @@ Lógica pura: sin cámara ni reloj propio.
 """
 from __future__ import annotations
 
-ESTADOS_ZOOM = ("centrando", "acercando", "encuadrando", "analizando", "escaneando")
+ESTADOS_ZOOM = ("encuadrando", "analizando", "escaneando")   # NO al centrar ni al acercarse: el zoom llenaba la imagen a 1,7 m y el robot dejaba de avanzar (2026-10-23)
 DEFECTOS = {
     "zoom_auto": True,
     "zoom_fraccion_objetivo": 0.80,     # la planta debe ocupar ~80 % del lado mayor de la imagen (validado: 0.85 > 0.72 > 0.55 en exactitud del clasificador)

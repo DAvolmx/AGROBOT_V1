@@ -56,6 +56,7 @@ from pulse_drive import ConductorPulsos, ACCIONES, MODOS
 from mapas import GestorMapas, ErrorMapa
 from scan_mapa import scan_a_mapa
 from mapa_scan import MapaScan
+import simulador_visual
 from asistido import Asistido
 from servo_bajo import ServoBajo
 from zoom_auto import ZoomAuto, DEFECTOS as ZOOM_DEFECTOS
@@ -2207,6 +2208,22 @@ def _crear_mision_plantas():
     mision_plantas = mp.MisionPlantas(explorador=explorador, vision=vision_activa, get_macetas=_macetas_ahora,
                                       get_pose=ros_bridge.pose_en_mapa, led=_poner_led, grabar=_grabar_video,
                                       get_config=lambda: state.config.get("mision_plantas", {}), on_event=evento)
+
+
+async def simulador_handler(request: web.Request):
+    """GET /api/simulador — estado del simulador visual. POST {"accion": "iniciar"|"detener", "escenario"?}."""
+    if request.method == "GET":
+        return web.json_response(await asyncio.to_thread(simulador_visual.estado))
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    accion = body.get("accion")
+    if accion == "iniciar":
+        return web.json_response(await asyncio.to_thread(simulador_visual.iniciar, body.get("escenario")))
+    if accion == "detener":
+        return web.json_response(await asyncio.to_thread(simulador_visual.detener))
+    return web.json_response({"error": "accion debe ser iniciar o detener"}, status=400)
 
 
 async def camara_cajas_handler(request: web.Request):
@@ -4771,6 +4788,8 @@ def create_app() -> web.Application:
     app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
     app.router.add_get("/api/giro_cerrado", giro_cerrado_handler)
     app.router.add_post("/api/giro_cerrado", giro_cerrado_handler)
+    app.router.add_get("/api/simulador", simulador_handler)
+    app.router.add_post("/api/simulador", simulador_handler)
     app.router.add_get("/api/camara/cajas", camara_cajas_handler)
     app.router.add_get("/api/camara/cruda.jpg", camara_cruda_handler)
     app.router.add_get("/api/mision_plantas", mision_plantas_handler)

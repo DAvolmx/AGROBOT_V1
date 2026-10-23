@@ -641,6 +641,7 @@ input[type="text"], select { font-family: inherit; }
     <button class="nav-btn" data-tab="tab-nav"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11 20 4l-7 17-2.5-7.5L3 11Z"/></svg></span>Navegación</button>
     <button class="nav-btn" data-tab="tab-slam"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span>SLAM &amp; Telemetría</button>
     <button class="nav-btn" data-tab="tab-ai"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.5 4.5l2 2M17.5 17.5l2 2M19.5 4.5l-2 2M6.5 17.5l-2 2"/></svg></span>Gestor de Modelos IA</button>
+    <button class="nav-btn" data-tab="tab-sim"><span class="ic">🧪</span>Simulación</button>
     <button class="nav-btn" data-tab="tab-motores"><span class="ic">⚙</span>Motores y servo</button>
     <button class="nav-btn" data-tab="tab-hw"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.7a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.4 2.7a7.6 7.6 0 0 0-2.6 1.5l-2.4-.7-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.7a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.4-2.7a7.6 7.6 0 0 0 2.6-1.5l2.4.7 2-3.4-2-1.6Z"/></svg></span>Config. Hardware</button>
     <button class="nav-btn" data-tab="tab-params"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h9M17 6h3M4 12h3M9 12h11M4 18h13M19 18h1"/><circle cx="14.5" cy="6" r="2"/><circle cx="6.5" cy="12" r="2"/><circle cx="16.5" cy="18" r="2"/></svg></span>Parámetros</button>
@@ -674,6 +675,17 @@ input[type="text"], select { font-family: inherit; }
 
   <div class="content">
 
+    <div class="tab" id="tab-sim">
+      <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <strong>Simulación visual</strong>
+        <span id="sim-estado" class="pill">comprobando…</span>
+        <button class="btn" id="sim-iniciar">Iniciar</button>
+        <button class="btn" id="sim-detener">Detener</button>
+        <a id="sim-abrir" class="btn" target="_blank" rel="noopener" style="display:none">Abrir aparte</a>
+        <span class="hint" style="flex-basis:100%">Corre el código real del robot contra un mundo virtual (puerto 8093). Gasta CPU y GPU: detenla antes de probar con el robot.</span>
+      </div>
+      <iframe id="sim-frame" title="Simulador" style="width:100%;height:1000px;border:0;border-radius:16px;display:none"></iframe>
+    </div>
     <div class="tab" id="tab-motores"><iframe id="motor-setup-frame" src="/motores.html" title="Asignación de motores y servo" style="width:100%;height:1100px;border:0;border-radius:16px"></iframe></div>
     <!-- ================= DASHBOARD ================= -->
     <div class="tab active" id="tab-dashboard">
@@ -1626,6 +1638,7 @@ input[type="text"], select { font-family: inherit; }
       if (btn.dataset.tab === "tab-sistema") { resizeRadar(); dibujarRadarSiVisible(); }
       if (btn.dataset.tab === "tab-dashboard") { resizeRadarDash(); dibujarRadarSiVisible(); }
       if (btn.dataset.tab === "tab-nav") resizeMap();
+      if (btn.dataset.tab === "tab-sim") simRefrescar();
       if (btn.dataset.tab === "tab-asistido") {
         montarAsistido();
         refrescarAsistido();
@@ -1833,6 +1846,34 @@ input[type="text"], select { font-family: inherit; }
       case "captures_cleared": setCaptures([]); break;
     }
   }
+
+
+  // ---------------------------------------------------------------
+  // Simulación visual (simulador_pasivo/servidor.py, lanzado por el backend)
+  // ---------------------------------------------------------------
+  async function simRefrescar() {
+    let e = null;
+    try { e = await (await fetch("/api/simulador")).json(); } catch (_) {}
+    const pill = $("sim-estado"), frame = $("sim-frame"), abrir = $("sim-abrir");
+    if (!e) { pill.textContent = "sin respuesta del backend"; return; }
+    pill.textContent = e.escuchando ? "en marcha" : e.corriendo ? "arrancando…" : "detenida";
+    $("sim-iniciar").disabled = e.corriendo; $("sim-detener").disabled = !e.corriendo;
+    const url = `http://${location.hostname}:${e.puerto}/`;
+    if (e.escuchando) {
+      if (frame.dataset.url !== url) { frame.src = url; frame.dataset.url = url; }
+      frame.style.display = "block"; abrir.href = url; abrir.style.display = "";
+    } else {
+      frame.style.display = "none"; frame.removeAttribute("src"); delete frame.dataset.url; abrir.style.display = "none";
+      if (e.corriendo) setTimeout(simRefrescar, 1500);   // arrancando: sigue preguntando hasta que escuche
+    }
+  }
+  async function simOrden(accion) {
+    $("sim-estado").textContent = accion === "iniciar" ? "arrancando…" : "deteniendo…";
+    try { await fetch("/api/simulador", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accion }) }); } catch (_) {}
+    simRefrescar();
+  }
+  $("sim-iniciar").addEventListener("click", () => simOrden("iniciar"));
+  $("sim-detener").addEventListener("click", () => simOrden("detener"));
 
   // ---------------------------------------------------------------
   // Galería

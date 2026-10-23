@@ -23,7 +23,8 @@
   },
   "detection": {
     "plaga_requiere_vegetacion": true,
-    "plaga_vegetacion_min": 0.08,
+    "plaga_vegetacion_min": 0.05,
+    "plaga_bordes_max": 0.3,
     "plaga_persistencia_ventana": 5,
     "plaga_persistencia_min": 3,
     "confidence_threshold": 0.6,
@@ -33,8 +34,11 @@
     "clases_planta": [
       "col_planta",
       "col_cogollo",
-      "maceta_planta"
+      "maceta_planta",
+      "maceta"
     ],
+    "modelo_maceta": "agrobot_maceta_det.pt",
+    "maceta_conf": 0.3,
     "escanear_al_detectar": "siempre"
   },
   "slam": {
@@ -44,7 +48,7 @@
     "lidar_adelante_cm": 18.5,
     "lidar_atras_cm": 30.5,
     "robot_ancho_cm": 38,
-    "cono_frontal_deg": 20,
+    "cono_frontal_deg": 45,
     "cono_lateral_deg": 45,
     "margen_parada_cm": 12,
     "deslizamiento_cm": 20,
@@ -59,7 +63,7 @@
     "man_histeresis_cm": 12.0,
     "man_pausa_s": 0.0,
     "escala_velocidad": 0.13,
-    "distancia_puntos_cm": 20,
+    "distancia_puntos_cm": 480,
     "avance_libre_cm": 40,
     "lado_libre_cm": 30,
     "retroceso_libre_cm": 30,
@@ -83,15 +87,16 @@
     "sendero_parada_incierta_ciclos": 0,
     "sendero_si_no_cabe": "aviso",
     "sendero_holgura_lateral_cm": 14,
-    "politica_activa": true
+    "politica_activa": false,
+    "camara_obstaculos": true
   },
   "odometria_webcam": {
     "habilitada": true,
     "publicar_ros": true,
-    "camara_altura_m": 0.4,
-    "camara_inclinacion_deg": 15.5,
+    "camara_altura_m": 0.24,
+    "camara_inclinacion_deg": -2.3,
     "camara_hfov_deg": 71,
-    "camara_adelante_m": 0.42
+    "camara_adelante_m": 0.245
   },
   "control": {
     "max_v_mps": 1.5,
@@ -170,6 +175,17 @@
     "max_area_frac": 0.85,
     "giro_cerrado": false,
     "giro_max_deg": 25.0,
-    "sin_mover": false
+    "sin_mover": false,
+    "vistas_escaneo": [
+      "arriba",
+      "abajo",
+      "izquierda",
+      "volver_izquierda",
+      "derecha",
+      "volver_derecha"
+    ],
+    "paso_servo_vista_deg": 10.0,
+    "retroceso_tras_analisis": 2,
+    "atras_libre_m": 0.35
   }
 }

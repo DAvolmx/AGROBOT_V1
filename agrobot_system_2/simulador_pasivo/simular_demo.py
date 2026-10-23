@@ -39,7 +39,7 @@ import sendero as SEN                                 # noqa: E402
 
 CFG_ROBOT = json.loads((AQUI.parent / "jetson" / "backend" / "agrobot_config.json").read_text())
 ALTURA_LIDAR = 0.375
-CAM_ALTURA, CAM_HFOV, CAM_TILT_HOME, SERVO_HOME = 0.40, 71.0, 15.5, 98.0
+CAM_ALTURA, CAM_HFOV, CAM_TILT_HOME, SERVO_HOME = 0.24, 71.0, -2.3, 98.0   # medido 2026-10-23: lente a 24 cm, casi horizontal en 98°
 ANCHO, ALTO = 640, 480
 VFOV = math.degrees(2 * math.atan(math.tan(math.radians(CAM_HFOV) / 2) * ALTO / ANCHO))
 # Suelos: (prob. de detectar una maceta visible, falsos positivos por segundo, factor de ruido del LIDAR)

@@ -1,5 +1,5 @@
 """Field capture: bounded asynchronous queue; no actuator commands."""
-import asyncio, json, time, uuid, threading, queue, shutil, zipfile
+import asyncio, json, os, time, uuid, threading, queue, shutil, zipfile
 from pathlib import Path
 from aiohttp import web
 import cv2
@@ -107,7 +107,11 @@ class Recoleccion:
             try:
                 if kind=='sample':
                     d,s=data
-                    with (d/'variables.jsonl').open('a') as out:out.write(json.dumps(finite_json(s),default=str,allow_nan=False)+'\n')
+                    with (d/'variables.jsonl').open('a') as out:
+                        out.write(json.dumps(finite_json(s),default=str,allow_nan=False)+'\n')
+                        # 2026-10-23: la Jetson se apagó por batería y la sesión quedó en 0 bytes (todo seguía en caché). fsync cada 2 s.
+                        if time.monotonic()-getattr(self,'_t_fsync',0.0)>2.0:
+                            out.flush();os.fsync(out.fileno());self._t_fsync=time.monotonic()
                     self.count+=1
                 elif kind in ('photo','video'):
                     d,f,t=data;image,ts,seq=f

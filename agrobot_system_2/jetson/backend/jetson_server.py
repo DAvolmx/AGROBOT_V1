@@ -20,6 +20,7 @@ Diseño para latencia mínima: todo es push (ver README). Nada aquí depende
 de internet — este proceso corre dentro de la red aislada del AP.
 """
 import asyncio
+import glob
 import json
 import math
 import os
@@ -3563,6 +3564,20 @@ def _carga_gpu_pct() -> float | None:
     return round(sum(_muestras_gpu) / len(_muestras_gpu), 1)
 
 
+VDD_IN_AVISO_V = 4.80
+
+
+def _vdd_in_v():
+    """Tensión VDD_IN de la Jetson en voltios (INA3221 de la placa), o None si no se puede leer."""
+    for f in glob.glob("/sys/bus/i2c/drivers/ina3221/*/hwmon/hwmon*/in*_label"):
+        try:
+            if open(f).read().strip() == "VDD_IN":
+                return round(int(open(f[:-len("_label")] + "_input").read()) / 1000.0, 3)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
 def _temperatura_zona(tipo: str) -> float | None:
     """Temperatura de la zona térmica del kernel de ese tipo (p. ej.
     "tj-thermal", la unión del chip, o "iwlwifi_1", la tarjeta WiFi/BT)."""
@@ -3627,6 +3642,16 @@ async def stats_loop():
         # La tarjeta WiFi/BT va aparte: es la que se calienta (AP + cliente +
         # Bluetooth en una sola radio) y la que se apaga sola si pasa de ~100.
         stats["temp_wifi_c"] = _temperatura_zona("iwlwifi_1")
+        # Tensión de entrada de la Jetson (INA3221). Va regulada (~5,05 V), pero con la batería floja cae bajo carga: el 2026-10-23 la
+        # Jetson se apagó sin aviso en plena prueba. Aviso una vez por caída por debajo de VDD_IN_AVISO_V.
+        stats["vdd_in_v"] = _vdd_in_v()
+        if stats["vdd_in_v"] is not None:
+            bajo = stats["vdd_in_v"] < VDD_IN_AVISO_V
+            if bajo and not getattr(state, "_aviso_tension", False):
+                print(f"[energia] VDD_IN {stats['vdd_in_v']:.2f} V: batería baja, cargar antes de seguir", flush=True)
+                await state.broadcast({"type": "toast", "data": {"kind": "warning", "title": "Batería baja",
+                                                                 "message": f"La Jetson recibe {stats['vdd_in_v']:.2f} V: carga la batería antes de seguir."}})
+            state._aviso_tension = bajo
 
         state.system_stats = stats
         health_data = _salud_completa()

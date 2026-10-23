@@ -2738,14 +2738,16 @@ input[type="text"], select { font-family: inherit; }
   let lastEnv = {};
   function updateEnv(d) {
     lastEnv = d;
-    $("v-co2").innerHTML = `${Math.round(d.co2 ?? 0)}<small> ppm</small>`;
-    $("v-hum").innerHTML = `${(d.humidity ?? 0).toFixed(1)}<small> %</small>`;
-    $("v-temp-scd").innerHTML = `${(d.tempSCD ?? 0).toFixed(1)}<small> °C</small>`;
-    // Barra superior del dashboard
-    $("k-co2-dash").textContent = `${Math.round(d.co2 ?? 0)} ppm`;
-    $("k-temp-dash").textContent = `${(d.tempSCD ?? 0).toFixed(1)}°C`;
-    $("k-hum-dash").textContent = `${(d.humidity ?? 0).toFixed(1)}%`;
     const caidos = d._sensors_missing || [];
+    // Sensor no disponible: «—» en vez de un 0 que parece lectura
+    const amb = (k, txt) => caidos.includes(k) ? "—" : txt;
+    $("v-co2").innerHTML = `${amb("co2", Math.round(d.co2 ?? 0))}<small> ppm</small>`;
+    $("v-hum").innerHTML = `${amb("humidity", (d.humidity ?? 0).toFixed(1))}<small> %</small>`;
+    $("v-temp-scd").innerHTML = `${amb("tempSCD", (d.tempSCD ?? 0).toFixed(1))}<small> °C</small>`;
+    // Barra superior del dashboard
+    $("k-co2-dash").textContent = `${amb("co2", Math.round(d.co2 ?? 0))} ppm`;
+    $("k-temp-dash").textContent = `${amb("tempSCD", (d.tempSCD ?? 0).toFixed(1))}°C`;
+    $("k-hum-dash").textContent = `${amb("humidity", (d.humidity ?? 0).toFixed(1))}%`;
     $("env-missing-row").style.display = caidos.length ? "flex" : "none";
     if (caidos.length) $("env-missing").textContent = caidos.join(", ");
 

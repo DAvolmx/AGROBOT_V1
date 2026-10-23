@@ -314,6 +314,10 @@ def normalize_env(payload: dict) -> dict:
             missing.append(field)
         else:
             payload[field] = number
+    # 2026-10-23: el firmware del nodo (esp32_lora_v3) marca el SCD40 como listo sin comprobar que responde y, si nunca hay medida,
+    # manda co2=0, tempSCD=0, humidity=0. Los tres a cero a la vez es imposible en la realidad: es «sensor ambiental no disponible».
+    if all(payload.get(k) == 0.0 for k in ("co2", "tempSCD", "humidity")):
+        missing.extend(k for k in ("co2", "tempSCD", "humidity") if k not in missing)
     payload["_sensors_missing"] = missing
     return payload
 

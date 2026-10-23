@@ -114,6 +114,7 @@ unsigned long lastSensorLog = 0;
 RTC_DATA_ATTR bool joined = false;
 bool mpu_ok = false;
 bool scd40_ok = false;
+unsigned long ultimaMedidaAmbiente = 0;     // millis() de la última medida válida del SCD40 (0 = nunca)
 struct SensorData {
   float accelX, accelY, accelZ;
   float gyroX, gyroY, gyroZ;
@@ -191,15 +192,27 @@ void mpu6050_read(float* accelX, float* accelY, float* accelZ,
 // =============================================
 void scd40_init() {
   Serial.print("  🌡️  SCD40 (I2C)... ");
+  // 2026-10-23: antes se marcaba OK sin mirar si el sensor respondía, y sin SCD40 se mandaban ceros como si fueran lecturas.
   Wire.beginTransmission(SCD40_ADDR);
-  Wire.write(0x21);
-  Wire.write(0xB1);
-  Wire.endTransmission();
-  delay(1000);
-  scd40_ok = true;
-  Serial.println("✅");
+  bool responde = (Wire.endTransmission() == 0);          // ¿hay algo en 0x62?
+  if (responde) {
+    Wire.beginTransmission(SCD40_ADDR);
+    Wire.write(0x21);                                     // start_periodic_measurement (si ya medía, NACK: no pasa nada)
+    Wire.write(0xB1);
+    Wire.endTransmission();
+    delay(1000);
+  }
+  scd40_ok = responde;
+  Serial.println(responde ? "✅" : "❌ no responde en 0x62 (revisar cables SDA 41 / SCL 42, alimentación 3V3)");
 }
 void scd40_read(uint16_t* co2, float* temperature, float* humidity) {
+  // Sin sensor (o sin medidas hace 60 s): reintento de arranque cada 30 s, así un cable reconectado vuelve solo sin reiniciar la placa.
+  static unsigned long ultimoReintento = 0;
+  bool mudo = !scd40_ok || (ultimaMedidaAmbiente != 0 && millis() - ultimaMedidaAmbiente > 60000);
+  if (mudo && millis() - ultimoReintento > 30000) {
+    ultimoReintento = millis();
+    scd40_init();
+  }
   if (!scd40_ok) return;
 
   Wire.beginTransmission(SCD40_ADDR);
@@ -223,6 +236,7 @@ void scd40_read(uint16_t* co2, float* temperature, float* humidity) {
   if (co2_raw == 0) return;
 
   *co2 = co2_raw;
+  ultimaMedidaAmbiente = millis();
   int16_t temp_raw = (int16_t)(((uint16_t)data[3] << 8) | data[4]);
   *temperature = -45.0 + 175.0 * (temp_raw / 65536.0);
   uint16_t hum_raw = ((uint16_t)data[6] << 8) | data[7];
@@ -336,15 +350,19 @@ void connectToWiFi() {
 void sendUDP() {
   if (!wifi_connected) return;
   char udp_payload[256];
+  // Sin medida del SCD40 en los últimos 15 s se manda null: el backend lo marca como «no disponible» en vez de graficar ceros.
+  bool amb = scd40_ok && ultimaMedidaAmbiente != 0 && (millis() - ultimaMedidaAmbiente) < 15000;
+  char amb_txt[80];
+  if (amb) snprintf(amb_txt, sizeof(amb_txt), "\"co2\":%d,\"tempSCD\":%.2f,\"humidity\":%.1f",
+                    sensorData.co2, sensorData.temperature_scd, sensorData.humidity);
+  else snprintf(amb_txt, sizeof(amb_txt), "\"co2\":null,\"tempSCD\":null,\"humidity\":null");
   snprintf(udp_payload, sizeof(udp_payload),
     "{\"accelX\":%.2f,\"accelY\":%.2f,\"accelZ\":%.2f,"
     "\"gyroX\":%.2f,\"gyroY\":%.2f,\"gyroZ\":%.2f,"
-    "\"co2\":%d,\"tempSCD\":%.2f,\"humidity\":%.1f,"
-    "\"seq\":%lu}",
+    "%s,\"env_ok\":%s,\"seq\":%lu}",
     sensorData.accelX, sensorData.accelY, sensorData.accelZ,
     sensorData.gyroX, sensorData.gyroY, sensorData.gyroZ,
-    sensorData.co2, sensorData.temperature_scd, sensorData.humidity,
-    udpSeq);
+    amb_txt, amb ? "true" : "false", udpSeq);
   udp.beginPacket(JETSON_IP, JETSON_UDP_PORT);
   udp.write((uint8_t*)udp_payload, strlen(udp_payload));
   udp.endPacket();

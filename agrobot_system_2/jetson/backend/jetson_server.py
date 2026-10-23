@@ -55,6 +55,7 @@ from patrol import PatrolController
 from pulse_drive import ConductorPulsos, ACCIONES, MODOS
 from mapas import GestorMapas, ErrorMapa
 from scan_mapa import scan_a_mapa
+from mapa_scan import MapaScan
 from asistido import Asistido
 from servo_bajo import ServoBajo
 from zoom_auto import ZoomAuto, DEFECTOS as ZOOM_DEFECTOS
@@ -860,6 +861,32 @@ def _decimar(points: list[dict], maximo: int) -> list[dict]:
              "distance_m": round(p["distance_m"], 3)} for p in points]
 
 
+mapa_scan = MapaScan()
+_ultimo_mapa_scan_t = 0.0
+_ultimo_envio_mapa_scan = 0.0
+MAPA_SCAN_PERIODO_S = 0.2          # el scan se acumula a 5 Hz
+MAPA_SCAN_ENVIO_S = 1.0            # y el mapa acumulado se difunde a 1 Hz
+
+
+def _mapa_desde_scan() -> bool:
+    return (state.config.get("slam") or {}).get("mapa_fuente", "scan") == "scan"
+
+
+def _acumular_scan(points: list[dict], pose: dict):
+    """El mapa del dashboard se dibuja con los puntos del scan acumulados (mapa_scan.py), alineados contra lo ya dibujado."""
+    global _ultimo_mapa_scan_t, _ultimo_envio_mapa_scan
+    ahora = time.monotonic()
+    if ahora - _ultimo_mapa_scan_t >= MAPA_SCAN_PERIODO_S:
+        _ultimo_mapa_scan_t = ahora
+        mapa_scan.agregar(ahora, pose, [p["angle_deg"] for p in points], [p["distance_m"] for p in points])
+    if ahora - _ultimo_envio_mapa_scan >= MAPA_SCAN_ENVIO_S:
+        _ultimo_envio_mapa_scan = ahora
+        m = mapa_scan.como_mapa()
+        if m is not None:
+            m["received_at"] = time.time()
+            _schedule(state.broadcast({"type": "map", "data": m}))
+
+
 def _difundir_scan_en_mapa(points: list[dict]):
     """El scan en coordenadas del MAPA (pose = TF map->base_link de
     slam_toolbox), para pintar los puntos en vivo sobre el mapa. Sin TF
@@ -873,6 +900,8 @@ def _difundir_scan_en_mapa(points: list[dict]):
     if pose is None:
         return
     _ultimo_envio_scan_mapa = ahora
+    if _mapa_desde_scan():
+        _acumular_scan(points, pose)
     _schedule(state.broadcast({"type": "scan_mapa", "data": {
         "pose": {k: round(pose[k], 3) for k in ("x", "y", "theta_deg")},
         "pts": scan_a_mapa(points, pose)}}))
@@ -926,6 +955,8 @@ def _ros_on_map(map_dict: dict):
     health.beat("slam")
     ros_last_map = map_dict
     now = time.time()
+    if _mapa_desde_scan() and mapa_scan.version:     # el dashboard dibuja el mapa de puntos del scan; la rejilla SLAM queda de respaldo
+        return
     if now - _last_map_broadcast < 0.5:
         return
     _last_map_broadcast = now
@@ -1010,7 +1041,7 @@ async def ws_handler(request: web.Request):
             "pose_edad_s": (round(e, 2) if (e := pose_edad_s()) is not None else None),
             "pose_confiable": pose_confiable(),
             "lidar_scan": _decimar(lidar_reactive.last_scan or [], RADAR_MAX_PUNTOS),
-            "map": ros_last_map,
+            "map": (mapa_scan.como_mapa() if _mapa_desde_scan() and mapa_scan.version else None) or ros_last_map,
             "ros_available": ros_bridge.available,
             "ros_reason": ROS_UNAVAILABLE_REASON,
             "navigation": state.config["navigation"],
@@ -3570,6 +3601,7 @@ async def nav_reset_map_handler(request: web.Request):
              "slam_toolbox/srv/Reset", "{pause_new_measurements: false}"],
             capture_output=True, text=True, timeout=20)
 
+    mapa_scan.reiniciar()
     try:
         res = await asyncio.to_thread(_llamar)
         ok = res.returncode == 0 and "result=0" in res.stdout

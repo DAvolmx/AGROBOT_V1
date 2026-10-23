@@ -1119,10 +1119,13 @@ async def ws_handler(request: web.Request):
 
     finally:
         state.ws_clients.discard(ws)
-        if conductor is not None:
-            conductor.parar()
-        if actuator_proto is not None:
-            actuator_proto.emergency_stop()
+        # Un celular que se duerme o pierde el WiFi NO debe cortar la autonomía (presentación 2026-10-23): solo se frena si
+        # nadie la está llevando, o si el operador tenía el mando manual.
+        if _modo_auto_activo() is None or asistido.activa:
+            if conductor is not None:
+                conductor.parar()
+            if actuator_proto is not None:
+                actuator_proto.emergency_stop()
 
     return ws
 

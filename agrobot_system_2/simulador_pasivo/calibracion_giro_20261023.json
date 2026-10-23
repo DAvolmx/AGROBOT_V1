@@ -1,0 +1,11 @@
+{
+  "fecha": "2026-10-23",
+  "origen": "grabacion de campo 20261023_051014_6ba57f + poses del SLAM del lote 20261023_050415 (tools/medir_giro.py)",
+  "firmware": "fusion v5, minp 100 (100 % continuo), dif_del 100, freno_ms 80, comp_neg 0, comp_pos 0",
+  "giro_por_toque": {
+    "izquierda_omega_neg": {"toques": 16, "grados": 2.3, "avance_cm": -8.6, "cm_por_grado": -3.77},
+    "derecha_omega_pos":  {"toques": 17, "grados": 5.5, "avance_cm": 2.6,  "cm_por_grado": 0.48}
+  },
+  "rodado_tras_pulso_cm": "35-40 (la distancia al frente cae 0,50 -> 0,15 m en 0,8 s con v_cmd = 0; velocidad real ~0,5 m/s con v_pedida 0,2)",
+  "nota": "El simulador NO reproduce esta asimetria con imperfecciones de chasis (giros simetricos, +-1 cm); con lados de distinta fuerza (x1,7) si aparece una deriva de ~4 cm pero con MAS giro en el sentido que retrocede, al reves que en el robot real. Hipotesis pendiente: el eje delantero pasivo / el agarre. Calibrar comp_neg/comp_pos con tools/medir_giro.py."
+}

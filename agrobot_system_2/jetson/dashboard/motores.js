@@ -59,7 +59,8 @@ $('swap').onclick = async () => {
   try { await api('/api/c3/pines/intercambiar', {a: +$('sa').value, b: +$('sb').value}); msg('Pines intercambiados.'); } catch (e) { msg(e.message); }
   const LIM_TXT = {adel: 'Máx. adelante %', atras: 'Máx. atrás %', pivote: 'Potencia de pivote (traseras) %',
   minp: 'Arranque mínimo %', acel: 'Aceleración %/s', frena: 'Frenado %/s', tras: 'Fuerza extra de las traseras %',
-  dif_del: '% del giro que hacen las delanteras (0 = solo traseras, 100 = skid-steer)', periodo: 'Ráfaga de tensión completa, ms (0 = PWM continuo)', refuerzo: 'Anti-hundimiento % (100 = apagado)', freno_ms: 'Freno activo al parar, ms (0 = rueda libre)'};
+  dif_del: '% del giro que hacen las delanteras (0 = solo traseras, 100 = skid-steer)', periodo: 'Ráfaga de tensión completa, ms (0 = PWM continuo)', refuerzo: 'Anti-hundimiento % (100 = apagado)', freno_ms: 'Freno activo al parar, ms (0 = rueda libre)',
+  comp_neg: 'Giro a la IZQUIERDA: % que se apagan las ruedas que retroceden', comp_pos: 'Giro a la DERECHA: % que se apagan las ruedas que retroceden'};
 async function cargarLimites() {
   try {
     const d = await api('/api/c3/limites'); const box = $('limites'); box.innerHTML = '';

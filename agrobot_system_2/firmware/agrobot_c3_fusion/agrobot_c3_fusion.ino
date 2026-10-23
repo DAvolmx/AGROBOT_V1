@@ -337,6 +337,7 @@ const uint32_t FRENO_ESPERA_MS = 200;
 static uint32_t mFrenoHasta[4] = {};
 static uint32_t mCeroDesde[4] = {};
 static bool mFrenado[4] = {};
+static float escGiro[4] = {1, 1, 1, 1};        // compensacion del giro por rueda (protegida por mux): ver fusion::escala_giro
 static float mCur[4] = {};
 static uint32_t mZeroAt[4] = {};
 
@@ -408,7 +409,7 @@ void motorTask(void *) {
           libre[i] = false;
           // Rafaga: tension completa o nada segun la fase; el pin queda asignado (fase apagada =
           // duty 0 = rueda libre) para no hacer attach/detach en cada ciclo.
-          float salida = fabsf(fusion::rafaga(mCur[i], now, L));
+          float salida = fabsf(fusion::rebanada(fusion::rafaga(mCur[i], now, L), now, escGiro[i]));
           ledcWriteChannel(i, lroundf(fminf(salida, 100.f) * 255.f / 100.f));
         }
       }
@@ -423,8 +424,10 @@ void aplicarMezcla(float v, float omega) {
   fusion::Lim L;
   portENTER_CRITICAL(&mux); L = lim; portEXIT_CRITICAL(&mux);
   fusion::Out o = fusion::mezclar(v, omega, L, refuerzo.boost);
-  float t[4];
+  float t[4], esc[4];
+  fusion::escala_giro(omega, o, L, esc);
   for (int i = 0; i < 4; i++) t[i] = invertida[i] ? -o.d[i] : o.d[i];
+  portENTER_CRITICAL(&mux); for (int i = 0; i < 4; i++) escGiro[i] = esc[i]; portEXIT_CRITICAL(&mux);
   setTargets(t);
 }
 
@@ -437,7 +440,7 @@ const unsigned long TEST_MS = 400;     // la prueba se corta sola si el dashboar
 
 static float *limCampo(fusion::Lim &L, int id) {
   float *c[fusion::N_LIM] = {&L.adel, &L.atras, &L.pivote, &L.minp, &L.acel, &L.frena, &L.tras,
-                             &L.dif_del, &L.periodo, &L.refuerzo, &L.freno_ms};
+                             &L.dif_del, &L.periodo, &L.refuerzo, &L.freno_ms, &L.comp_neg, &L.comp_pos};
   return id >= 0 && id < fusion::N_LIM ? c[id] : nullptr;
 }
 

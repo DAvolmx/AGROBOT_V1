@@ -125,7 +125,7 @@ class LidarReactive:
         """
         clave = (self.last_scan_at, cfg["robot_largo_cm"], cfg["robot_ancho_cm"],
                  cfg["cono_frontal_deg"], cfg["cono_lateral_deg"], cfg.get("lidar_adelante_cm"), cfg.get("lidar_atras_cm"),
-                 cfg.get("corredor_holgura_cm"))
+                 cfg.get("corredor_holgura_cm"), cfg.get("cono_trasero_deg"), cfg.get("holgura_trasera_cm"))
         if self._cache is not None and self._cache[0] == clave:
             return self._cache[1]
 
@@ -138,6 +138,11 @@ class LidarReactive:
         # 2026-10-22: configurable. Con 5 cm el robot (38 cm) se metía entre las patas de una mesa (70 cm) y quedaba atrapado.
         holgura_corredor = float(cfg.get("corredor_holgura_cm", CORREDOR_HOLGURA_M * 100)) / 100.0
         semi_lateral = cfg["cono_lateral_deg"] / 2.0
+        # TRASERO más ancho que el frontal (2026-10-23, «la detección trasera sigue fallando»): al retroceder en curva (los giros a
+        # un lado arrastran al robot hacia atrás ~9 cm por toque) o al rodar tras frenar, la parte de atrás barre un arco más ancho
+        # que el corredor recto. Un cono de 90° y una holgura mayor lo cubren sin tocar el frente.
+        semi_trasero = float(cfg.get("cono_trasero_deg", max(cfg["cono_frontal_deg"], 90))) / 2.0
+        holgura_trasera = float(cfg.get("holgura_trasera_cm", max(holgura_corredor * 100, 25))) / 100.0
         adelante = atras = izquierda = derecha = math.inf
         cerca = math.inf                 # distancia mínima del cuerpo a CUALQUIER punto (todas las direcciones): para girar en el sitio
 
@@ -168,8 +173,8 @@ class LidarReactive:
             if abs_a <= semi_frontal:
                 if en_camino:
                     adelante = min(adelante, d - ml_f)
-            elif abs_a >= 180.0 - semi_frontal:
-                if en_camino:
+            elif abs_a >= 180.0 - semi_trasero:
+                if lateral <= ma + holgura_trasera:
                     atras = min(atras, d - ml_b)
             elif abs(a - 90.0) <= semi_lateral:
                 izquierda = min(izquierda, d - ma)

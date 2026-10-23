@@ -142,6 +142,7 @@ DEFAULTS = {
         "avance_libre_cm": 100,      # para lanzar un pulso de avance
         "lado_libre_cm": 60,         # para considerar un lado como salida
         "retroceso_libre_cm": 50,    # para poder retroceder
+        "servo_baja_macetas": True,   # en autonomía, la cámara baja si la maceta está baja en la imagen (servo_bajo.py)
         "asistido_reanuda_s": 2.5,   # segundos sin órdenes manuales tras los que la autonomía interrumpida se reanuda sola (0 = nunca)
         "escaneo_periodo_s": 120,    # cada cuánto se para a barrer con la cámara
         # El barrido lo hace el BACKEND moviendo el servo paso a paso (como

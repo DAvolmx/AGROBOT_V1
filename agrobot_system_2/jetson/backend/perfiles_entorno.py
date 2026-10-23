@@ -54,7 +54,7 @@ PERFILES = {
         # --- espacio que exige para maniobrar en un sitio chico ---
         "avance_libre_cm": 40,        # > el corte de 32, si no se corta a medio pulso
         "lado_libre_cm": 30,
-        "retroceso_libre_cm": 30,
+        "retroceso_libre_cm": 45,     # 2026-10-23: era 30; a 100 % el robot rueda ~35 cm y los giros a un lado lo arrastran hacia atrás
         "distancia_puntos_cm": 120,
         # Paredes cerca: en una sala los dos lados cuentan siempre.
         "sendero_pared_max_cm": 120,

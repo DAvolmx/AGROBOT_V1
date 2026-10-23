@@ -4865,3 +4865,19 @@ al 80 %/100 %, watchdog del loop). Robot en el pasillo.
 - **Seguridad:** `safety.anticolision_disparo_m` 0,12 → 0,20 (con 100 % el robot rueda 35-40 cm tras un pulso). Pendiente: servo hacia
   abajo con macetas bajas, detección trasera, compensación del giro a la izquierda (retrocede ~9 cm por toque; derecha +2,5 cm).
 
+### 2026-10-23 (tarde) — Pausa sin salir de autónomo, servo bajo, detección trasera, compensación del giro, mapa
+- **Mando asistido = PAUSA, no parada:** `pausar()/continuar()` en explorador, patrulla y misión; `_tomar_mando` ya no llama a `_parada_total`
+  (que emitía `mission_state active=false` y el dashboard pasaba a «manual»). Reanuda sola tras `autonomia.asistido_reanuda_s` (2,5 s);
+  «Quedarme en manual» sí detiene todo. El panel muestra «AUTÓNOMO · en pausa (mando tuyo)».
+- **Servo hacia abajo con macetas bajas** (`servo_bajo.py`, `_bucle_servo_macetas`, `autonomia.servo_baja_macetas`): caja cortada por abajo o
+  centro por debajo del 62 % de la imagen -> baja el servo 6° (tope 62°); vuelve a 98° tras 4 s sin macetas. Solo en autonomía.
+- **Detección trasera:** `slam.distancias` usa cono trasero de 90° (`cono_trasero_deg`) y holgura trasera 25 cm (`holgura_trasera_cm`);
+  `anticolision_parar_atras_m` 0,22, `anticolision_margen_atras_m` 0,35, interior `retroceso_libre_cm` 45.
+- **Giro asimétrico (medido con SLAM):** a la izquierda (omega_cmd<0) cada toque gira 2,3° y RETROCEDE 8,6 cm; a la derecha gira 5,5° y avanza 2,6 cm.
+  Firmware: límites `comp_neg`/`comp_pos` (0-80 %: fracción del ciclo de 100 ms en que se apagan las ruedas que retroceden en el giro);
+  `comp_neg` = 25 puesto. Calibrar con `tools/medir_giro.py` (propone el siguiente valor). Datos: `simulador_pasivo/calibracion_giro_20261023.json`.
+  El simulador no reproduce la asimetría con imperfecciones de chasis (limitación documentada).
+- **Mapa desfasado:** guardado como «desfasado_20261023_0530» y reseteado (también borra los 50 waypoints de coordenadas viejas).
+  `simular_slam.py` sobre la grabación del 05:10: los saltos de pose (26-30) aparecen con todas las configuraciones; la de hoy
+  (scans cada 0,1 s, mapa cada 0,5 s) es la mejor (2 manchas, divergencia 0,28 m) -> no se revierte. Nuevas configs `giro_ancho`, `busca_ancha`.
+

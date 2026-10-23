@@ -56,6 +56,7 @@ from pulse_drive import ConductorPulsos, ACCIONES, MODOS
 from mapas import GestorMapas, ErrorMapa
 from scan_mapa import scan_a_mapa
 from asistido import Asistido
+from servo_bajo import ServoBajo
 from odometria_webcam import OdometriaWebcam, SERVO_TOLERANCIA_DEG
 from explorador import ExploradorReactivo
 from sendero import SeguidorSendero
@@ -1768,23 +1769,40 @@ def _distancias_lidar() -> dict:
         return {}
 
 
+def _pausar_autonomia():
+    """PAUSA (no apaga) la autonomía: misión, exploración y patrulla siguen «activas» —la interfaz no pasa a manual— pero
+    sueltan el mando; se cancelan la visión, la evasión, el paso robótico, la meta de Nav2 y los pulsos en curso."""
+    pasos = [
+        ("mision_plantas", lambda: mision_plantas is not None and mision_plantas.pausar()),
+        ("exploracion", lambda: explorador is not None and explorador.pausar()),
+        ("patrulla", lambda: patrol is not None and patrol.pausar()),
+        ("vision_activa", lambda: vision_activa is not None and vision_activa.cancelar("mando manual")),
+        ("evasion", _detener_evasion),
+        ("paso_robotico", lambda: paso_robotico is not None and paso_robotico.detener()),
+        ("nav2", ros_bridge.cancel_nav_goal),
+        ("pulsos", lambda: conductor is not None and conductor.parar()),
+        ("motores", lambda: actuator_proto is not None and actuator_proto.emergency_stop()),
+    ]
+    for nombre, fn in pasos:
+        try:
+            fn()
+        except Exception as exc:
+            print(f"[asistido] {nombre} falló al pausar: {type(exc).__name__}: {exc}", flush=True)
+
+
 def _tomar_mando(origen: str) -> str | None:
-    """El operador da una orden manual: si hay autonomía en marcha se PAUSA (queda registrado qué hacía y qué ordenaba)
-    y el mando pasa a él. Devuelve el modo interrumpido, o None si no había autonomía que interrumpir."""
+    """El operador da una orden manual: si hay autonomía en marcha se PAUSA (queda registrado qué hacía y qué ordenaba) y el
+    mando pasa a él un momento; vuelve sola (`_vigia_asistido`) o con el botón. Devuelve el modo interrumpido, o None."""
+    if asistido.activa:
+        return asistido.modo_previo                     # ya está en manos del operador
     modo = _modo_auto_activo()
     if modo is None:
         return None
     st = state.actuator_status or {}
     meta = (state.config.get("navigation") or {}).get("last_goal") if modo == "nav2" else None
-    asistido.soltar()                                  # una intervención nueva sustituye a una vieja sin reanudar
     asistido.tomar(modo, (st.get("v_cmd") or 0.0, st.get("omega_cmd") or 0.0), meta)
-    if modo == "mision" and mision_plantas is not None:
-        mision_plantas.detener("mando manual")         # con esta etiqueta la misión se puede REANUDAR conservando las plantas
-    _parada_total(f"mando manual ({origen})", remote=False, emergencia=False, aviso=False)
+    _pausar_autonomia()
     _schedule(state.broadcast({"type": "asistido", "data": asistido.estado()}))
-    _schedule(state.broadcast({"type": "toast", "data": {
-        "kind": "info", "title": "Mando manual",
-        "message": f"Autonomía «{modo}» en pausa. Reanúdala desde Manejo asistido cuando quieras."}}))
     return modo
 
 
@@ -1809,11 +1827,17 @@ async def _reanudar_autonomia() -> tuple[bool, str, str | None]:
     if not asistido.activa or modo is None:
         return False, "no hay ninguna autonomía interrumpida", None
     meta = asistido.meta_previa
-    if _modo_auto_activo() is not None:
+    en_pausa = any(getattr(o, "pausado", False) for o in (mision_plantas, explorador, patrol) if o is not None)
+    if _modo_auto_activo() is not None and not en_pausa:
         return False, "ya hay una autonomía en marcha", modo
     conductor.parar()
     ok, msg = False, "este modo no se puede reanudar solo"
-    if modo == "exploracion" and explorador is not None:
+    objetos = [o for o in (mision_plantas, explorador, patrol) if o is not None and getattr(o, "pausado", False)]
+    if modo != "nav2" and objetos:
+        for o in objetos:                                # en pausa: se CONTINÚA donde se quedó (plantas, ruta, contadores)
+            o.continuar()
+        ok, msg = True, "continúa donde se quedó"
+    elif modo == "exploracion" and explorador is not None:
         explorador.escaneo_al_iniciar = False
         try:
             ok, msg = explorador.iniciar()
@@ -1873,9 +1897,12 @@ async def _vigia_asistido():
 
 async def asistido_soltar_handler(request: web.Request):
     """POST /api/asistido/soltar — se queda en manual: la autonomía interrumpida NO se reanuda."""
+    hecho = []
+    if asistido.activa:
+        hecho = _parada_total("mando manual: se queda en manual", remote=False, emergencia=False, aviso=False)
     modo = asistido.soltar()
     await state.broadcast({"type": "asistido", "data": asistido.estado()})
-    return web.json_response({"ok": True, "modo_descartado": modo})
+    return web.json_response({"ok": True, "modo_descartado": modo, "detenido": hecho})
 
 
 async def asistido_aplicar_handler(request: web.Request):
@@ -1982,6 +2009,46 @@ def _grabar_video(on: bool):
         print(f"[VIDEO] misión: grabando {_video_file}", flush=True)
     elif not on and video_recording:
         video_recording = False          # el bucle cierra el archivo solo
+
+
+_servo_bajo = ServoBajo()
+
+
+async def _bucle_servo_macetas():
+    """En autonomía, si una maceta está baja en la imagen (o cortada por el borde inferior) la cámara baja para no perderla antes
+    de tocarla (servo_bajo.py). No actúa con el operador al mando, durante barridos de escaneo ni con la visión activa trabajando."""
+    while True:
+        try:
+            await asyncio.sleep(0.5)
+            if not state.config.get("autonomia", {}).get("servo_baja_macetas", True):
+                continue
+            if asistido.activa or camera is None or not _autonomia_activa():
+                continue
+            if vision_activa is not None and vision_activa.estado != "inactiva":
+                continue
+            if patrol is not None and getattr(patrol, "_escaneando", False):
+                continue
+            f = camera.ultimo_frame()
+            if f is None:
+                continue
+            with camera._lock:
+                lista, ts = list(camera._cajas), camera._cajas_ts
+            if ts is None or time.time() - ts > 1.0:
+                continue
+            h = f[0].shape[0]
+            cajas = [b["xyxy"] for b in lista if b.get("class") == "maceta" and float(b.get("confidence", 0)) >= 0.35]
+            nuevo = _servo_bajo.paso(cajas, h, float(state.servo_angle), time.monotonic())
+            if nuevo is not None:
+                state.servo_angle = clamp_servo(float(nuevo))
+                if actuator_proto is not None:
+                    actuator_proto.send_actuator_update()
+                await state.broadcast({"type": "actuator_setpoint",
+                                       "data": {"servo_angle": state.servo_angle, "led": state.led_on}})
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[servo_bajo] falló: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(2.0)
 
 
 def _macetas_ahora():
@@ -4006,6 +4073,7 @@ async def start_background(app: web.Application):
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
     app["vigia_asistido_task"] = asyncio.create_task(_vigia_asistido())
+    app["servo_macetas_task"] = asyncio.create_task(_bucle_servo_macetas())
     app["zupt_task"] = asyncio.create_task(_bucle_zupt())
     app["modo_seguro_task"] = asyncio.create_task(_bucle_modo_seguro())
     global entorno

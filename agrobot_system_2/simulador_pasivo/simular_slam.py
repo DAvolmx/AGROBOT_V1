@@ -34,7 +34,15 @@ CFG_ROBOT = ROS_WS / "src" / "agrobot_navigation" / "config" / "slam_toolbox_map
 DOMINIO = "77"
 AJUSTES_INTERIOR = {"minimum_travel_distance": 0.05, "minimum_travel_heading": 0.10, "loop_search_maximum_distance": 3.0,
                     "link_match_minimum_response_fine": 0.10}
-CONFIGS = {"actual": (False, {}), "caja": (True, {}), "caja_interior": (True, AJUSTES_INTERIOR)}
+# "ayer": slam_toolbox como estaba antes del 2026-10-23 (scans cada 0,2 s y mapa cada 1 s): ¿el mapa se desfasó por haberlos acelerado?
+CONFIGS = {"actual": (False, {}), "caja": (True, {}), "caja_interior": (True, AJUSTES_INTERIOR),
+           "ayer": (True, {"minimum_time_interval": 0.2, "map_update_interval": 1.0}),
+           "ayer_rapido": (True, {"minimum_time_interval": 0.2, "map_update_interval": 1.0, "minimum_travel_heading": 0.35,
+                                  "correlation_search_space_dimension": 0.9}),
+           # giros rápidos (a 100 % el robot gira ~15° entre dos scans): búsqueda angular más ancha, menos castigo al ángulo
+           "giro_ancho": (True, {"coarse_search_angle_offset": 0.52, "angle_variance_penalty": 0.6, "minimum_travel_heading": 0.10}),
+           "busca_ancha": (True, {"correlation_search_space_dimension": 0.9, "link_scan_maximum_distance": 2.5,
+                                  "coarse_search_angle_offset": 0.52, "angle_variance_penalty": 0.6})}
 
 
 def yaml_con(ajustes: dict, destino: Path) -> Path:

@@ -29,8 +29,10 @@ struct Lim {            // % de duty (rampas en %/s; periodo en ms; refuerzo y d
   float periodo = 100;  // ms de la rafaga (0 = PWM continuo)
   float refuerzo = 100; // % de anti-hundimiento (100 = apagado)
   float freno_ms = 80;  // FRENO ACTIVO (ambos pines a HIGH) al parar de verdad; 0 = rueda libre como antes
+  float comp_neg = 0;   // COMPENSACION DEL GIRO (omega<0 = izquierda fisica en este robot): % del ciclo en que las ruedas que van HACIA ATRAS se APAGAN
+  float comp_pos = 0;   // idem para omega>0 (derecha). Medido 2026-10-23: a la izquierda retrocede ~9 cm por toque; a la derecha avanza ~2,5
 };
-constexpr int N_LIM = 11;
+constexpr int N_LIM = 13;
 inline float clip(float x, float a, float b) { return x < a ? a : x > b ? b : x; }
 
 inline bool limValido(const Lim &L) {
@@ -40,7 +42,8 @@ inline bool limValido(const Lim &L) {
          L.frena >= 50 && L.frena <= 1000 && L.tras >= 100 && L.tras <= 200 &&
          L.dif_del >= 0 && L.dif_del <= 100 &&
          (L.periodo == 0 || (L.periodo >= 40 && L.periodo <= 400)) &&
-         L.refuerzo >= 100 && L.refuerzo <= 130 && L.freno_ms >= 0 && L.freno_ms <= 400;
+         L.refuerzo >= 100 && L.refuerzo <= 130 && L.freno_ms >= 0 && L.freno_ms <= 400 &&
+         L.comp_neg >= 0 && L.comp_neg <= 80 && L.comp_pos >= 0 && L.comp_pos <= 80;
 }
 
 struct Out { float d[4]; };   // duty firmado (%), ANTES de aplicar la inversion de cada rueda
@@ -80,6 +83,18 @@ inline float rampa(float cur, float t, float dt, const Lim &L) {
   if (cur == 0) cur = (t > 0 ? 1 : -1) * fminf(fabsf(t), L.minp);   // arranque desde parado
   if (fabsf(t) > fabsf(cur)) return cur + clip(t - cur, -L.acel * dt, L.acel * dt);
   return cur + clip(t - cur, -L.frena * dt, L.frena * dt);
+}
+
+// Compensacion del giro: en un giro (omega != 0) las ruedas que van hacia atras (salida < 0) solo se alimentan la fraccion
+// (1 - comp/100) del ciclo; el resto de ruedas, siempre. esc[i] = fraccion de ciclo ENCENDIDA de la rueda i (1 = sin recorte).
+inline void escala_giro(float omega, const Out &o, const Lim &L, float esc[4]) {
+  float wn = clip(omega / OMEGA_MAX, -1, 1);
+  float c = fabsf(wn) < .02f ? 0.f : (wn < 0 ? L.comp_neg : L.comp_pos);
+  for (int i = 0; i < 4; i++) esc[i] = (c > 0 && o.d[i] < 0) ? 1.f - c / 100.f : 1.f;
+}
+inline float rebanada(float salida, uint32_t t_ms, float esc) {   // ciclo fijo de 100 ms
+  if (esc >= 1.f || salida == 0) return salida;
+  return (float)(t_ms % 100) < 100.f * esc ? salida : 0.f;
 }
 
 // De la envolvente (duty firmado, %) a lo que recibe el motor en este instante (%):

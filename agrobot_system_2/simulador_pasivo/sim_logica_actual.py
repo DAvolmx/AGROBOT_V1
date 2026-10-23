@@ -175,6 +175,8 @@ class Config:
     fu_dif_del: float = 0.0
     fu_periodo: float = 100.0
     fu_refuerzo: float = 100.0
+    fu_comp_neg: float = 0.0
+    fu_comp_pos: float = 0.0
     # --- firmware «MAX FRENTE» (firmware/agrobot_c3_skidsteer_maxfrente): las ruedas delanteras (R1, L1) al 100 % de PWM en
     # el sentido que pida su lado; las traseras (pivote) a tras_factor x el duty proporcional (0 = sin ayuda trasera) ---
     tras_factor: float = 1.0
@@ -547,6 +549,19 @@ def fu_mezclar(v, w, adel, atras, pivote, minp, tras, dif_del, boost=1.0):
     return d
 
 
+def fu_escala_giro(w, d, comp_neg, comp_pos):
+    """Port de fusion::escala_giro: fracción de ciclo ENCENDIDA de cada rueda (1 = sin recorte) en un giro."""
+    wn = max(-1.0, min(1.0, w / SU_OMEGA_MAX))
+    c = 0.0 if abs(wn) < 0.02 else (comp_neg if wn < 0 else comp_pos)
+    return [1.0 - c / 100.0 if (c > 0 and x < 0) else 1.0 for x in d]
+
+
+def fu_rebanada(salida, t_ms, esc):
+    if esc >= 1.0 or salida == 0:
+        return salida
+    return salida if (t_ms % 100) < 100.0 * esc else 0.0
+
+
 def fu_rafaga(env, t_ms, periodo):
     if periodo <= 0:
         return env
@@ -572,12 +587,15 @@ class MotoresFusion:
         self.hi = 0
         self.boost = 1.0
         self.t_mon = 0.0
+        self.esc = [1.0] * 4
 
     def recibir(self, pv, pw, t):
         self.refreshed = t
         c = self.cfg
-        self.t = fu_mezclar(pv * 0.01 * SU_V_MAX, pw * 0.01 * SU_OMEGA_MAX, c.fu_adel, c.fu_atras,
+        w = pw * 0.01 * SU_OMEGA_MAX
+        self.t = fu_mezclar(pv * 0.01 * SU_V_MAX, w, c.fu_adel, c.fu_atras,
                             c.fu_pivote, c.fu_minp, c.fu_tras, c.fu_dif_del, self.boost)
+        self.esc = fu_escala_giro(w, self.t, c.fu_comp_neg, c.fu_comp_pos)
 
     def tick(self, t):
         c = self.cfg
@@ -599,7 +617,7 @@ class MotoresFusion:
                 if self.cur[i] == 0 and prev != 0:
                     self.zero_at[i] = t
         t_ms = int(round(t * 1000))
-        d = [fu_rafaga(x, t_ms, c.fu_periodo) for x in self.cur]
+        d = [fu_rebanada(fu_rafaga(x, t_ms, c.fu_periodo), t_ms, e) for x, e in zip(self.cur, self.esc)]
         return [d[0], d[2], d[3], d[1]]
 
 

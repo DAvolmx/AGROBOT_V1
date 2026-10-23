@@ -1650,6 +1650,7 @@ input[type="text"], select { font-family: inherit; }
                                 (d.reanuda_en_s !== null && d.reanuda_en_s !== undefined ? ` · vuelve en ${d.reanuda_en_s.toFixed(1)} s` : "")
                     : auto ? `autonomía: ${NOMBRE_MODO[auto] || auto}` : "manual";
     $("as-botones").style.display = pausada ? "flex" : "none";
+    if ($("mode-status") && (pausada || isAutonomousMode)) $("mode-status").textContent = pausada ? "AUTÓNOMO · en pausa (mando tuyo)" : "AUTÓNOMO";
     if (document.activeElement !== $("as-reanuda-s") && d.reanuda_s !== undefined) $("as-reanuda-s").value = d.reanuda_s;
     $("as-recientes").innerHTML = (d.recientes || []).slice().reverse().map((e) =>
       `${new Date(e.t * 1000).toLocaleTimeString()} · <b>${e.tipo}</b> · tú v=${e.v} ω=${e.w} · auto v=${e.auto_v} ω=${e.auto_w}`).join("<br>");

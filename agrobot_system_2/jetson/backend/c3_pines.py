@@ -31,7 +31,9 @@ LIMITES = {"adel": (10, 100, 80), "atras": (10, 100, 60), "pivote": (30, 100, 10
            "minp": (0, 100, 50), "acel": (20, 600, 120), "frena": (50, 1000, 300), "tras": (100, 200, 130),
            # solo los entiende el firmware FUSION (agrobot_c3_fusion); el suave no responde a estos ids
            "dif_del": (0, 100, 0), "periodo": (0, 400, 100), "refuerzo": (100, 130, 100),
-           "freno_ms": (0, 400, 80)}
+           "freno_ms": (0, 400, 80),
+           # compensación del giro (solo FUSION): % del ciclo en que se apagan las ruedas que van hacia atrás; neg = giro a la izquierda
+           "comp_neg": (0, 80, 0), "comp_pos": (0, 80, 0)}
 LIM_IDS = list(LIMITES)
 
 

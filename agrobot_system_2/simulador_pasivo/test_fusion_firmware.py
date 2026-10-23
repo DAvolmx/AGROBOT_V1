@@ -26,6 +26,13 @@ def test_mezcla_rampa_y_rafaga_coinciden_con_el_cpp(tmp_path):
         env = rng.choice([0.0, 99.0, -99.0, rng.uniform(-100, 100)]); tms = rng.randrange(0, 100000); per = rng.choice([0, 40, 100, 250, 400])
         casos.append("B %.6f %d %d" % (env, tms, per))
         esperado.append(S.fu_rafaga(env, tms, per))
+    for _ in range(1500):
+        v = rng.choice([0.0, rng.uniform(-0.6, 0.6)]); w = rng.choice([0.0, rng.uniform(-1.6, 1.6)])
+        lim = (rng.choice([60, 100]), rng.choice([60, 100]), rng.choice([60, 100]), rng.choice([0, 30, 100]), rng.choice([100, 150]),
+               rng.choice([0, 100]), rng.choice([0, 30, 60]), rng.choice([0, 30, 60]))
+        casos.append("G %.6f %.6f %d %d %d %d %d %d %d %d" % ((v, w) + lim))
+        d = S.fu_mezclar(v, w, lim[0], lim[1], lim[2], lim[3], lim[4], lim[5])
+        esperado.append(S.fu_escala_giro(w, d, lim[6], lim[7]))
     out = subprocess.run([str(exe)], input="\n".join(casos), capture_output=True, text=True, check=True).stdout.split("\n")
     assert out[0] == "1", "los limites de fabrica del firmware son invalidos"
     out = [o for o in out[1:] if o]

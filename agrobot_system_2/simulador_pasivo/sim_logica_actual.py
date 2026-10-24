@@ -39,6 +39,7 @@ LÍMITES (importan para lo que se puede concluir):
 """
 from __future__ import annotations
 
+import copy
 import math
 import os
 import sys
@@ -213,6 +214,9 @@ class Config:
     rumbo_arco_k: float = 1.5           # omega de corrección por radián de error (modo arco)
     rumbo_arco_max: float = 0.4         # tope de ese omega (rad/s)
     rumbo_aprende: float = 0.3          # rapidez con que aprende hacia qué lado cae el robot en cada pulso recto
+    # Paredes SÓLIDAS (2026-10-24): al chocar, el robot vuelve a su última pose sin contacto y pierde la velocidad (choque inelástico). Antes
+    # atravesaba las paredes y solo contaba un contacto, así que en esquinas "ganaba" saliéndose del mapa. False = comportamiento anterior.
+    paredes_solidas: bool = True
 
     def slam_cfg(self):
         return {"robot_largo_cm": self.robot_largo_cm, "robot_ancho_cm": self.robot_ancho_cm,
@@ -1052,6 +1056,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     prog_ref, prog_t = (x0, y0), 0.0
     correcciones = corr_ejec = bloqueos = avances = 0
     contactos, prev_choque = 0, False
+    ultima_ok, t_choque = None, -9.0
     err, quieto, dist_rec = [], 0, 0.0
     pico_delta = 0.0
     ultimo = robot.centro()
@@ -1214,8 +1219,18 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
             mundo_cerca = MundoSim.cercano(mundo, cx, cy, 0.9)
         cerca_cada -= 1
         choque = H.choca(mundo_cerca, cx, cy, q[2], q[3], geo=robot.geo) if cerca_cada == 4 else prev_choque
-        if choque and not prev_choque:
+        if cfg.paredes_solidas and cerca_cada == 4:
+            if choque and ultima_ok is not None:
+                robot.d = copy.deepcopy(ultima_ok)             # choque inelástico: vuelve a donde no tocaba y se para
+                robot.d.dq[:] = 0.0
+                if hasattr(robot.d, "wheels"):
+                    robot.d.wheels[:] = 0.0
+            elif not choque:
+                ultima_ok = copy.deepcopy(robot.d)
+        if choque and not prev_choque and (t - t_choque > 1.0 or not cfg.paredes_solidas):
             contactos += 1
+        if choque:
+            t_choque = t
         prev_choque = choque
         # Atasco: sin moverse 5 cm en 40 s simulados no va a salir solo; se corta para no
         # gastar minutos de CPU. Cuenta como fallo (progreso lo que lleve).

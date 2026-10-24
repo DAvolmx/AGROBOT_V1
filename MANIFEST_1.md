@@ -15,7 +15,7 @@
 > Cualquier LLM o persona que retome este proyecto debe poder reconstruir
 > el estado completo del sistema leyendo solo este archivo.
 
-Última actualización: 2026-10-23
+Última actualización: 2026-10-24
 
 ---
 
@@ -4900,3 +4900,14 @@ al 80 %/100 %, watchdog del loop). Robot en el pasillo.
   y 62,2 % / 0,60 (AYER); con hardware flojo 74,4 % vs 43,6 % y 41,0 %. Por escenario: exterior huerta 25→100 %, camino de plantas 0→83 %, curva 75→100 %, callejón 46→79 %;
   SIN mejora el eslalon (37,5 %: el robot se aparta de la maceta de un lado y cae sobre la del otro) y poca en campo de rocas (42 %). NO desplegado: `tools/aplicar_resultado_entrenamiento.py`.
 
+### 2026-10-24 — mapas de interior, paredes sólidas, maniobras de esquina, digitalizador
+- **Simulador**: `simulador_pasivo/mapas_interiores.py` (10 mapas: laberintos, pasillos L/S/U, 2 laboratorios, sala con puerta, puerta descentrada, almacén) incluidos en `entorno_calibrado.escenarios("interior")`;
+  exportados a `mundos/interior_*.json` (`exportar_mundos_interiores.py`); suelo `baldosa` en `mundo.py`; visor 3D interior `static/interior_render.js` (SIN probar en navegador).
+- **`sim_logica_actual.Config.paredes_solidas=True`** (REEMPLAZA el comportamiento anterior: el robot atravesaba las paredes y solo contaba 1 contacto): choque inelástico, vuelve a la última pose sin contacto;
+  un contacto nuevo cuenta si pasó > 1 s. TODO resultado de entrenamiento anterior a esto en esquinas es optimista.
+- **`entrenar_intensivo.py`**: espacio ampliado con maniobras `man_*` (giro de N pulsos, retroceso, histéresis, pausa, escape, desaceleración); semilla `MAN`.
+- **Explorador real** (`jetson/backend/explorador.py`): `man_giro_pulsos`, `man_retroceso_cm`, `man_atras_pulsos` (por defecto 1 / 0 / 1 = comportamiento de siempre); `tests/test_explorador_esquina.py` (4 pruebas, sin robot). NO probado en el robot.
+- **Digitalizador** `jetson/backend/digitalizar_mapa.py` + `POST /api/mapas/digitalizar` + `GET /api/mapas/digital/<nombre>/<archivo>` + botón en el dashboard: SVG/DXF/JSON/PNG. Validado con `validar_digitalizacion.py` y `validar_mapa_scan.py` (10 mapas de verdad conocida).
+- **`mapa_scan.py`**: ancla de rumbo por paredes (`manhattan`, APAGADA por defecto: en el banco no mejora, 94-97 % de precisión ya sin ella) y `MARGEN_LIBRE_CELDAS`.
+- **Percepción**: `percepcion_sintetica/entrenar_col_plagas_v2.py` (col + pulgón + negativos): mAP50 pulgón 0,705, 0 cajas en 34 fondos; dano_hoja 0,137 (no mejora). Datasets: `datos_plantas_medicinales/` (2), `datos_plagas_reales/internet/{aphid_generalization,agropest12}`.
+- **Contradicción pendiente**: §0 dice que el signo de rf2o sigue sin corregir; la memoria del proyecto lo da por corregido el 2026-10-23 y no hay entrada que lo respalde.

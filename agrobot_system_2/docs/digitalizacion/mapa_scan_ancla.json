@@ -1,0 +1,1082 @@
+[
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": false,
+  "recall": 69.27272727272728,
+  "precision": 98.9821882951654,
+  "error_cm": 5.295962137402692,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": false,
+  "recall": 67.27272727272727,
+  "precision": 99.73958333333334,
+  "error_cm": 3.798239671013653,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": false,
+  "recall": 63.81818181818182,
+  "precision": 95.8005249343832,
+  "error_cm": 3.715406275824236,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": false,
+  "recall": 54.48113207547169,
+  "precision": 92.97520661157024,
+  "error_cm": 4.767998812013842,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": false,
+  "recall": 64.85849056603774,
+  "precision": 100.0,
+  "error_cm": 1.926501715303447,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": false,
+  "recall": 60.37735849056604,
+  "precision": 99.24528301886792,
+  "error_cm": 3.910202551770909,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": false,
+  "recall": 44.38202247191011,
+  "precision": 99.4413407821229,
+  "error_cm": 2.9279574114998064,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": false,
+  "recall": 42.13483146067416,
+  "precision": 100.0,
+  "error_cm": 3.762443390458106,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": false,
+  "recall": 48.03370786516854,
+  "precision": 100.0,
+  "error_cm": 4.5546735387224295,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": false,
+  "recall": 71.36842105263158,
+  "precision": 82.90816326530613,
+  "error_cm": 4.718421612902795,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": false,
+  "recall": 70.52631578947368,
+  "precision": 99.7289972899729,
+  "error_cm": 2.84177917518229,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": false,
+  "recall": 79.57894736842105,
+  "precision": 99.73614775725594,
+  "error_cm": 2.608502107541117,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": false,
+  "recall": 45.601851851851855,
+  "precision": 100.0,
+  "error_cm": 3.7222032575196393,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": false,
+  "recall": 62.268518518518526,
+  "precision": 99.65156794425087,
+  "error_cm": 4.490787253340957,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": false,
+  "recall": 53.93518518518518,
+  "precision": 96.98113207547169,
+  "error_cm": 2.768835718446398,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": false,
+  "recall": 43.6399217221135,
+  "precision": 98.25581395348837,
+  "error_cm": 3.663567269769789,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": false,
+  "recall": 52.83757338551859,
+  "precision": 95.65217391304348,
+  "error_cm": 4.509051515341705,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": false,
+  "recall": 48.92367906066536,
+  "precision": 83.93939393939394,
+  "error_cm": 5.272311878200711,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": false,
+  "recall": 56.981981981981974,
+  "precision": 96.19047619047619,
+  "error_cm": 4.812852133357729,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": false,
+  "recall": 50.45045045045045,
+  "precision": 96.70846394984326,
+  "error_cm": 4.567967625066332,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": false,
+  "recall": 62.387387387387385,
+  "precision": 96.56203288490283,
+  "error_cm": 3.6165095341213727,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": false,
+  "recall": 68.67469879518072,
+  "precision": 99.43714821763602,
+  "error_cm": 3.62402667783361,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": false,
+  "recall": 83.73493975903614,
+  "precision": 99.46808510638297,
+  "error_cm": 3.902140793519387,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": false,
+  "recall": 68.67469879518072,
+  "precision": 88.25688073394495,
+  "error_cm": 5.436521754016446,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": false,
+  "recall": 68.13186813186813,
+  "precision": 99.36842105263159,
+  "error_cm": 4.617597646590385,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": false,
+  "recall": 91.75824175824175,
+  "precision": 99.82847341337907,
+  "error_cm": 4.324171197190798,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": false,
+  "recall": 84.06593406593407,
+  "precision": 91.28787878787878,
+  "error_cm": 4.838438887153775,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": false,
+  "recall": 62.07513416815742,
+  "precision": 94.86803519061584,
+  "error_cm": 4.694060837833989,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": false,
+  "recall": 70.48300536672629,
+  "precision": 96.74681753889675,
+  "error_cm": 3.8161745908222136,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": false,
+  "recall": 58.139534883720934,
+  "precision": 90.97525473071325,
+  "error_cm": 4.342366640639399,
+  "anclajes": 0,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": true,
+  "recall": 59.81818181818181,
+  "precision": 80.23255813953489,
+  "error_cm": 5.71267171175643,
+  "anclajes": 164,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": true,
+  "recall": 64.9090909090909,
+  "precision": 99.74683544303798,
+  "error_cm": 3.6322279490973095,
+  "anclajes": 164,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": true,
+  "recall": 76.18181818181819,
+  "precision": 99.53703703703704,
+  "error_cm": 3.7492292860446024,
+  "anclajes": 164,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": true,
+  "recall": 62.97169811320755,
+  "precision": 99.27797833935018,
+  "error_cm": 4.281159745345411,
+  "anclajes": 120,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": true,
+  "recall": 59.43396226415094,
+  "precision": 100.0,
+  "error_cm": 3.493325984301167,
+  "anclajes": 120,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": true,
+  "recall": 59.43396226415094,
+  "precision": 99.61538461538461,
+  "error_cm": 2.4894353794583757,
+  "anclajes": 120,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": true,
+  "recall": 36.51685393258427,
+  "precision": 85.79881656804734,
+  "error_cm": 3.9663108050766698,
+  "anclajes": 96,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": true,
+  "recall": 44.10112359550562,
+  "precision": 100.0,
+  "error_cm": 4.721013857751659,
+  "anclajes": 96,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": true,
+  "recall": 57.02247191011236,
+  "precision": 83.66533864541833,
+  "error_cm": 3.2205810287894314,
+  "anclajes": 96,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": true,
+  "recall": 75.36842105263158,
+  "precision": 91.06699751861042,
+  "error_cm": 4.762077875777267,
+  "anclajes": 132,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": true,
+  "recall": 73.89473684210527,
+  "precision": 98.91304347826086,
+  "error_cm": 2.8538711744034195,
+  "anclajes": 132,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": true,
+  "recall": 80.84210526315789,
+  "precision": 97.76674937965261,
+  "error_cm": 3.986557177722111,
+  "anclajes": 132,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": true,
+  "recall": 52.083333333333336,
+  "precision": 94.53125,
+  "error_cm": 3.577523901999349,
+  "anclajes": 124,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": true,
+  "recall": 56.25,
+  "precision": 99.61832061068702,
+  "error_cm": 3.806330432582388,
+  "anclajes": 124,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": true,
+  "recall": 53.00925925925925,
+  "precision": 100.0,
+  "error_cm": 2.424660557642833,
+  "anclajes": 124,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": true,
+  "recall": 52.25048923679061,
+  "precision": 99.71139971139971,
+  "error_cm": 3.6708340279594567,
+  "anclajes": 106,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": true,
+  "recall": 48.14090019569471,
+  "precision": 99.83739837398375,
+  "error_cm": 5.494397218460039,
+  "anclajes": 106,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": true,
+  "recall": 43.24853228962818,
+  "precision": 99.83999999999999,
+  "error_cm": 2.8872482311376104,
+  "anclajes": 106,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": true,
+  "recall": 54.27927927927928,
+  "precision": 93.84615384615384,
+  "error_cm": 5.913023349150724,
+  "anclajes": 106,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": true,
+  "recall": 56.08108108108109,
+  "precision": 83.17307692307693,
+  "error_cm": 6.041605935032889,
+  "anclajes": 106,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": true,
+  "recall": 59.23423423423423,
+  "precision": 100.0,
+  "error_cm": 1.85956856350338,
+  "anclajes": 106,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": true,
+  "recall": 68.67469879518072,
+  "precision": 99.800796812749,
+  "error_cm": 3.3700995472136106,
+  "anclajes": 80,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": true,
+  "recall": 86.14457831325302,
+  "precision": 79.61672473867596,
+  "error_cm": 5.713751517107038,
+  "anclajes": 80,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": true,
+  "recall": 84.33734939759037,
+  "precision": 97.3021582733813,
+  "error_cm": 2.123036132357718,
+  "anclajes": 80,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": true,
+  "recall": 68.13186813186813,
+  "precision": 100.0,
+  "error_cm": 5.61372565870775,
+  "anclajes": 76,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": true,
+  "recall": 97.25274725274726,
+  "precision": 90.55258467023172,
+  "error_cm": 4.7525256848885515,
+  "anclajes": 76,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": true,
+  "recall": 84.06593406593407,
+  "precision": 99.63099630996311,
+  "error_cm": 3.289987364621337,
+  "anclajes": 76,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": true,
+  "recall": 65.11627906976744,
+  "precision": 97.81341107871721,
+  "error_cm": 4.775626308675345,
+  "anclajes": 104,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": true,
+  "recall": 49.55277280858677,
+  "precision": 80.24691358024691,
+  "error_cm": 5.759330185758708,
+  "anclajes": 104,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": true,
+  "recall": 68.87298747763863,
+  "precision": 98.78971255673223,
+  "error_cm": 3.0517356645487923,
+  "anclajes": 104,
+  "nivel": "deriva_1pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": false,
+  "recall": 61.45454545454545,
+  "precision": 91.869918699187,
+  "error_cm": 5.452084846758991,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": false,
+  "recall": 65.45454545454545,
+  "precision": 99.46380697050938,
+  "error_cm": 2.9590299356426213,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": false,
+  "recall": 73.63636363636363,
+  "precision": 100.0,
+  "error_cm": 4.358493194514044,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": false,
+  "recall": 59.43396226415094,
+  "precision": 99.57627118644068,
+  "error_cm": 3.632253779908795,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": false,
+  "recall": 57.311320754716974,
+  "precision": 99.59349593495935,
+  "error_cm": 3.546289185308691,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": false,
+  "recall": 56.839622641509436,
+  "precision": 99.62264150943396,
+  "error_cm": 4.075235549840441,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": false,
+  "recall": 47.19101123595505,
+  "precision": 95.13513513513514,
+  "error_cm": 3.8845336824047463,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": false,
+  "recall": 51.68539325842697,
+  "precision": 97.64150943396226,
+  "error_cm": 2.571376330690221,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": false,
+  "recall": 46.06741573033708,
+  "precision": 98.5,
+  "error_cm": 3.672293447293458,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": false,
+  "recall": 75.1578947368421,
+  "precision": 94.5273631840796,
+  "error_cm": 5.205895264985263,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": false,
+  "recall": 82.94736842105263,
+  "precision": 100.0,
+  "error_cm": 2.9577391993751347,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": false,
+  "recall": 81.05263157894737,
+  "precision": 99.74874371859298,
+  "error_cm": 3.0456909644518033,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": false,
+  "recall": 55.78703703703704,
+  "precision": 93.84057971014492,
+  "error_cm": 5.112506029131976,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": false,
+  "recall": 53.00925925925925,
+  "precision": 100.0,
+  "error_cm": 4.980046062347242,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": false,
+  "recall": 52.54629629629629,
+  "precision": 86.23188405797102,
+  "error_cm": 3.098527603129788,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": false,
+  "recall": 58.31702544031311,
+  "precision": 98.1159420289855,
+  "error_cm": 3.604473544597739,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": false,
+  "recall": 48.7279843444227,
+  "precision": 98.94419306184012,
+  "error_cm": 3.8706286265228047,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": false,
+  "recall": 44.61839530332681,
+  "precision": 87.63197586726999,
+  "error_cm": 5.063237290552998,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": false,
+  "recall": 64.63963963963964,
+  "precision": 95.27326440177252,
+  "error_cm": 4.015479384307653,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": false,
+  "recall": 52.702702702702695,
+  "precision": 95.24539877300614,
+  "error_cm": 4.832413369153295,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": false,
+  "recall": 61.48648648648649,
+  "precision": 95.76642335766424,
+  "error_cm": 3.402641541160404,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": false,
+  "recall": 43.97590361445783,
+  "precision": 89.68692449355433,
+  "error_cm": 4.800135144640275,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": false,
+  "recall": 89.7590361445783,
+  "precision": 99.63833634719711,
+  "error_cm": 6.052873130586766,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": false,
+  "recall": 83.13253012048193,
+  "precision": 96.85314685314685,
+  "error_cm": 4.511497532360206,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": false,
+  "recall": 68.13186813186813,
+  "precision": 99.80314960629921,
+  "error_cm": 3.1506761829981014,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": false,
+  "recall": 86.81318681318682,
+  "precision": 87.58620689655172,
+  "error_cm": 4.958338969074197,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": false,
+  "recall": 91.75824175824175,
+  "precision": 90.59674502712477,
+  "error_cm": 4.2500829063306975,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": false,
+  "recall": 61.35957066189624,
+  "precision": 97.70444763271162,
+  "error_cm": 5.008106882942055,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": false,
+  "recall": 55.635062611806795,
+  "precision": 80.0,
+  "error_cm": 5.642403323453717,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": false,
+  "recall": 69.76744186046511,
+  "precision": 95.0354609929078,
+  "error_cm": 3.5901927672508873,
+  "anclajes": 0,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": true,
+  "recall": 62.36363636363637,
+  "precision": 94.11764705882352,
+  "error_cm": 4.843873271164302,
+  "anclajes": 164,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": true,
+  "recall": 71.45454545454545,
+  "precision": 99.75124378109453,
+  "error_cm": 4.183130640317628,
+  "anclajes": 164,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_serpiente",
+  "manhattan": true,
+  "recall": 73.27272727272728,
+  "precision": 92.04301075268818,
+  "error_cm": 4.270764164976402,
+  "anclajes": 164,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": true,
+  "recall": 57.07547169811321,
+  "precision": 92.96875,
+  "error_cm": 5.515853336711684,
+  "anclajes": 120,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": true,
+  "recall": 58.01886792452831,
+  "precision": 89.00709219858156,
+  "error_cm": 4.131322498167896,
+  "anclajes": 120,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laberinto_estrecho",
+  "manhattan": true,
+  "recall": 57.07547169811321,
+  "precision": 89.27335640138409,
+  "error_cm": 3.6069986843201813,
+  "anclajes": 120,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": true,
+  "recall": 48.03370786516854,
+  "precision": 99.46808510638297,
+  "error_cm": 4.489209774611396,
+  "anclajes": 96,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": true,
+  "recall": 45.50561797752809,
+  "precision": 100.0,
+  "error_cm": 2.1413279377082497,
+  "anclajes": 96,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_L",
+  "manhattan": true,
+  "recall": 56.46067415730337,
+  "precision": 98.7551867219917,
+  "error_cm": 3.5642716128193426,
+  "anclajes": 96,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": true,
+  "recall": 72.42105263157896,
+  "precision": 91.37055837563452,
+  "error_cm": 3.7332136866836363,
+  "anclajes": 132,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": true,
+  "recall": 82.52631578947368,
+  "precision": 99.75786924939467,
+  "error_cm": 2.9723843563900885,
+  "anclajes": 132,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_S",
+  "manhattan": true,
+  "recall": 78.10526315789474,
+  "precision": 95.71788413098237,
+  "error_cm": 4.0557843740055,
+  "anclajes": 132,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": true,
+  "recall": 55.092592592592595,
+  "precision": 98.44357976653697,
+  "error_cm": 4.6638341189495485,
+  "anclajes": 124,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": true,
+  "recall": 51.157407407407405,
+  "precision": 100.0,
+  "error_cm": 4.716179841725941,
+  "anclajes": 124,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "pasillo_U",
+  "manhattan": true,
+  "recall": 54.166666666666664,
+  "precision": 100.0,
+  "error_cm": 4.394886545832171,
+  "anclajes": 124,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": true,
+  "recall": 47.35812133072407,
+  "precision": 99.53051643192488,
+  "error_cm": 3.8866983704849,
+  "anclajes": 106,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": true,
+  "recall": 43.83561643835616,
+  "precision": 96.38932496075353,
+  "error_cm": 4.8325522332209045,
+  "anclajes": 106,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_bancos",
+  "manhattan": true,
+  "recall": 44.61839530332681,
+  "precision": 89.25750394944708,
+  "error_cm": 5.347488559557192,
+  "anclajes": 106,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": true,
+  "recall": 70.04504504504504,
+  "precision": 99.12280701754386,
+  "error_cm": 3.5389109020703495,
+  "anclajes": 106,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": true,
+  "recall": 56.531531531531535,
+  "precision": 95.53571428571429,
+  "error_cm": 5.383350289889038,
+  "anclajes": 106,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "laboratorio_mesas_sillas",
+  "manhattan": true,
+  "recall": 52.47747747747747,
+  "precision": 95.6386292834891,
+  "error_cm": 2.8830933230825706,
+  "anclajes": 106,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": true,
+  "recall": 27.10843373493976,
+  "precision": 77.90697674418605,
+  "error_cm": 4.441384140278898,
+  "anclajes": 80,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": true,
+  "recall": 75.90361445783132,
+  "precision": 79.63302752293579,
+  "error_cm": 6.178870235809286,
+  "anclajes": 80,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "sala_con_puerta",
+  "manhattan": true,
+  "recall": 83.73493975903614,
+  "precision": 98.06338028169014,
+  "error_cm": 4.055886630165457,
+  "anclajes": 80,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": true,
+  "recall": 48.35164835164835,
+  "precision": 88.88888888888889,
+  "error_cm": 4.645995795122159,
+  "anclajes": 76,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": true,
+  "recall": 86.26373626373626,
+  "precision": 97.23756906077348,
+  "error_cm": 4.453527615948918,
+  "anclajes": 76,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "puerta_descentrada",
+  "manhattan": true,
+  "recall": 91.75824175824175,
+  "precision": 99.64601769911503,
+  "error_cm": 4.550465764567002,
+  "anclajes": 76,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": true,
+  "recall": 57.78175313059034,
+  "precision": 91.76136363636364,
+  "error_cm": 5.184667489128187,
+  "anclajes": 104,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": true,
+  "recall": 48.3005366726297,
+  "precision": 74.89114658925979,
+  "error_cm": 6.767880078351006,
+  "anclajes": 104,
+  "nivel": "deriva_3pct"
+ },
+ {
+  "mapa": "almacen_estanterias",
+  "manhattan": true,
+  "recall": 67.62075134168157,
+  "precision": 94.0922190201729,
+  "error_cm": 3.0616635113126693,
+  "anclajes": 104,
+  "nivel": "deriva_3pct"
+ }
+]

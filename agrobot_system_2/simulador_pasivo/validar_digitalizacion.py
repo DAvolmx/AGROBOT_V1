@@ -20,15 +20,23 @@ import mapas_interiores as MI          # noqa: E402
 import sim_logica_actual as S          # noqa: E402
 
 
-def recorrido(e, paso=0.1):
-    """Puntos (x, y, rumbo) a lo largo de la línea central (ida y vuelta para ver las dos caras de las paredes)."""
+def recorrido(e, paso=0.1, giro_deg=2.5):
+    """Puntos (x, y, rumbo) a lo largo de la línea central. En cada esquina el robot gira en su sitio de `giro_deg` en `giro_deg`
+    (≈0,25 rad/s a 10 Hz: como el robot real, que no gira más rápido que 0,6 rad/s)."""
     c = list(e.linea_central) if e.linea_central else [(0.0, 0.0), tuple(e.meta_xy or (e.goal_x, 0.0))]
     ida = []
+    th_prev = None
     for (ax, ay), (bx, by) in zip(c, c[1:]):
+        th = math.atan2(by - ay, bx - ax)
+        if th_prev is not None:
+            d = (th - th_prev + math.pi) % (2 * math.pi) - math.pi
+            n = int(abs(math.degrees(d)) / giro_deg)
+            ida += [(ax, ay, th_prev + d * (i + 1) / (n + 1)) for i in range(n)]
         L = math.hypot(bx - ax, by - ay)
         n = max(1, int(L / paso))
         for i in range(n):
-            ida.append((ax + (bx - ax) * i / n, ay + (by - ay) * i / n, math.atan2(by - ay, bx - ax)))
+            ida.append((ax + (bx - ax) * i / n, ay + (by - ay) * i / n, th))
+        th_prev = th
     ida.append((*c[-1], ida[-1][2]))
     return ida
 

@@ -669,8 +669,29 @@ class ExploradorReactivo:
                     self.estado = (f"girando a la {lado} (frente {frente:.2f} m"
                                    + (" · arco" if maniobra else ", pivote") + ")")
                     self._ultimo_lado = lado
+                    # Maniobra de esquina (2026-10-24, simulada en sim_logica_actual: man_*): si el frente está muy cerca, primero se retrocede
+                    # `man_atras_pulsos` pulsos y luego se gira `man_giro_pulsos` seguidos (se corta si el frente ya quedó libre).
+                    # Con los valores por defecto (0 / 1 / 1) es el comportamiento de siempre.
+                    n_atras = max(1, int(cfg.get("man_atras_pulsos", 1)))
+                    n_giro = max(1, int(cfg.get("man_giro_pulsos", 1)))
+                    ret_cm = float(cfg.get("man_retroceso_cm", 0.0))
+                    if ret_cm > 0 and frente < ret_cm / 100.0 and atras >= max(retro_libre, 0.30):
+                        self.estado = f"esquina: retrocedo {n_atras} pulso(s) (frente {frente:.2f} m)"
+                        for _ in range(n_atras):
+                            self._conducir("atras", maniobra=False)
+                            await asyncio.sleep(1.05)
+                            if self._hueco(self._distancias(), "atras") < 0.30:
+                                break
                     self._conducir(lado, maniobra=maniobra)
                     self.giros += 1
+                    for _ in range(n_giro - 1):
+                        await asyncio.sleep(1.05)
+                        if not self.activo or self.pausado or time.monotonic() < self._mando_cedido_hasta:
+                            break
+                        if self._hueco(self._distancias(), "adelante") >= avance_libre + 0.30:
+                            break                   # el frente ya está despejado: no hace falta seguir girando
+                        self._conducir(lado, maniobra=maniobra)
+                        self.giros += 1
                     if cfg.get("rumbo_fusion_activo", False) and float(cfg.get("man_pausa_s", 0.0)) > 0:
                         await asyncio.sleep(float(cfg["man_pausa_s"]))     # deja que el LIDAR se asiente antes de decidir
                     continue

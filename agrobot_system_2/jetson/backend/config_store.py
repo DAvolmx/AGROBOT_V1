@@ -131,6 +131,10 @@ DEFAULTS = {
         "rumbo_pulso_escala": 0.3,       # duración del pulso de corrección de rumbo respecto al giro normal
         "man_histeresis_cm": 12.0,
         "man_pausa_s": 0.0,
+        # Maniobra de esquina (2026-10-24): 1 / 0 / 1 = comportamiento de siempre. Valores del simulador: ver docs/REPORTE_MEJORAS_20261024.
+        "man_giro_pulsos": 1,
+        "man_retroceso_cm": 0.0,
+        "man_atras_pulsos": 1,
         # Acelerador que usan los pulsos del modo exploración, como fracción
         # del máximo. Los motores no bajan de ~78 % de potencia, así que esto
         # solo limita el tope; para ir "despacio" lo que vale son los pulsos.

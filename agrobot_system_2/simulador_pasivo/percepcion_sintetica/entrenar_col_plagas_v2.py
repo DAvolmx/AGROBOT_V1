@@ -89,21 +89,23 @@ def main():
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--modelo", default=str(RAIZ / "jetson" / "backend" / "models" / "yolo11n.pt"))
     ap.add_argument("--nombre", default="col_plagas_v2")
+    ap.add_argument("--solo-eval", action="store_true", help="no entrena: solo mide el best.pt ya existente")
     a = ap.parse_args()
     from ultralytics import YOLO
-    n = preparar()
+    n = preparar() if not a.solo_eval else {"nota": "dataset ya preparado"}
     print("dataset:", n, flush=True)
     t0 = time.time()
     m = YOLO(a.modelo)
-    m.train(data=str(SAL / "data.yaml"), epochs=a.epocas, imgsz=640, batch=a.batch, workers=2, device=0, project=str(AQUI / "modelos" / "yolo"),
-            name=a.nombre, exist_ok=True, patience=12, cache=False, plots=False, verbose=False, amp=True)
+    if not a.solo_eval:
+      m.train(data=str(SAL / "data.yaml"), epochs=a.epocas, imgsz=640, batch=a.batch, workers=2, device=0, project=str(AQUI / "modelos" / "yolo"),
+              name=a.nombre, exist_ok=True, patience=12, cache=False, plots=False, verbose=False, amp=True)
     best = AQUI / "modelos" / "yolo" / a.nombre / "weights" / "best.pt"
     mb = YOLO(str(best))
     v = mb.val(data=str(SAL / "data.yaml"), split="val", imgsz=640, device=0, plots=False, verbose=False)
     por = {NOMBRES[int(c)]: round(float(x), 3) for c, x in zip(v.box.ap_class_index, v.box.ap50)}
     # falsos positivos: cajas por foto sobre fondos reservados (val de negativos) y sobre las coles reales del operador
     def cajas(carpeta, conf=0.35):
-        fs = sorted(glob.glob(str(carpeta / "*.*")))[:120]
+        fs = [f for f in sorted(glob.glob(str(carpeta / "*.*")))[:200] if cv2.imread(f) is not None][:120]   # HEIC/WebP ilegibles se saltan
         tot, por_cls = 0, {k: 0 for k in NOMBRES}
         for r in mb.predict(fs, conf=conf, imgsz=640, device=0, verbose=False):
             for c in r.boxes.cls.tolist():

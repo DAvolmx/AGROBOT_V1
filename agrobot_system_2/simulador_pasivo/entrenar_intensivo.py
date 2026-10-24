@@ -38,6 +38,8 @@ HOY = {"escala_int": 0.13, "escala_ext": 0.5, "suavidad_duty": 0.35, "suavidad_p
        "man_giro_pulsos": 1, "man_retroceso_cm": 0, "man_atras_pulsos": 1, "man_histeresis_cm": 0, "man_pausa_s": 0,
        "man_escape_s": 6, "man_desacel_cm": 0, "man_desacel_factor": 0.6}
 AYER = dict(HOY, fu_freno_ms=0, fu_comp_neg=0, fu_frena=300, fu_acel=120)           # firmware de esta mañana: sin freno ni compensación
+# Semilla con maniobras de esquina (2026-10-24, paredes sólidas: pasillo_L 2/2, curva 2/2, callejón 1/1; ver docs): retroceso + giro de 4 pulsos
+MAN = dict(HOY, man_giro_pulsos=4, man_retroceso_cm=20, man_atras_pulsos=2, man_histeresis_cm=15, man_pausa_s=0.5, man_escape_s=10, avance_libre_int=60)
 PESO = {"interior": 0.7, "exterior": 0.3}
 
 
@@ -157,7 +159,7 @@ def main():
     previo = None
     if a.inicio:
         previo = json.loads(Path(a.inicio).read_text())["mejor"]["params"]
-    mu = a_unidad(previo or HOY)
+    mu = a_unidad(previo or MAN)
     sd = np.full(len(CLAVES), a.sd)
     rng = np.random.default_rng(20261023)
     hist, archivo = [], []
@@ -166,7 +168,7 @@ def main():
         # referencia de partida (la config de hoy en las semillas de la gen 0) para ver cuánto se mejora
         while time.time() < fin_busqueda and gen < a.gens_max:
             gen += 1
-            pob = [de_unidad(mu)] + ([HOY] + ([previo] if previo else []) if gen == 1 else []) + [de_unidad(mu + sd * rng.standard_normal(len(CLAVES))) for _ in range(a.pob)]
+            pob = [de_unidad(mu)] + ([HOY, MAN] + ([previo] if previo else []) if gen == 1 else []) + [de_unidad(mu + sd * rng.standard_normal(len(CLAVES))) for _ in range(a.pob)]
             pob = pob[:a.pob]
             si = [100 + gen * 7 + k for k in range(a.semillas_gen)]         # semillas nuevas cada generación (con numba un episodio dura ~1 s)
             se = [200 + gen * 7 + k for k in range(a.semillas_gen)]
@@ -200,8 +202,8 @@ def main():
             if len(cand) == 6:
                 break
         cand.append(de_unidad(mu))
-        nombres = [f"top{i+1}" for i in range(len(cand) - 1)] + ["media_final", "HOY", "AYER"]
-        todos = cand + [HOY, AYER]
+        nombres = [f"top{i+1}" for i in range(len(cand) - 1)] + ["media_final", "HOY", "AYER", "MAN"]
+        todos = cand + [HOY, AYER, MAN]
         if previo:
             nombres.append("ronda1")
             todos.append(previo)

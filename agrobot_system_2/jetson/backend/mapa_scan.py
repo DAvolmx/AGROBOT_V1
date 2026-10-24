@@ -26,10 +26,20 @@ BUSQUEDA_DEG, PASO_DEG = 2.0, 1.0
 CORR_MAX_M, CORR_MAX_DEG = 0.30, 10.0
 MIN_IMPACTOS_ALINEAR = 150      # con menos mapa que esto no hay contra qué alinear
 MARGEN_RECORTE = 10             # celdas
+MARGEN_LIBRE_CELDAS = 1.0       # el rayo libre se detiene tantas celdas antes del impacto (con el ruido del LIDAR, 1 borraba muros vistos de refilón)
+# Ancla de rumbo por paredes (2026-10-24): en interiores los muros son ortogonales, así que el ángulo de los muros módulo 90° es una
+# referencia global que la deriva del giroscopio/ICP no tiene. Se fija con los primeros scans nítidos y cada scan nítido empuja
+# suavemente el rumbo corregido hacia ella. Solo actúa con muros claros (concentración alta) y errores pequeños: en exteriores o con
+# curvas no hay concentración y no hace nada.
+MANHATTAN_CONC_MIN = 0.60       # |Σ w e^{i4θ}| / Σ w: 1 = todos los segmentos paralelos o perpendiculares
+MANHATTAN_ERR_MAX_DEG = 8.0     # más error que esto = probablemente no es la misma orientación (otra sala girada): no se toca
+MANHATTAN_GANANCIA = 0.15
+MANHATTAN_SCANS_INICIO = 5      # scans nítidos para fijar el eje
 
 
 class MapaScan:
-    def __init__(self, res: float = RES_M, lado_m: float = LADO_M):
+    def __init__(self, res: float = RES_M, lado_m: float = LADO_M, manhattan: bool = False):
+        self.manhattan = manhattan
         self.res = res
         self.n = int(round(lado_m / res))
         self.origen = -lado_m / 2
@@ -38,6 +48,10 @@ class MapaScan:
     def reiniciar(self):
         self.L = np.zeros((self.n, self.n), dtype=np.float32)
         self.corr = np.zeros(3)                    # dx, dy, dtheta(rad) sobre la pose de slam
+        self._eje_z = 0j                           # eje del edificio como número complejo e^{i4θ} (se promedia en 4θ por la simetría de 90°)
+        self._eje_n = 0
+        self.eje_deg = None                        # eje fijado (grados, módulo 90) o None
+        self.anclajes = 0                          # veces que el ancla empujó el rumbo
         self._previa = None                        # (t, pose) para la velocidad angular
         self.version = 0
         self.impactos = 0
@@ -59,6 +73,39 @@ class MapaScan:
 
     def _dentro(self, iy, ix):
         return (iy >= 0) & (iy < self.n) & (ix >= 0) & (ix < self.n)
+
+    # ---- ancla de rumbo por paredes
+    @staticmethod
+    def _angulo_muros(lx, ly):
+        """(φ, concentración): orientación dominante de los muros del scan módulo 90° (marco del robot) y qué tan clara es."""
+        o = np.argsort(np.arctan2(ly, lx))
+        px, py = lx[o], ly[o]
+        K = 4                                   # base de 4 puntos: con el ruido del LIDAR (~1-2 cm) los vecinos inmediatos dan direcciones al azar
+        dx, dy = px[K:] - px[:-K], py[K:] - py[:-K]
+        L = np.hypot(dx, dy)
+        ok = (L > 0.12) & (L < 0.60)
+        if ok.sum() < 20:
+            return None, 0.0
+        z = (L[ok] * np.exp(4j * np.arctan2(dy[ok], dx[ok]))).sum()
+        return float(np.angle(z) / 4.0), float(abs(z) / L[ok].sum())
+
+    def _anclar(self, lx, ly, th_total):
+        """Devuelve la corrección de rumbo (rad) que acerca el rumbo total a la ortogonalidad del eje fijado, o 0."""
+        phi, conc = self._angulo_muros(lx, ly)
+        if phi is None or conc < MANHATTAN_CONC_MIN:
+            return 0.0
+        z = np.exp(4j * (phi + th_total))
+        if self._eje_n < MANHATTAN_SCANS_INICIO:
+            self._eje_z += z
+            self._eje_n += 1
+            if self._eje_n == MANHATTAN_SCANS_INICIO:
+                self.eje_deg = math.degrees(np.angle(self._eje_z) / 4.0) % 90.0
+            return 0.0
+        err = np.angle(z / np.exp(1j * np.angle(self._eje_z))) / 4.0          # en (-45°, 45°]
+        if abs(math.degrees(err)) > MANHATTAN_ERR_MAX_DEG:
+            return 0.0
+        self.anclajes += 1
+        return -MANHATTAN_GANANCIA * err
 
     # ---- alineación scan-to-map
     def _alinear(self, lx, ly, x, y, th):
@@ -103,6 +150,10 @@ class MapaScan:
             return False
         lx, ly = self._puntos_robot(angulos_deg[v], dist_m[v])
         self.corr = self._alinear(lx, ly, x, y, th)
+        if self.manhattan:
+            d = self._anclar(lx, ly, th + self.corr[2])
+            if d:
+                self.corr[2] = float(np.clip(self.corr[2] + d, -math.radians(CORR_MAX_DEG), math.radians(CORR_MAX_DEG)))
         cx, cy, cth = x + self.corr[0], y + self.corr[1], th + self.corr[2]
         wx, wy = self._a_mapa(lx, ly, cx, cy, cth)
         # libre: muestras a lo largo de cada rayo hasta justo antes del impacto
@@ -111,7 +162,7 @@ class MapaScan:
         ux, uy = (wx - cx) / largo, (wy - cy) / largo
         paso = (np.arange(m) * self.res * 0.9)[None, :]                    # muestras cada ~4,5 cm: ninguna celda del rayo se salta
         fx, fy = cx + ux[:, None] * paso, cy + uy[:, None] * paso
-        mascara = paso < (largo[:, None] - self.res)
+        mascara = paso < (largo[:, None] - MARGEN_LIBRE_CELDAS * self.res)
         iy, ix = self._celdas(fx[mascara], fy[mascara])
         ok = self._dentro(iy, ix)
         libre = np.zeros_like(self.L, dtype=bool)

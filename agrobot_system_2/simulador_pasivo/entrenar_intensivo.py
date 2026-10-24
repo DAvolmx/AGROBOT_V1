@@ -30,7 +30,7 @@ ESPACIO = {
     "man_histeresis_cm": ("u", 0, 30), "man_pausa_s": ("u", 0, 1.5), "man_escape_s": ("u", 6, 30),
     "man_desacel_cm": ("u", 0, 100), "man_desacel_factor": ("u", 0.4, 1.0),
 }
-ENTEROS = ("man_giro_pulsos", "man_atras_pulsos")
+ENTEROS = ("man_giro_pulsos", "man_atras_pulsos", "mx_giro_largo")
 CLAVES = list(ESPACIO)
 HOY = {"escala_int": 0.13, "escala_ext": 0.5, "suavidad_duty": 0.35, "suavidad_periodo_s": 0.2, "sendero_tol_cm": 10,
        "avance_libre_int": 40, "avance_libre_ext": 100, "cono_int": 45, "cono_ext": 20, "fu_adel": 100, "fu_pivote": 100,

@@ -135,6 +135,16 @@ DEFAULTS = {
         "man_giro_pulsos": 1,
         "man_retroceso_cm": 0.0,
         "man_atras_pulsos": 1,
+        # Maniobras específicas (2026-10-24; simuladas por misiones). TODAS APAGADAS: ir al hueco del scan, rumbo a la meta y escape de nicho.
+        "mx_hueco": False,
+        "mx_hueco_m": 1.0,
+        "mx_grados_pulso": 6.0,
+        "mx_meta": False,
+        "mx_rumbo_tol_deg": 25.0,
+        "mx_bordear_s": 12.0,
+        "mx_anti_dither": False,
+        "mx_ventana_s": 25.0,
+        "mx_giro_largo": 5,
         # Guardián del sendero (2026-10-24, guardian_sendero.py). APAGADO: se prueba primero en un pasillo con el robot en el suelo.
         "guardian_sendero_activo": False,
         "guardian_tol_cm": 6.0,

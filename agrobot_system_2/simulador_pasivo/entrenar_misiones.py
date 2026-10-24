@@ -21,28 +21,38 @@ import sim_logica_actual as S
 
 ESPACIO = dict(EI.ESPACIO)
 ESPACIO.update({"mis_dist_insp_m": ("u", 0.30, 0.90), "mis_escaneo_s": ("u", 3.0, 12.0),
-                "guardian_tol_cm": ("u", 3.0, 10.0), "guardian_tol_deg": ("u", 2.0, 8.0)})
+                "guardian_tol_cm": ("u", 3.0, 10.0), "guardian_tol_deg": ("u", 2.0, 8.0),
+                # maniobras específicas (ir al hueco, rumbo a la meta, escape de nicho)
+                "mx_hueco_m": ("u", 0.6, 1.5), "mx_grados_pulso": ("u", 3.0, 10.0), "mx_giro_largo": ("u", 3, 9), "mx_bordear_s": ("u", 5.0, 25.0),
+                "mx_rumbo_tol_deg": ("u", 12.0, 40.0), "mx_ventana_s": ("u", 15.0, 40.0)})
+ESPACIO_ENTEROS = ("mx_giro_largo",)
 CLAVES = list(ESPACIO)
 EI.ESPACIO, EI.CLAVES = ESPACIO, CLAVES               # a_unidad / de_unidad de entrenar_intensivo usan estas globales
-EXTRA_HOY = {"mis_dist_insp_m": 0.5, "mis_escaneo_s": 8.0, "guardian_tol_cm": 6.0, "guardian_tol_deg": 4.0}
+EXTRA_HOY = {"mis_dist_insp_m": 0.5, "mis_escaneo_s": 8.0, "guardian_tol_cm": 6.0, "guardian_tol_deg": 4.0,
+             "mx_hueco_m": 1.0, "mx_grados_pulso": 6.0, "mx_giro_largo": 5, "mx_bordear_s": 12.0, "mx_rumbo_tol_deg": 25.0, "mx_ventana_s": 25.0}
 HOY = dict(EI.HOY, **EXTRA_HOY)
 MAN = dict(EI.MAN, **EXTRA_HOY)
 NOMBRES = list(MS.misiones(0))
 
 
-def campos(p, entorno, guardian=True):
+def campos(p, entorno, guardian=True, mx=True):
     c = EI.campos(p, entorno)
+    if mx:
+        c.update(mx_hueco=True, mx_meta=True, mx_anti_dither=True, mx_hueco_m=p.get("mx_hueco_m", 1.0), mx_grados_pulso=p.get("mx_grados_pulso", 6.0),
+                 mx_giro_largo=int(round(p.get("mx_giro_largo", 5))), mx_bordear_s=p.get("mx_bordear_s", 12.0),
+                 mx_rumbo_tol_deg=p.get("mx_rumbo_tol_deg", 25.0), mx_ventana_s=p.get("mx_ventana_s", 25.0))
     c.update(mision=True, guardian=guardian, guardian_usar_memoria=False, guardian_tol_cm=p.get("guardian_tol_cm", 6.0),
              guardian_tol_deg=p.get("guardian_tol_deg", 4.0), mis_dist_insp_m=p.get("mis_dist_insp_m", 0.5), mis_escaneo_s=p.get("mis_escaneo_s", 8.0))
     return c
 
 
 def _job(a):
-    p, nombre, semilla, extremo, guardian = a
+    p, nombre, semilla, extremo, modo = a
+    guardian, mx = modo if isinstance(modo, tuple) else (modo, modo)
     try:
         ent, esc = MS.misiones(semilla)[nombre]
         S.SUBSTEP = 0.005
-        r = S.episodio(esc, S.Config(**campos(p, ent, guardian)), semilla, EC.hip(semilla, extremo))
+        r = S.episodio(esc, S.Config(**campos(p, ent, guardian, mx)), semilla, EC.hip(semilla, extremo))
         m = r["mision"]
         return {"mision": nombre, "seed": semilla, "costo": MS.costo(r), "exito": MS.exito(r), "llego": bool(r["llego"]), "contactos": int(r["contactos"]),
                 "progreso": float(r["progreso"]), "t_s": float(r["t_s"]), "rmse_cm": float(r["rmse_cm"]), "plantas": m["plantas"], "detectadas": m["detectadas"],
@@ -98,14 +108,22 @@ def main():
         log.flush()
     for k, v in EXTRA_HOY.items():
         EI.HOY.setdefault(k, v)
-    mu = EI.a_unidad(MAN)
+    import glob as _g
+    previos = sorted(_g.glob(str(Path.home() / ".agrobot/aprendizaje/misiones_2026*/historial.json")))
+    arranque = dict(MAN)
+    if previos:
+        try:
+            arranque = dict(EXTRA_HOY, **json.load(open(previos[-1]))["archivo_top"][0]["params"])    # mejor de la corrida anterior (sin maniobras nuevas)
+        except (OSError, ValueError, KeyError, IndexError):
+            pass
+    mu = EI.a_unidad(arranque)
     sd = np.full(len(CLAVES), a.sd)
     rng = np.random.default_rng(20261024)
     hist, archivo, gen = [], [], 0
     with Pool(a.procs) as pool:
         while time.time() < fin:
             gen += 1
-            pob = [EI.de_unidad(mu)] + ([MAN] if gen == 1 else [])
+            pob = [EI.de_unidad(mu)] + ([MAN, arranque] if gen == 1 else [])
             pob += [EI.de_unidad(mu + sd * rng.standard_normal(len(CLAVES))) for _ in range(a.pob)]
             pob = pob[:a.pob]
             semillas = [300 + gen * 5 + k for k in range(a.semillas_gen)]
@@ -135,10 +153,9 @@ def main():
             if len(cand) == 5:
                 break
         cand.append(EI.de_unidad(mu))
-        nombres = [f"top{i+1}" for i in range(len(cand) - 1)] + ["media_final", "HOY_con_guardian", "HOY_sin_guardian", "ROBOT_DE_HOY"]
-        # ROBOT_DE_HOY = parámetros de hoy sin guardián ni maniobras (HOY ya las trae apagadas) y sin misión inteligente
+        nombres = [f"top{i+1}" for i in range(len(cand) - 1)] + ["media_final", "HOY_con_guardian_y_maniobras", "HOY_con_guardian", "ROBOT_DE_HOY"]
         todos = cand + [HOY, HOY, HOY]
-        gflags = [True] * len(cand) + [True, False, False]
+        gflags = [(True, True)] * len(cand) + [(True, True), (True, False), (False, False)]
         semillas = list(range(7000, 7000 + a.val_semillas))
         val = evaluar(pool, todos, semillas, guardian=gflags)
         filas = [{"nombre": n, "params": p, **resumen(r)} for n, p, r in zip(nombres, todos, val)]
@@ -147,8 +164,8 @@ def main():
         mejor = min(filas[:len(cand)], key=lambda f: f["todo"]["costo"])
         say("mejor validado:", mejor["nombre"])
         say("== ESTRÉS (hardware más flojo) ==")
-        est = evaluar(pool, [mejor["params"], HOY, HOY], list(range(8000, 8000 + a.estres_semillas)), extremo=True, guardian=[True, True, False])
-        estres = {n: resumen(r) for n, r in zip(["mejor", "HOY_con_guardian", "HOY_sin_guardian"], est)}
+        est = evaluar(pool, [mejor["params"], HOY, HOY], list(range(8000, 8000 + a.estres_semillas)), extremo=True, guardian=[(True, True), (True, False), (False, False)])
+        estres = {n: resumen(r) for n, r in zip(["mejor", "HOY_con_guardian", "ROBOT_DE_HOY"], est)}
         for n, v in estres.items():
             say(f"  {n:18s} {v['todo']}")
     json.dump({"duracion_min": round((time.time() - t0) / 60), "generaciones": gen, "historial": hist, "validacion": filas,

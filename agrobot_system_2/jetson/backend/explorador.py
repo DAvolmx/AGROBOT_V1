@@ -139,6 +139,15 @@ class ExploradorReactivo:
         self._corr_propia = False          # el pulso en curso es una corrección de rumbo (no reinicia la referencia)
         self.correcciones_rumbo = 0
         # Guardián del sendero (guardian_sendero.py): se asigna desde fuera; sin él (o con autonomia.guardian_sendero_activo=false) no hace nada.
+        # Maniobras específicas (2026-10-24, validadas en el simulador por misiones; todas con interruptor en autonomia.mx_*): ir al hueco,
+        # rumbo a la meta y escape de nicho.
+        self.scan_cb = None                 # () -> [{angle_deg, distance_m}] el último scan del LIDAR (0° = adelante, + = izquierda)
+        self._rectos = 0
+        self._bloq = 0
+        self._hist: list = []
+        self._commit = None
+        self._commit_hasta = 0.0
+        self.mx_escapes = 0
         self.guardian = None
         self.sensores_guardian = None       # () -> dict: LIDAR + cámara + IMU (ver jetson_server._sensores_guardian)
 
@@ -498,6 +507,9 @@ class ExploradorReactivo:
                 frente = self._hueco(d, "adelante")
                 atras = self._hueco(d, "atras")
                 izq, der = self._hueco(d, "izquierda"), self._hueco(d, "derecha")
+                if cfg.get("mx_anti_dither", False) and self._atrapado(cfg):
+                    await self._escape_nicho(cfg, d)
+                    continue
                 # En el eje pasivo no existe giro sobre el sitio: retrocede en
                 # un pulso protegido por el LIDAR hasta dejar hueco para un arco.
                 margen_giro = float(cfg.get("espacio_giro_eje_pasivo_m", 0.65))
@@ -539,6 +551,15 @@ class ExploradorReactivo:
                         self._sin_corregir = 0
                         continue
 
+                # Rumbo a la meta con el frente libre y espacio a los lados (campo abierto): un giro hacia ella cada 3 pulsos rectos como mucho.
+                if (cfg.get("mx_meta", False) and frente > 1.0 and izq > 0.6 and der > 0.6 and self._rectos >= 3 and not self._corr_propia):
+                    eb = self._rumbo_meta_rad()
+                    if eb is not None and abs(eb) > math.radians(float(cfg.get("mx_rumbo_tol_deg", 25.0))):
+                        self.estado = f"rumbo a la meta ({math.degrees(eb):+.0f}°)"
+                        self._conducir("izquierda" if eb > 0 else "derecha", maniobra=False)
+                        self._rectos = 0
+                        self.correcciones += 1
+                        continue
                 # Guardián del sendero: mide el error contra la referencia, correlaciona LIDAR + IMU + cámara con lo que funcionó antes y
                 # corrige con un pulso; APUNTA qué hizo y qué resultó (JSONL + memoria). Apagado por defecto.
                 if (frente >= avance_libre and self.guardian is not None and cfg.get("guardian_sendero_activo", False)
@@ -643,6 +664,7 @@ class ExploradorReactivo:
                         continue
                     self.estado = f"avanzando ({frente:.2f} m libres)"
                     self._conducir("adelante")
+                    self._rectos += 1
                     if self._rumbo_corr is not None and self._rumbo_ref is not None:
                         pose_r = self._get_pose()
                         if pose_r:
@@ -671,6 +693,16 @@ class ExploradorReactivo:
                         and self._hueco(d, self._ultimo_lado) >= lado_libre:
                     lado = self._ultimo_lado          # lados casi iguales: repite el último giro en vez de titubear
                 if self._hueco(d, lado) >= lado_libre:
+                    self._bloq += 1
+                    gap = None
+                    if cfg.get("mx_hueco", False):
+                        con_meta = self._rumbo_meta_rad() is not None
+                        gap = self._mejor_hueco(float(cfg.get("mx_hueco_m", 1.0)), 1.0 if con_meta else 0.2) or \
+                            self._mejor_hueco(0.6, 1.0 if con_meta else 0.2)
+                        if gap is not None and abs(math.degrees(gap)) >= 4.0 and self._hueco(d, "izquierda" if gap > 0 else "derecha") >= lado_libre:
+                            lado = "izquierda" if gap > 0 else "derecha"
+                    elif cfg.get("mx_meta", False) and self._commit and time.monotonic() < self._commit_hasta and self._hueco(d, self._commit) >= 0.30:
+                        lado = self._commit
                     maniobra = self._giro_con_arco_seguro(d)
                     if (not maniobra and cfg.get(
                             "arco_frontal_si_giro_pasivo_bloqueado", False)):
@@ -688,6 +720,8 @@ class ExploradorReactivo:
                     # Con los valores por defecto (0 / 1 / 1) es el comportamiento de siempre.
                     n_atras = max(1, int(cfg.get("man_atras_pulsos", 1)))
                     n_giro = max(1, int(cfg.get("man_giro_pulsos", 1)))
+                    if gap is not None:
+                        n_giro = int(max(1, min(9, round(abs(math.degrees(gap)) / float(cfg.get("mx_grados_pulso", 6.0))))))
                     ret_cm = float(cfg.get("man_retroceso_cm", 0.0))
                     if ret_cm > 0 and frente < ret_cm / 100.0 and atras >= max(retro_libre, 0.30):
                         self.estado = f"esquina: retrocedo {n_atras} pulso(s) (frente {frente:.2f} m)"
@@ -736,6 +770,88 @@ class ExploradorReactivo:
             # este bucle es el que conduce el robot.
             print(f"[exploración] bucle abortado: {type(exc).__name__}: {exc}\n"
                   + traceback.format_exc(), flush=True)
+
+    def _rumbo_meta_rad(self):
+        """Error de rumbo hacia la meta en rad (+ = la meta queda a la izquierda) o None si no hay meta."""
+        if self._rumbo_objetivo is None:
+            return None
+        info = self._rumbo_objetivo()
+        if info is None or info[1] < 0.3:
+            return None
+        return math.radians(info[0])
+
+    def _mejor_hueco(self, necesita: float, peso_meta: float):
+        """Ángulo (rad, + = izquierda) hacia el centro del hueco libre más conveniente en el scan, o None.
+        Un rumbo es libre si el rayo llega a `necesita` m; se erosiona ±12° para que el robot quepa; se prefiere el más cercano a la meta."""
+        scan = self.scan_cb() if self.scan_cb else None
+        if not scan:
+            return None
+        r = [math.inf] * 181                                        # -90..90° de 1° en 1°
+        for q in scan:
+            a = int(round(q["angle_deg"]))
+            a = a - 360 if a > 180 else a
+            if -90 <= a <= 90:
+                r[a + 90] = min(r[a + 90], q["distance_m"])
+        libre = [1 if v >= necesita else 0 for v in r]
+        k = 12
+        er = [1 if (i - k >= 0 and i + k <= 180 and all(libre[i - k:i + k + 1])) else 0 for i in range(181)]
+        meta = self._rumbo_meta_rad() or 0.0
+        mejor, mejor_p, i = None, -1e9, 0
+        while i <= 180:
+            if er[i]:
+                j = i
+                while j + 1 <= 180 and er[j + 1]:
+                    j += 1
+                c = math.radians((i + j) / 2 - 90)
+                pt = -peso_meta * abs(c - meta) + 0.01 * (j - i)
+                if pt > mejor_p:
+                    mejor, mejor_p = c, pt
+                i = j + 1
+            else:
+                i += 1
+        return mejor
+
+    def _atrapado(self, cfg) -> bool:
+        """Dando vueltas en un nicho: en `mx_ventana_s` s no se alejó 0,45 m y se bloqueó >= 8 veces."""
+        pose = self._get_pose()
+        if not pose:
+            return False
+        t = time.monotonic()
+        self._hist.append((t, pose["x"], pose["y"], self._bloq))
+        ventana = float(cfg.get("mx_ventana_s", 25.0))
+        while self._hist and t - self._hist[0][0] > ventana:
+            self._hist.pop(0)
+        if len(self._hist) < 2 or t - self._hist[0][0] < 0.9 * ventana:
+            return False
+        return (max(math.hypot(pose["x"] - h[1], pose["y"] - h[2]) for h in self._hist) < 0.45
+                and self._bloq - self._hist[0][3] >= 8)
+
+    async def _escape_nicho(self, cfg, d):
+        """Atrás x3 + giro largo al lado CONTRARIO del último + adelante x3, y compromiso de lado un rato."""
+        izq, der = self._hueco(d, "izquierda"), self._hueco(d, "derecha")
+        lado = ("derecha" if self._ultimo_lado == "izquierda" else "izquierda")
+        self.mx_escapes += 1
+        self._hist.clear()
+        self._commit, self._commit_hasta = lado, time.monotonic() + 2 * float(cfg.get("mx_bordear_s", 12.0))
+        self._ultimo_lado = lado
+        self.estado = f"atrapado en un nicho: escapo girando a la {lado}"
+        self._emitir(evento="escape_nicho", lado=lado, total=self.mx_escapes)
+        if self._hueco(d, "atras") >= 0.30:
+            for _ in range(3):
+                self._conducir("atras", maniobra=False)
+                await asyncio.sleep(1.05)
+        for _ in range(max(1, int(cfg.get("mx_giro_largo", 5)))):
+            if not self.activo or self.pausado:
+                return
+            self._conducir(lado, maniobra=False)
+            await asyncio.sleep(1.05)
+        for _ in range(3):
+            if not self.activo or self.pausado:
+                return
+            if self._hueco(self._distancias(), "adelante") < cfg["avance_libre_cm"] / 100.0:
+                return
+            self._conducir("adelante")
+            await asyncio.sleep(1.05)
 
     async def _guardian_paso(self, cfg) -> bool:
         """Un ciclo del guardián. True si ejecutó una corrección (y esperó a que asentara)."""

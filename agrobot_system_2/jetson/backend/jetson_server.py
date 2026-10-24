@@ -4353,6 +4353,7 @@ async def start_background(app: web.Application):
         import guardian_sendero
         explorador.guardian = guardian_sendero.GuardianSendero(guardian_sendero.MemoriaCorrecciones())
         explorador.sensores_guardian = _sensores_guardian
+        explorador.scan_cb = lambda: lidar_reactive.last_scan
     except Exception as exc:  # noqa: BLE001
         print(f"[guardián] no disponible: {exc}", flush=True)
 

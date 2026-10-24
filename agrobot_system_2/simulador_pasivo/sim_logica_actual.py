@@ -217,6 +217,14 @@ class Config:
     # Paredes SÓLIDAS (2026-10-24): al chocar, el robot vuelve a su última pose sin contacto y pierde la velocidad (choque inelástico). Antes
     # atravesaba las paredes y solo contaba un contacto, así que en esquinas "ganaba" saliéndose del mapa. False = comportamiento anterior.
     paredes_solidas: bool = True
+    # --- Guardián del sendero (2026-10-24, jetson/backend/guardian_sendero.py): mantiene el sendero con pulsos correctivos que aprende de
+    # la correlación LIDAR + IMU + cámara + error de pose. `guardian_obj` = instancia compartida entre episodios (su memoria aprende) o None.
+    guardian: bool = False
+    guardian_obj: object = None
+    guardian_explorar: float = 0.0
+    guardian_usar_memoria: bool = True
+    guardian_tol_cm: float = 6.0
+    guardian_tol_deg: float = 4.0
 
     def slam_cfg(self):
         return {"robot_largo_cm": self.robot_largo_cm, "robot_ancho_cm": self.robot_ancho_cm,
@@ -1057,6 +1065,34 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     correcciones = corr_ejec = bloqueos = avances = 0
     contactos, prev_choque = 0, False
     ultima_ok, t_choque = None, -9.0
+    guardian, g_libre_desde, g_reg = None, None, []
+    if cfg.guardian:
+        import guardian_sendero as GS
+        guardian = cfg.guardian_obj or GS.GuardianSendero(GS.MemoriaCorrecciones(None), log_dir=None, tol_cm=cfg.guardian_tol_cm,
+                                                           tol_deg=cfg.guardian_tol_deg, usar_memoria=cfg.guardian_usar_memoria)
+        guardian.explorar = cfg.guardian_explorar
+        guardian.pend = None
+        if esc.linea_central:
+            guardian.fijar_polilinea(esc.linea_central)
+        else:
+            guardian.fijar_polilinea([(x0 - 1.0, esc.centro_y), (x0 + 400.0, esc.centro_y)])
+
+    def _pose_g():
+        """Pose estimada tipo SLAM: la verdadera con ruido (2 cm, 1°)."""
+        gx, gy = robot.centro()
+        return {"x": gx + float(rng.normal(0, 0.02)), "y": gy + float(rng.normal(0, 0.02)),
+                "theta_deg": math.degrees(robot.psi_real()) + float(rng.normal(0, 1.0))}
+
+    def _sens_g(dd):
+        """Lo que correlaciona el guardián: LIDAR (real del simulador), IMU (giro verdadero + ruido) y cámara SINTÉTICA (el simulador no
+        renderiza el sendero: se deriva del error verdadero con ruido de 3 cm / 4° y confianza 0,7)."""
+        e_t = guardian.errores({"x": robot.centro()[0], "y": robot.centro()[1], "theta_deg": math.degrees(robot.psi_real())}) or (0.0, 0.0)
+        return {"lidar_adelante_m": dd.get("adelante"), "lidar_atras_m": dd.get("atras"), "lidar_izquierda_m": dd.get("izquierda"),
+                "lidar_derecha_m": dd.get("derecha"), "cerca": dd.get("cerca"),
+                "imu_gz": float(robot.d.dq[2]) + float(rng.normal(0, 0.01)), "imu_roll_deg": float(rng.normal(0, 0.4)),
+                "imu_pitch_deg": float(rng.normal(0, 0.4)),
+                "sendero_lateral_m": -e_t[0] + float(rng.normal(0, 0.03)), "sendero_rumbo_deg": -math.degrees(e_t[1]) + float(rng.normal(0, 4.0)),
+                "sendero_confianza": 0.7}
     err, quieto, dist_rec = [], 0, 0.0
     pico_delta = 0.0
     ultimo = robot.centro()
@@ -1145,7 +1181,25 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 if pulso_recto_pend and not cond.activo and rf is not None:
                     corr_rumbo.fin_pulso_recto(rf.e)
                     pulso_recto_pend = False
-                if rf is not None and not cond.activo:
+                if guardian is not None:
+                    if guardian.pend is not None:                    # esperando a que asiente la corrección anterior (sin pulsos rectos mezclados)
+                        corr = "hecho"
+                        if not cond.activo:
+                            g_libre_desde = t if g_libre_desde is None else g_libre_desde
+                            if t - g_libre_desde >= 0.5:
+                                g_reg.append(guardian.terminar(_pose_g(), _sens_g(d), colision=prev_choque))
+                                g_libre_desde = None
+                    elif not cond.activo:
+                        sg = _sens_g(d)
+                        pg = _pose_g()
+                        dec = guardian.decidir(pg, sg)
+                        if dec:
+                            guardian.iniciar(dec, pg, sg)
+                            cond.ordenar(dec["accion"], t, maniobra=False, esc_dur=dec["escala"])
+                            correcciones += 1
+                            corr = "hecho"
+                            sin_corregir = 0
+                if corr is None and rf is not None and not cond.activo:
                     e_eff = RF.error_con_mirada(rf.e, desvio_ult, cfg.rumbo_mirada_m)
                     corr = corr_rumbo.decidir(e_eff) if cfg.rumbo_modo == "pulso" else None   # primero el rumbo; el centrado lateral después
                     if corr:
@@ -1155,7 +1209,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                             corr_ejec += 1
                         sin_corregir = 0
                         corr = "hecho"
-                if corr is None and sin_corregir >= 1 and izq is not None and der is not None:
+                if corr is None and guardian is None and sin_corregir >= 1 and izq is not None and der is not None:
                     lim = cfg.sendero_pared_max_cm / 100.0
                     if izq <= lim and der <= lim:
                         e = izq - der
@@ -1270,6 +1324,8 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         "duty_max": round(duty_max_visto, 1),
         "mu": hip.mu, "dead": hip.dead, "bias": hip.bias, "drag": hip.drag,
     }
+    if guardian is not None:
+        res["guardian"] = guardian.resumen()
     if traza:
         res["traza"] = traj
     return res

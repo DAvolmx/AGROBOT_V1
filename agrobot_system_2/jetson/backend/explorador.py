@@ -138,6 +138,9 @@ class ExploradorReactivo:
         self._rumbo_pend = False           # hay un pulso recto cuya caída de rumbo aún no se midió
         self._corr_propia = False          # el pulso en curso es una corrección de rumbo (no reinicia la referencia)
         self.correcciones_rumbo = 0
+        # Guardián del sendero (guardian_sendero.py): se asigna desde fuera; sin él (o con autonomia.guardian_sendero_activo=false) no hace nada.
+        self.guardian = None
+        self.sensores_guardian = None       # () -> dict: LIDAR + cámara + IMU (ver jetson_server._sensores_guardian)
 
     # ------------------------------------------------------------------
     def iniciar(self) -> tuple[bool, str]:
@@ -160,6 +163,8 @@ class ExploradorReactivo:
         # diga lo contrario: si no, cada reinicio lanzaba un barrido de 8 s y la misión entraba en un BUCLE DE ESCANEOS (2026-10-23)
         self._ultimo_escaneo = 0.0 if self.escaneo_al_iniciar else time.monotonic()
         self._ref_pose, self._ref_t = None, time.monotonic()
+        if self.guardian is not None:
+            self.guardian.ref, self.guardian.pend = [], None
         self._grabar_recorrido(True)      # deja el rastro del recorrido
         self._tarea = asyncio.create_task(self._bucle())
         return True, "explorando: avanza, esquiva y mapea"
@@ -534,6 +539,13 @@ class ExploradorReactivo:
                         self._sin_corregir = 0
                         continue
 
+                # Guardián del sendero: mide el error contra la referencia, correlaciona LIDAR + IMU + cámara con lo que funcionó antes y
+                # corrige con un pulso; APUNTA qué hizo y qué resultó (JSONL + memoria). Apagado por defecto.
+                if (frente >= avance_libre and self.guardian is not None and cfg.get("guardian_sendero_activo", False)
+                        and not self._corr_propia):
+                    if await self._guardian_paso(cfg):
+                        continue
+
                 if frente >= avance_libre:
                     # Lo enseñado por el operador manda sobre la regla, también
                     # en marcha normal (con el listón más alto: ver _probar_aprendido).
@@ -669,6 +681,8 @@ class ExploradorReactivo:
                     self.estado = (f"girando a la {lado} (frente {frente:.2f} m"
                                    + (" · arco" if maniobra else ", pivote") + ")")
                     self._ultimo_lado = lado
+                    if self.guardian is not None:
+                        self.guardian.ref = []             # tras girar, el sendero es otro: la referencia nueva se fija en el siguiente tramo recto
                     # Maniobra de esquina (2026-10-24, simulada en sim_logica_actual: man_*): si el frente está muy cerca, primero se retrocede
                     # `man_atras_pulsos` pulsos y luego se gira `man_giro_pulsos` seguidos (se corta si el frente ya quedó libre).
                     # Con los valores por defecto (0 / 1 / 1) es el comportamiento de siempre.
@@ -722,6 +736,30 @@ class ExploradorReactivo:
             # este bucle es el que conduce el robot.
             print(f"[exploración] bucle abortado: {type(exc).__name__}: {exc}\n"
                   + traceback.format_exc(), flush=True)
+
+    async def _guardian_paso(self, cfg) -> bool:
+        """Un ciclo del guardián. True si ejecutó una corrección (y esperó a que asentara)."""
+        g = self.guardian
+        pose = self._get_pose()
+        if not pose:
+            return False
+        g.tol_y, g.tol_h = float(cfg.get("guardian_tol_cm", 6.0)) / 100.0, math.radians(float(cfg.get("guardian_tol_deg", 4.0)))
+        g.usar_memoria = bool(cfg.get("guardian_usar_memoria", True))
+        if len(g.ref) < 2:
+            g.fijar_recta(pose)                 # la referencia es el rumbo y la posición del primer tramo recto tras un giro o el arranque
+            return False
+        sens = self.sensores_guardian() if self.sensores_guardian else self._percepcion()
+        dec = g.decidir(pose, sens)
+        if dec is None:
+            return False
+        self.estado = f"guardián: {dec['explicacion']}"
+        g.iniciar(dec, pose, sens)
+        self._conducir(dec["accion"], maniobra=bool(cfg.get("correccion_eje_pasivo_arcos", MANIOBRA_EN_CORRECCION)), esc_dur=dec["escala"])
+        await asyncio.sleep(1.05 * max(dec["escala"], 0.5) + 0.5)          # el pulso + el asentamiento antes de medir qué cambió
+        g.terminar(self._get_pose() or pose, self.sensores_guardian() if self.sensores_guardian else self._percepcion())
+        self.correcciones += 1
+        self._sin_corregir = 0
+        return True
 
     def _correccion_sendero(self):
         if self._seguidor is None:

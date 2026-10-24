@@ -20,8 +20,10 @@ def exportar():
         centro = [list(p) for p in (e.linea_central or [(0.0, 0.0), tuple(e.meta_xy or (e.goal_x, 0.0))])]
         mundo = {"nombre": f"interior_{nombre}", "paredes": [[round(v, 3) for v in s] for s in e.paredes],
                  "sendero": [[round(x, 3), round(y, 3)] for x, y in centro], "ancho_sendero": 0.8, "ancho_paja": 0.0,
-                 "plantas": [[round(x, 3), round(y, 3), r, 0, 0.45] for x, y, r in e.macetas],
-                 "escaneos": [], "seco": 0.9, "borde": "paja", "superficie": "baldosa", "objetos": [],
+                 "plantas": [[round(x, 3), round(y, 3), r, 0, 0.45] for x, y, r in e.macetas if r > 0.04],
+                 "escaneos": [], "seco": 0.9, "borde": "paja", "superficie": "baldosa",
+                 "objetos": [{"tipo": "pata", "x": round(x, 3), "y": round(y, 3), "radio": r, "altura": 0.7 if r > 0.02 else 0.45, "solido": True}
+                             for x, y, r in e.macetas if r <= 0.04],
                  "limites": [round(min(xs) - 0.6, 2), round(min(ys) - 0.6, 2), round(max(xs) + 0.6, 2), round(max(ys) + 0.6, 2)],
                  "descripcion": e.descripcion, "meta": list(e.meta_xy or (e.goal_x, 0.0)), "entrenar": False}
         (DESTINO / f"interior_{nombre}.json").write_text(json.dumps(mundo, ensure_ascii=False, indent=1))

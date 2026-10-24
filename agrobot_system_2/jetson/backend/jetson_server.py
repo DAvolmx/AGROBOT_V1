@@ -2722,6 +2722,21 @@ def _percepcion_robot() -> dict:
     }
 
 
+def _sensores_guardian() -> dict:
+    """_percepcion_robot() + IMU (giro Z en rad/s, balanceo y cabeceo en °) para que el guardián correlacione distancia, IMU y cámara."""
+    s = _percepcion_robot()
+    env = state.env_telemetry or {}
+    ra = env.get("_received_at")
+    if ra is not None and time.time() - ra < 1.0:
+        if env.get("gyroZ") is not None:
+            s["imu_gz"] = math.radians(float(env["gyroZ"]))
+        if all(env.get(k) is not None for k in ("accelX", "accelY", "accelZ")):
+            inc = imu_nivel.inclinacion_deg((env["accelX"], env["accelY"], env["accelZ"]))
+            if inc:
+                s["imu_roll_deg"], s["imu_pitch_deg"] = inc
+    return s
+
+
 def _conducir_pulso(accion: str, maniobra: bool = True, esc_dur: float = 1.0):
     """Un pulso del conductor manual, con el acelerador de la config.
 
@@ -4332,6 +4347,14 @@ async def start_background(app: web.Application):
         politica=politica if state.config["autonomia"].get("politica_activa") else None,
         get_costmap=lambda: costmap,
     )
+
+    # Guardián del sendero: correlaciona LIDAR + cámara + IMU y apunta cada corrección (autonomia.guardian_sendero_activo, apagado por defecto)
+    try:
+        import guardian_sendero
+        explorador.guardian = guardian_sendero.GuardianSendero(guardian_sendero.MemoriaCorrecciones())
+        explorador.sensores_guardian = _sensores_guardian
+    except Exception as exc:  # noqa: BLE001
+        print(f"[guardián] no disponible: {exc}", flush=True)
 
     pose_estimator.gyro_weight = state.config["slam"]["pose_gyro_trust"]
 

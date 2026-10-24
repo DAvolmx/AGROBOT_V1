@@ -1,0 +1,428 @@
+{
+ "nombre": "interior_comedor_mesas_sillas",
+ "paredes": [
+  [
+   -0.6,
+   -2.3,
+   7.4,
+   -2.3
+  ],
+  [
+   7.4,
+   -2.3,
+   7.4,
+   2.3
+  ],
+  [
+   7.4,
+   2.3,
+   -0.6,
+   2.3
+  ],
+  [
+   -0.6,
+   2.3,
+   -0.6,
+   -2.3
+  ],
+  [
+   1.06,
+   0.66,
+   1.06,
+   1.04
+  ],
+  [
+   2.94,
+   1.04,
+   2.94,
+   0.66
+  ],
+  [
+   1.81,
+   1.66,
+   2.19,
+   1.66
+  ],
+  [
+   2.19,
+   0.04,
+   1.81,
+   0.04
+  ],
+  [
+   3.26,
+   -1.04,
+   3.26,
+   -0.66
+  ],
+  [
+   5.14,
+   -0.66,
+   5.14,
+   -1.04
+  ],
+  [
+   4.01,
+   -0.04,
+   4.39,
+   -0.04
+  ],
+  [
+   4.39,
+   -1.66,
+   4.01,
+   -1.66
+  ]
+ ],
+ "sendero": [
+  [
+   0.0,
+   0.0
+  ],
+  [
+   6.4,
+   0.0
+  ]
+ ],
+ "ancho_sendero": 0.8,
+ "ancho_paja": 0.0,
+ "plantas": [],
+ "escaneos": [],
+ "seco": 0.9,
+ "borde": "paja",
+ "superficie": "baldosa",
+ "objetos": [
+  {
+   "tipo": "pata",
+   "x": 1.55,
+   "y": 0.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.55,
+   "y": 1.15,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.45,
+   "y": 0.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.45,
+   "y": 1.15,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.06,
+   "y": 0.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.06,
+   "y": 1.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.44,
+   "y": 0.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.44,
+   "y": 1.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.94,
+   "y": 1.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.94,
+   "y": 0.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.56,
+   "y": 1.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.56,
+   "y": 0.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.81,
+   "y": 1.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.19,
+   "y": 1.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.81,
+   "y": 1.28,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.19,
+   "y": 1.28,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.19,
+   "y": 0.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.81,
+   "y": 0.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.19,
+   "y": 0.42,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.81,
+   "y": 0.42,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.75,
+   "y": -1.15,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.75,
+   "y": -0.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.65,
+   "y": -1.15,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.65,
+   "y": -0.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.26,
+   "y": -1.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.26,
+   "y": -0.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.64,
+   "y": -1.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.64,
+   "y": -0.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 5.14,
+   "y": -0.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 5.14,
+   "y": -1.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.76,
+   "y": -0.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.76,
+   "y": -1.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.01,
+   "y": -0.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.39,
+   "y": -0.04,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.01,
+   "y": -0.42,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.39,
+   "y": -0.42,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.39,
+   "y": -1.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.01,
+   "y": -1.66,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.39,
+   "y": -1.28,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.01,
+   "y": -1.28,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  }
+ ],
+ "limites": [
+  -1.2,
+  -2.9,
+  8.0,
+  2.9
+ ],
+ "descripcion": "Dos mesas con 4 sillas cada una en diagonal: eslalon entre patas y respaldos.",
+ "meta": [
+  6.4,
+  0.0
+ ],
+ "entrenar": false
+}

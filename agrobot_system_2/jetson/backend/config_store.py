@@ -135,6 +135,11 @@ DEFAULTS = {
         "man_giro_pulsos": 1,
         "man_retroceso_cm": 0.0,
         "man_atras_pulsos": 1,
+        # Guardián del sendero (2026-10-24, guardian_sendero.py). APAGADO: se prueba primero en un pasillo con el robot en el suelo.
+        "guardian_sendero_activo": False,
+        "guardian_tol_cm": 6.0,
+        "guardian_tol_deg": 4.0,
+        "guardian_usar_memoria": True,
         # Acelerador que usan los pulsos del modo exploración, como fracción
         # del máximo. Los motores no bajan de ~78 % de potencia, así que esto
         # solo limita el tope; para ir "despacio" lo que vale son los pulsos.

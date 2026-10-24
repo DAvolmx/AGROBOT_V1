@@ -1,0 +1,326 @@
+{
+ "nombre": "interior_sillas_sueltas",
+ "paredes": [
+  [
+   -0.6,
+   -2.3,
+   7.4,
+   -2.3
+  ],
+  [
+   7.4,
+   -2.3,
+   7.4,
+   2.3
+  ],
+  [
+   7.4,
+   2.3,
+   -0.6,
+   2.3
+  ],
+  [
+   -0.6,
+   2.3,
+   -0.6,
+   -2.3
+  ],
+  [
+   3.771,
+   1.516,
+   4.166,
+   1.58
+  ],
+  [
+   1.798,
+   -0.677,
+   2.084,
+   -0.397
+  ],
+  [
+   0.776,
+   1.225,
+   1.158,
+   1.342
+  ],
+  [
+   3.478,
+   -0.831,
+   3.085,
+   -0.902
+  ],
+  [
+   5.783,
+   1.278,
+   6.061,
+   0.99
+  ],
+  [
+   5.809,
+   -1.244,
+   5.471,
+   -1.03
+  ],
+  [
+   2.502,
+   -1.608,
+   2.853,
+   -1.416
+  ]
+ ],
+ "sendero": [
+  [
+   0.0,
+   0.0
+  ],
+  [
+   6.4,
+   0.0
+  ]
+ ],
+ "ancho_sendero": 0.8,
+ "ancho_paja": 0.0,
+ "plantas": [],
+ "escaneos": [],
+ "seco": 0.9,
+ "borde": "paja",
+ "superficie": "baldosa",
+ "objetos": [
+  {
+   "tipo": "pata",
+   "x": 3.771,
+   "y": 1.516,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.166,
+   "y": 1.58,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.835,
+   "y": 1.121,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.23,
+   "y": 1.185,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.798,
+   "y": -0.677,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.084,
+   "y": -0.397,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.078,
+   "y": -0.962,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.364,
+   "y": -0.682,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 0.776,
+   "y": 1.225,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.158,
+   "y": 1.342,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 0.892,
+   "y": 0.843,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 1.275,
+   "y": 0.959,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.478,
+   "y": -0.831,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.085,
+   "y": -0.902,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.407,
+   "y": -0.437,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.014,
+   "y": -0.508,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 5.783,
+   "y": 1.278,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 6.061,
+   "y": 0.99,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 5.496,
+   "y": 1.0,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 5.773,
+   "y": 0.712,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 5.809,
+   "y": -1.244,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 5.471,
+   "y": -1.03,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 6.023,
+   "y": -0.906,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 5.685,
+   "y": -0.692,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.502,
+   "y": -1.608,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.853,
+   "y": -1.416,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.695,
+   "y": -1.959,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.045,
+   "y": -1.766,
+   "radio": 0.017,
+   "altura": 0.45,
+   "solido": true
+  }
+ ],
+ "limites": [
+  -1.2,
+  -2.9,
+  8.0,
+  2.9
+ ],
+ "descripcion": "7 sillas sueltas en orientaciones al azar (semilla fija).",
+ "meta": [
+  6.4,
+  0.0
+ ],
+ "entrenar": false
+}

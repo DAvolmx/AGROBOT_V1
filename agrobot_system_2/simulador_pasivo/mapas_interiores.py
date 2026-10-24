@@ -72,6 +72,81 @@ def _sala(x0, x1, y0, y1):
     return rect(x0, y0, x1, y1)
 
 
+R_PATA_MESA, R_PATA_SILLA = 0.03, 0.017
+
+
+def patas_mesa(cx, cy, largo=1.2, ancho=0.6, r=R_PATA_MESA):
+    """4 patas verticales (círculos): el tablero está por encima del plano del LIDAR (37,5 cm) y no se ve; el robot cabe por debajo."""
+    return [(cx + sx * (largo / 2 - r - 0.02), cy + sy * (ancho / 2 - r - 0.02), r) for sx in (-1, 1) for sy in (-1, 1)]
+
+
+def silla(cx, cy, rumbo_deg=0.0, lado=0.40, r=R_PATA_SILLA, respaldo=True):
+    """Silla: 4 patas finas de 1,7 cm de radio en un cuadrado de `lado` m y un respaldo (segmento) en el borde trasero.
+    Devuelve (patas, segmentos). `rumbo_deg` = hacia dónde mira la silla."""
+    th = math.radians(rumbo_deg)
+    c, sn = math.cos(th), math.sin(th)
+
+    def g(dx, dy):
+        return (cx + c * dx - sn * dy, cy + sn * dx + c * dy)
+    h = lado / 2
+    patas = [(*g(sx * h, sy * h), r) for sx in (-1, 1) for sy in (-1, 1)]
+    segs = []
+    if respaldo:
+        a, b = g(-h, -h), g(-h, h)
+        segs.append((a[0], a[1], b[0], b[1]))
+    return patas, segs
+
+
+def _patas_y_sillas():
+    """Escenarios con PATAS (lo que más se le cuela a un LIDAR plano: finas, en grupos y sin pared detrás)."""
+    out = {}
+    sala = _sala(-0.6, 7.4, -2.3, 2.3)
+    # 1) laboratorio de mesas altas: solo se ven las patas
+    pat = []
+    for x in (1.6, 3.8):
+        for y in (-1.25, 1.25):
+            pat += patas_mesa(x, y, 1.4, 0.7)
+    out["lab_patas_mesas"] = E("lab_patas_mesas", sala, pat, goal_x=6.4, t_max=210.0, meta_xy=(6.4, 0.0),
+                               descripcion="Laboratorio con 4 mesas altas (solo se ven las 16 patas de 3 cm de radio); pasillo central de 1,5 m.")
+    # 2) aula: dos filas de sillas con un pasillo de 70 cm entre ellas
+    pat, seg = [], []
+    for y0, rumbo in ((0.75, -90.0), (-0.75, 90.0)):
+        for x in np.arange(1.0, 5.6, 0.62):
+            p, s_ = silla(x, y0, rumbo)
+            pat += p
+            seg += s_
+    out["aula_sillas"] = E("aula_sillas", sala + seg, pat, goal_x=6.4, t_max=210.0, meta_xy=(6.4, 0.0),
+                           descripcion="Dos filas de 8 sillas (patas de 1,7 cm + respaldo) con un pasillo libre de ~70 cm.")
+    # 3) comedor: mesas con sillas alrededor, eslalon entre ellas
+    pat, seg = [], []
+    for cx, cy in ((2.0, 0.85), (4.2, -0.85)):
+        pat += patas_mesa(cx, cy, 1.0, 0.7)
+        for dx, dy, rum in ((-0.75, 0.0, 0.0), (0.75, 0.0, 180.0), (0.0, 0.62, -90.0), (0.0, -0.62, 90.0)):
+            p, s_ = silla(cx + dx, cy + dy, rum, lado=0.38)
+            pat += p
+            seg += s_
+    out["comedor_mesas_sillas"] = E("comedor_mesas_sillas", sala + seg, pat, goal_x=6.4, t_max=230.0, meta_xy=(6.4, 0.0),
+                                    descripcion="Dos mesas con 4 sillas cada una en diagonal: eslalon entre patas y respaldos.")
+    # 4) túnel bajo una mesa larga: patas en las esquinas, 90 cm entre filas de patas
+    pat = [(x, y, R_PATA_MESA) for x in (1.5, 3.0, 4.5) for y in (-0.45, 0.45)]
+    out["bajo_mesa_larga"] = E("bajo_mesa_larga", sala, pat, goal_x=6.4, t_max=200.0, meta_xy=(6.4, 0.0),
+                               descripcion="Pasar por debajo de una mesa de 4,5 m: 3 pares de patas con 90 cm de paso libre entre ellas.")
+    # 5) sillas sueltas desordenadas
+    rng = np.random.default_rng(7)
+    pat, seg = [], []
+    for _ in range(7):
+        for _ in range(60):
+            x, y = rng.uniform(1.0, 5.8), rng.uniform(-1.7, 1.7)
+            if all(math.hypot(x - a, y - b) > 0.95 for a, b, _r in pat[::4]) and math.hypot(y, 0) > 0.2 or False:
+                break
+        p, s_ = silla(x, y, float(rng.uniform(0, 360)))
+        pat += p
+        seg += s_
+    out["sillas_sueltas"] = E("sillas_sueltas", sala + seg, pat, goal_x=6.4, t_max=230.0, meta_xy=(6.4, 0.0),
+                              descripcion="7 sillas sueltas en orientaciones al azar (semilla fija).")
+    return out
+
+
 def mapas() -> dict:
     m = {}
     # ------------------------------------------------------------------ laberintos (un camino con vueltas)
@@ -119,6 +194,7 @@ def mapas() -> dict:
     m["almacen_estanterias"] = E(
         "almacen_estanterias", _sala(-0.6, 6.2, -2.0, 2.0) + est, [], goal_x=5.4, t_max=210.0, meta_xy=(5.4, 0.8),
         descripcion="Almacén con dos pares de estanterías (pasillo central de 1 m) y un muro que se rodea por arriba.")
+    m.update(_patas_y_sillas())
     return m
 
 

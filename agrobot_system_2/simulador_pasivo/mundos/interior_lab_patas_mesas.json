@@ -1,0 +1,188 @@
+{
+ "nombre": "interior_lab_patas_mesas",
+ "paredes": [
+  [
+   -0.6,
+   -2.3,
+   7.4,
+   -2.3
+  ],
+  [
+   7.4,
+   -2.3,
+   7.4,
+   2.3
+  ],
+  [
+   7.4,
+   2.3,
+   -0.6,
+   2.3
+  ],
+  [
+   -0.6,
+   2.3,
+   -0.6,
+   -2.3
+  ]
+ ],
+ "sendero": [
+  [
+   0.0,
+   0.0
+  ],
+  [
+   6.4,
+   0.0
+  ]
+ ],
+ "ancho_sendero": 0.8,
+ "ancho_paja": 0.0,
+ "plantas": [],
+ "escaneos": [],
+ "seco": 0.9,
+ "borde": "paja",
+ "superficie": "baldosa",
+ "objetos": [
+  {
+   "tipo": "pata",
+   "x": 0.95,
+   "y": -1.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 0.95,
+   "y": -0.95,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.25,
+   "y": -1.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.25,
+   "y": -0.95,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 0.95,
+   "y": 0.95,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 0.95,
+   "y": 1.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.25,
+   "y": 0.95,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 2.25,
+   "y": 1.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.15,
+   "y": -1.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.15,
+   "y": -0.95,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.45,
+   "y": -1.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.45,
+   "y": -0.95,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.15,
+   "y": 0.95,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 3.15,
+   "y": 1.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.45,
+   "y": 0.95,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  },
+  {
+   "tipo": "pata",
+   "x": 4.45,
+   "y": 1.55,
+   "radio": 0.03,
+   "altura": 0.7,
+   "solido": true
+  }
+ ],
+ "limites": [
+  -1.2,
+  -2.9,
+  8.0,
+  2.9
+ ],
+ "descripcion": "Laboratorio con 4 mesas altas (solo se ven las 16 patas de 3 cm de radio); pasillo central de 1,5 m.",
+ "meta": [
+  6.4,
+  0.0
+ ],
+ "entrenar": false
+}

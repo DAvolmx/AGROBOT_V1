@@ -1,0 +1,71 @@
+{
+ "nombre": "interior_puerta_descentrada",
+ "paredes": [
+  [
+   -0.6,
+   -2.2,
+   5.0,
+   -2.2
+  ],
+  [
+   5.0,
+   -2.2,
+   5.0,
+   2.2
+  ],
+  [
+   5.0,
+   2.2,
+   -0.6,
+   2.2
+  ],
+  [
+   -0.6,
+   2.2,
+   -0.6,
+   -2.2
+  ],
+  [
+   1.8,
+   -2.2,
+   1.8,
+   -0.95
+  ],
+  [
+   1.8,
+   -0.25,
+   1.8,
+   2.2
+  ]
+ ],
+ "sendero": [
+  [
+   0.0,
+   0.0
+  ],
+  [
+   4.0,
+   0.0
+  ]
+ ],
+ "ancho_sendero": 0.8,
+ "ancho_paja": 0.0,
+ "plantas": [],
+ "escaneos": [],
+ "seco": 0.9,
+ "borde": "paja",
+ "superficie": "baldosa",
+ "objetos": [],
+ "limites": [
+  -1.2,
+  -2.8,
+  5.6,
+  2.8
+ ],
+ "descripcion": "Puerta de 70 cm desplazada 60 cm a la derecha de la línea de salida.",
+ "meta": [
+  4.0,
+  0.0
+ ],
+ "entrenar": false
+}

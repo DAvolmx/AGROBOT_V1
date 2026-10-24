@@ -53,7 +53,7 @@ from camera import CameraWorker
 from obstacle_avoidance import ControladorEvasion, LecturasSensoresLIDAR
 from patrol import PatrolController
 from pulse_drive import ConductorPulsos, ACCIONES, MODOS
-from mapas import GestorMapas, ErrorMapa
+from mapas import GestorMapas, ErrorMapa, validar_nombre as validar_nombre_mapa
 from scan_mapa import scan_a_mapa
 from mapa_scan import MapaScan
 import simulador_visual
@@ -3694,6 +3694,43 @@ async def mapas_cargar_handler(request: web.Request):
     return web.json_response({"ok": True, "puntos": len(waypoints)})
 
 
+async def mapas_digitalizar_handler(request: web.Request):
+    """POST /api/mapas/digitalizar {"nombre": "invernadero"} -> plano vectorial (SVG, DXF, JSON y PNG) en maps/<nombre>/digital/.
+    Hace falta el mapa.pgm/mapa.yaml de ese mapa (los guarda «Guardar mapa»)."""
+    body = await request.json()
+    try:
+        nombre = validar_nombre_mapa(body.get("nombre", ""))
+    except ErrorMapa as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    yaml_path = mapas.carpeta / nombre / "mapa.yaml"
+    if not yaml_path.exists():
+        return web.json_response({"ok": False, "error": f"«{nombre}» no tiene mapa.yaml/mapa.pgm"}, status=404)
+    import digitalizar_mapa
+    loop = asyncio.get_running_loop()
+    try:
+        res = await loop.run_in_executor(None, digitalizar_mapa.digitalizar, yaml_path, mapas.carpeta / nombre / "digital")
+    except Exception as exc:  # noqa: BLE001  (cualquier fallo de lectura/OpenCV se le muestra al operador)
+        return web.json_response({"ok": False, "error": f"no se pudo digitalizar: {exc}"}, status=500)
+    base = f"/api/mapas/digital/{nombre}/"
+    return web.json_response({"ok": True, **{k: v for k, v in res.items() if k not in ("muros", "esquinas")},
+                              "archivos": {f: base + f for f in ("plano.svg", "plano.dxf", "plano.json", "plano.png")}})
+
+
+async def mapas_digital_archivo_handler(request: web.Request):
+    """GET /api/mapas/digital/<nombre>/<archivo>: descarga lo generado por /api/mapas/digitalizar."""
+    try:
+        nombre = validar_nombre_mapa(request.match_info["nombre"])
+    except ErrorMapa as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    archivo = request.match_info["archivo"]
+    if archivo not in ("plano.svg", "plano.dxf", "plano.json", "plano.png", "limpio.png"):
+        return web.json_response({"ok": False, "error": "archivo desconocido"}, status=404)
+    ruta = mapas.carpeta / nombre / "digital" / archivo
+    if not ruta.exists():
+        return web.json_response({"ok": False, "error": "primero hay que digitalizar el mapa"}, status=404)
+    return web.FileResponse(ruta)
+
+
 async def nav_mode_handler(request: web.Request):
     """GET: modo actual. POST {"mode": "mapping"|"localization"}: solo lo anota
     para la UI — relanzar los nodos ROS correctos se hace a mano (ver README),
@@ -4789,6 +4826,8 @@ def create_app() -> web.Application:
     app.router.add_get("/api/mapas", mapas_listar_handler)
     app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)
     app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
+    app.router.add_post("/api/mapas/digitalizar", mapas_digitalizar_handler)
+    app.router.add_get("/api/mapas/digital/{nombre}/{archivo}", mapas_digital_archivo_handler)
     app.router.add_get("/api/giro_cerrado", giro_cerrado_handler)
     app.router.add_post("/api/giro_cerrado", giro_cerrado_handler)
     app.router.add_get("/api/simulador", simulador_handler)

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="350" viewBox="0 0 5.200 3.500">
+<rect width="5.200" height="3.500" fill="#fff"/>
+<g stroke="#111" stroke-width="0.06" stroke-linecap="square">
+<line x1="0.400" y1="0.370" x2="4.650" y2="0.370"/>
+<line x1="0.400" y1="1.375" x2="3.700" y2="1.375"/>
+<line x1="4.725" y1="0.350" x2="4.725" y2="3.000"/>
+<line x1="1.500" y1="2.075" x2="3.750" y2="2.075"/>
+<line x1="1.550" y1="3.075" x2="3.100" y2="3.075"/>
+<line x1="3.649" y1="3.075" x2="4.701" y2="3.075"/>
+<line x1="0.421" y1="0.398" x2="0.421" y2="1.402"/>
+<line x1="1.550" y1="2.050" x2="1.550" y2="3.050"/>
+<line x1="3.675" y1="1.399" x2="3.675" y2="2.101"/>
+</g>
+<circle cx="4.688" cy="0.360" r="0.05" fill="#d33"/>
+<circle cx="0.410" cy="0.384" r="0.05" fill="#d33"/>
+<circle cx="0.410" cy="1.389" r="0.05" fill="#d33"/>
+<circle cx="3.688" cy="1.387" r="0.05" fill="#d33"/>
+<circle cx="4.713" cy="3.038" r="0.05" fill="#d33"/>
+<circle cx="1.525" cy="2.063" r="0.05" fill="#d33"/>
+<circle cx="3.713" cy="2.088" r="0.05" fill="#d33"/>
+<circle cx="1.550" cy="3.063" r="0.05" fill="#d33"/>
+<text x="3.05" y="1.60" font-size="0.22" fill="#058" text-anchor="middle">2.97 m²</text>
+</svg>

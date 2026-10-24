@@ -25,11 +25,18 @@ ESPACIO = {
     "fu_adel": ("u", 60, 100), "fu_pivote": ("u", 60, 100), "fu_tras": ("u", 100, 200), "fu_dif_del": ("u", 0, 100),
     "fu_acel": ("log", 100, 600), "fu_frena": ("log", 300, 1000), "fu_freno_ms": ("u", 0, 250),
     "fu_comp_neg": ("u", 0, 60), "fu_comp_pos": ("u", 0, 40),
+    # maniobras del explorador (2026-10-24, mapas con esquinas): solo existen en el simulador hasta que se porten al robot
+    "man_giro_pulsos": ("u", 1, 8), "man_retroceso_cm": ("u", 0, 30), "man_atras_pulsos": ("u", 1, 3),
+    "man_histeresis_cm": ("u", 0, 30), "man_pausa_s": ("u", 0, 1.5), "man_escape_s": ("u", 6, 30),
+    "man_desacel_cm": ("u", 0, 100), "man_desacel_factor": ("u", 0.4, 1.0),
 }
+ENTEROS = ("man_giro_pulsos", "man_atras_pulsos")
 CLAVES = list(ESPACIO)
 HOY = {"escala_int": 0.13, "escala_ext": 0.5, "suavidad_duty": 0.35, "suavidad_periodo_s": 0.2, "sendero_tol_cm": 10,
        "avance_libre_int": 40, "avance_libre_ext": 100, "cono_int": 45, "cono_ext": 20, "fu_adel": 100, "fu_pivote": 100,
-       "fu_tras": 150, "fu_dif_del": 100, "fu_acel": 600, "fu_frena": 1000, "fu_freno_ms": 80, "fu_comp_neg": 25, "fu_comp_pos": 0}
+       "fu_tras": 150, "fu_dif_del": 100, "fu_acel": 600, "fu_frena": 1000, "fu_freno_ms": 80, "fu_comp_neg": 25, "fu_comp_pos": 0,
+       "man_giro_pulsos": 1, "man_retroceso_cm": 0, "man_atras_pulsos": 1, "man_histeresis_cm": 0, "man_pausa_s": 0,
+       "man_escape_s": 6, "man_desacel_cm": 0, "man_desacel_factor": 0.6}
 AYER = dict(HOY, fu_freno_ms=0, fu_comp_neg=0, fu_frena=300, fu_acel=120)           # firmware de esta mañana: sin freno ni compensación
 PESO = {"interior": 0.7, "exterior": 0.3}
 
@@ -38,7 +45,7 @@ def a_unidad(p):
     u = []
     for k in CLAVES:
         t, a, b = ESPACIO[k]
-        v = min(max(p[k], a), b)
+        v = min(max(p.get(k, HOY[k]), a), b)
         u.append((math.log(v) - math.log(a)) / (math.log(b) - math.log(a)) if t == "log" else (v - a) / (b - a))
     return np.array(u)
 
@@ -48,6 +55,8 @@ def de_unidad(u):
     for k, x in zip(CLAVES, np.clip(u, 0, 1)):
         t, a, b = ESPACIO[k]
         p[k] = round(float(math.exp(math.log(a) + x * (math.log(b) - math.log(a))) if t == "log" else a + x * (b - a)), 3)
+        if k in ENTEROS:
+            p[k] = int(round(p[k]))
     return p
 
 
@@ -59,7 +68,11 @@ def campos(p, entorno):
                           avance_libre_cm=p["avance_libre_int" if i else "avance_libre_ext"],
                           cono_frontal_deg=p["cono_int" if i else "cono_ext"], fu_adel=p["fu_adel"], fu_pivote=p["fu_pivote"],
                           fu_tras=p["fu_tras"], fu_dif_del=p["fu_dif_del"], fu_acel=p["fu_acel"], fu_frena=p["fu_frena"],
-                          fu_freno_ms=p["fu_freno_ms"], fu_comp_neg=p["fu_comp_neg"], fu_comp_pos=p["fu_comp_pos"])
+                          fu_freno_ms=p["fu_freno_ms"], fu_comp_neg=p["fu_comp_neg"], fu_comp_pos=p["fu_comp_pos"],
+                          man_giro_pulsos=int(p.get("man_giro_pulsos", 1)), man_retroceso_cm=p.get("man_retroceso_cm", 0),
+                          man_atras_pulsos=int(p.get("man_atras_pulsos", 1)), man_histeresis_cm=p.get("man_histeresis_cm", 0),
+                          man_pausa_s=p.get("man_pausa_s", 0), man_escape_s=p.get("man_escape_s", 0) if p.get("man_escape_s", 6) > 6.5 else 0,
+                          man_desacel_cm=p.get("man_desacel_cm", 0), man_desacel_factor=p.get("man_desacel_factor", 0.6))
 
 
 def _job(a):
@@ -125,6 +138,8 @@ def main():
     ap.add_argument("--gens-max", type=int, default=10_000)
     ap.add_argument("--inicio", default=None, help="informe.json de una ronda anterior: arranca desde su mejor candidato")
     ap.add_argument("--sd", type=float, default=0.22)
+    ap.add_argument("--semillas-gen", type=int, default=1, help="semillas de interior por escenario y generación (exterior = las mismas)")
+    ap.add_argument("--estres-semillas", type=int, default=12)
     ap.add_argument("--val-semillas", type=int, default=16, help="semillas de interior en la validación final (exterior = la mitad)")
     a = ap.parse_args()
     t0 = time.time()
@@ -153,8 +168,8 @@ def main():
             gen += 1
             pob = [de_unidad(mu)] + ([HOY] + ([previo] if previo else []) if gen == 1 else []) + [de_unidad(mu + sd * rng.standard_normal(len(CLAVES))) for _ in range(a.pob)]
             pob = pob[:a.pob]
-            si = [100 + gen * 7 + k for k in range(3)]         # semillas nuevas cada generación (con numba un episodio dura ~1 s)
-            se = [200 + gen * 7 + k for k in range(2)]
+            si = [100 + gen * 7 + k for k in range(a.semillas_gen)]         # semillas nuevas cada generación (con numba un episodio dura ~1 s)
+            se = [200 + gen * 7 + k for k in range(a.semillas_gen)]
             rs = evaluar(pool, pob, si, se)
             fit = np.array([fitness(r) for r in rs])
             orden = np.argsort(fit)
@@ -199,7 +214,7 @@ def main():
         mejor = min(validos, key=lambda f: f["todo"]["puntos"])
         say("mejor validado:", mejor["nombre"], mejor["todo"])
         say("== ESTRÉS (hardware más flojo: masa, drag y agarre) ==")
-        est = evaluar(pool, [mejor["params"], HOY, AYER], list(range(7000, 7012)), list(range(8000, 8006)), extremo=True)
+        est = evaluar(pool, [mejor["params"], HOY, AYER], list(range(7000, 7000 + a.estres_semillas)), list(range(8000, 8000 + max(2, a.estres_semillas // 2))), extremo=True)
         estres = {n: resumen(r) for n, r in zip(["mejor", "HOY", "AYER"], est)}
         for n, v in estres.items():
             say(f"  {n:6s} {v['todo']}")

@@ -1,0 +1,71 @@
+{
+ "nombre": "interior_sala_con_puerta",
+ "paredes": [
+  [
+   -0.6,
+   -2.2,
+   5.4,
+   -2.2
+  ],
+  [
+   5.4,
+   -2.2,
+   5.4,
+   2.2
+  ],
+  [
+   5.4,
+   2.2,
+   -0.6,
+   2.2
+  ],
+  [
+   -0.6,
+   2.2,
+   -0.6,
+   -2.2
+  ],
+  [
+   2.0,
+   -2.2,
+   2.0,
+   -0.45
+  ],
+  [
+   2.0,
+   0.45,
+   2.0,
+   2.2
+  ]
+ ],
+ "sendero": [
+  [
+   0.0,
+   0.0
+  ],
+  [
+   4.2,
+   0.0
+  ]
+ ],
+ "ancho_sendero": 0.8,
+ "ancho_paja": 0.0,
+ "plantas": [],
+ "escaneos": [],
+ "seco": 0.9,
+ "borde": "paja",
+ "superficie": "baldosa",
+ "objetos": [],
+ "limites": [
+  -1.2,
+  -2.8,
+  6.0,
+  2.8
+ ],
+ "descripcion": "Dos salas unidas por una puerta de 90 cm: hay que centrarse y cruzar el vano.",
+ "meta": [
+  4.2,
+  0.0
+ ],
+ "entrenar": false
+}

@@ -2539,8 +2539,10 @@ input[type="text"], select { font-family: inherit; }
             <span class="mono" style="color:var(--ink-soft); font-size:12px;">
               · ${new Date(m.guardado * 1000).toLocaleString()} · ${m.puntos} pto(s) · ${(m.peso_kb / 1024).toFixed(1)} MB</span></span>
           <button class="btn" data-cargar="${escaparHTML(m.nombre)}">Cargar</button>
+          <button class="btn" data-digitalizar="${escaparHTML(m.nombre)}" title="Convierte el mapa en un plano vectorial (SVG, DXF, JSON)">Digitalizar</button>
         </div>`).join("");
       cont.querySelectorAll("[data-cargar]").forEach((btn) => btn.addEventListener("click", () => cargarMapa(btn.dataset.cargar, btn)));
+      cont.querySelectorAll("[data-digitalizar]").forEach((btn) => btn.addEventListener("click", () => digitalizarMapa(btn.dataset.digitalizar, btn)));
     } catch (_) {
       cont.textContent = "No se pudo leer la lista de mapas.";
     }
@@ -2568,6 +2570,29 @@ input[type="text"], select { font-family: inherit; }
     } finally {
       btn.disabled = false; btn.textContent = "Guardar mapa";
       refrescarMapas();
+    }
+  }
+
+  async function digitalizarMapa(nombre, btn) {
+    btn.disabled = true; btn.textContent = "Digitalizando…";
+    try {
+      const res = await fetch("/api/mapas/digitalizar", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { toast("error", "No se digitalizó", d.error || `HTTP ${res.status}`); return; }
+      toast("success", "Plano listo", `${d.ancho_m} × ${d.alto_m} m · ${d.area_libre_m2} m² libres · ${d.n_muros} muros (${d.largo_muros_m} m)`);
+      window.open(d.archivos["plano.png"], "_blank");
+      const fila = btn.parentElement;
+      fila.querySelectorAll(".enlaces-plano").forEach((e) => e.remove());
+      const a = document.createElement("span");
+      a.className = "enlaces-plano mono"; a.style.fontSize = "12px";
+      a.innerHTML = ["svg", "dxf", "json", "png"].map((x) => `<a href="${d.archivos["plano." + x]}" download>${x}</a>`).join(" · ");
+      fila.appendChild(a);
+    } catch (_) {
+      toast("error", "Sin conexión", "No llegó la orden a la Jetson.");
+    } finally {
+      btn.disabled = false; btn.textContent = "Digitalizar";
     }
   }
 

@@ -1,0 +1,87 @@
+{
+ "nombre": "interior_pasillo_L",
+ "paredes": [
+  [
+   -0.7,
+   0.5,
+   1.7,
+   0.5
+  ],
+  [
+   1.7,
+   0.5,
+   1.7,
+   2.2
+  ],
+  [
+   1.7,
+   2.2,
+   1.7,
+   3.8
+  ],
+  [
+   -0.7,
+   -0.5,
+   2.7,
+   -0.5
+  ],
+  [
+   2.7,
+   -0.5,
+   2.7,
+   2.2
+  ],
+  [
+   2.7,
+   2.2,
+   2.7,
+   3.8
+  ],
+  [
+   1.7,
+   3.8,
+   2.7,
+   3.8
+  ],
+  [
+   -0.7,
+   0.5,
+   -0.7,
+   -0.5
+  ]
+ ],
+ "sendero": [
+  [
+   -0.7,
+   0
+  ],
+  [
+   2.2,
+   0
+  ],
+  [
+   2.2,
+   2.2
+  ]
+ ],
+ "ancho_sendero": 0.8,
+ "ancho_paja": 0.0,
+ "plantas": [],
+ "escaneos": [],
+ "seco": 0.9,
+ "borde": "paja",
+ "superficie": "baldosa",
+ "objetos": [],
+ "limites": [
+  -1.3,
+  -1.1,
+  3.3,
+  4.4
+ ],
+ "descripcion": "Pasillo con una esquina de 90° a la izquierda (1,0 m de ancho).",
+ "meta": [
+  2.2,
+  2.2
+ ],
+ "entrenar": false
+}

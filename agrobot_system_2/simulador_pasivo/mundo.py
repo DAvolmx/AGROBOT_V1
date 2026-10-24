@@ -52,7 +52,7 @@ TIERRA, PAJA, PLANTA, PIEDRA, HIERBA, BORDE_TIERRA, PLANTA_ALTA = 0, 1, 2, 3, 4,
 #   cesped     hierba pisada: verde apagado con calvas de tierra
 #   hojarasca  hojas secas: manchas marrón-naranja sobre tierra
 #   barro      tierra oscura y brillante con charcos
-SUPERFICIES = ("tierra", "grava", "cesped", "hojarasca", "barro")
+SUPERFICIES = ("tierra", "grava", "cesped", "hojarasca", "barro", "baldosa")
 COLOR_GRAVA = (128, 132, 136)
 COLOR_CESPED = (62, 118, 88)
 COLOR_HOJARASCA = (48, 92, 142)
@@ -689,11 +689,30 @@ class Mundo:
                 charcos = ruido(px * 0.6, py * 0.6, 1.2, 2)
                 mojado = charcos > 0.72
                 img[mojado] *= 0.78
-            if camino is not None and self.superficie != "tierra":
+            if self.superficie == "baldosa":
+                self._pintar_baldosa(img, clase, px, py)
+            elif camino is not None and self.superficie != "tierra":
                 self._pintar_superficie(img, clase, px, py, camino)
         if rng is not None:
             img += rng.normal(0, 7, img.shape)
         return np.clip(img, 0, 255)
+
+    def _pintar_baldosa(self, img, clase, px, py):
+        """Suelo de interior (2026-10-24): baldosas de 50 cm con junta oscura, damero de dos tonos y mota fina. Cubre tierra, paja,
+        hierba y borde; deja plantas y piedras (macetas y obstáculos) como están."""
+        zona = (clase == TIERRA) | (clase == PAJA) | (clase == HIERBA) | (clase == BORDE_TIERRA)
+        if not zona.any():
+            return
+        lado = 0.5
+        i, j = np.floor(px / lado).astype(int), np.floor(py / lado).astype(int)
+        damero = ((i + j) % 2).astype(np.float32)
+        fx, fy = np.abs(px / lado - np.round(px / lado)), np.abs(py / lado - np.round(py / lado))
+        junta = (np.minimum(fx, fy) * lado) < 0.006
+        base = np.array((172, 176, 182), np.float32)                      # BGR: gris cálido
+        tono = 1 + 0.07 * (damero - 0.5) + 0.10 * (ruido(px, py, 55.0, 1) - 0.5) + 0.04 * (ruido(px, py, 3.0, 2) - 0.5)
+        color = base * tono[..., None]
+        color[junta] = np.array((96, 100, 104), np.float32)
+        img[zona] = color[zona]
 
     def _pintar_superficie(self, img, clase, px, py, camino):
         """Repinta la tierra DEL CAMINO según `self.superficie`. Lo que no es

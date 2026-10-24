@@ -65,7 +65,7 @@ def _rocas(rng, n, x0, x1, ancho):
     return out
 
 
-def escenarios(entorno: str, semilla: int = 0) -> dict:
+def escenarios(entorno: str, semilla: int = 0, extendido: bool = True) -> dict:
     E = S.Escenario
     if entorno == "interior":
         esc = dict(S.escenarios_interior(0.60))
@@ -73,6 +73,9 @@ def escenarios(entorno: str, semilla: int = 0) -> dict:
         # (sala en L: pendiente — el robot simulado atraviesa la pared de esa geometría; la curva de 60° a la izquierda ya cubre el giro)
         esc["callejon_1m"] = E("callejon_1m", S._sala(L + 1.7, 3.0), _hileras(0.55, L, 0.6), goal_x=L, t_max=150.0,
                                descripcion="Callejón de plantas con 55 cm libres.")
+        if extendido:
+            import mapas_interiores as MI                     # laboratorios, laberintos, pasillos con esquinas, puertas, almacén
+            esc.update(MI.mapas())
         return esc
     rng = np.random.default_rng(500 + semilla)
     return {

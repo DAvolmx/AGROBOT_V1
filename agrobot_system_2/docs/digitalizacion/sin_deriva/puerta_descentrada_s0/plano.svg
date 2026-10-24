@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="525" viewBox="0 0 6.600 5.250">
+<rect width="6.600" height="5.250" fill="#fff"/>
+<g stroke="#111" stroke-width="0.06" stroke-linecap="square">
+<line x1="0.450" y1="0.450" x2="6.100" y2="0.450"/>
+<line x1="0.650" y1="4.825" x2="6.150" y2="4.825"/>
+<line x1="6.050" y1="0.499" x2="6.050" y2="4.901"/>
+<line x1="0.488" y1="0.500" x2="0.488" y2="4.854"/>
+<line x1="2.875" y1="0.750" x2="2.875" y2="2.850"/>
+<line x1="2.850" y1="3.600" x2="2.850" y2="4.900"/>
+</g>
+<circle cx="6.075" cy="0.475" r="0.05" fill="#d33"/>
+<circle cx="0.469" cy="0.475" r="0.05" fill="#d33"/>
+<circle cx="6.100" cy="4.863" r="0.05" fill="#d33"/>
+<text x="3.31" y="2.62" font-size="0.22" fill="#058" text-anchor="middle">16.33 m²</text>
+</svg>

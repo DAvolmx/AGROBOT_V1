@@ -188,6 +188,37 @@ def main():
                       "(no fotorrealista) y la cámara simulada no reproduce la oscuridad ni el desenfoque reales (brillo 65/255, nitidez < 60). "
                       "No se afirma que la simulación sea indistinguible de la imagen real.")
 
+    # ---------------------------------------------------------------- 7b guardián
+    doc.add_heading("7b. Guardián del sendero y patas de mesas/sillas", 1)
+    doc.add_paragraph("Escenarios nuevos con patas (círculos de 3 y 1,7 cm de radio + respaldos): lab_patas_mesas, aula_sillas, comedor_mesas_sillas, bajo_mesa_larga, sillas_sueltas. "
+                      "guardian_sendero.py mide el error contra la referencia, corrige con pulsos, correlaciona LIDAR + IMU + cámara + error con una memoria de casos "
+                      "(qué se hizo en situaciones parecidas y cuánto mejoró) y APUNTA cada corrección real (JSONL + memoria). Apagado en el robot (guardian_sendero_activo=false).")
+    gr = js(RAIZ / "docs" / "guardian" / "resultados.json")
+    if gr:
+        modos = [("base", "base (explorador de hoy)"), ("ley", "guardián, solo ley"), ("memoria", "guardián + memoria entrenada")]
+        filas = []
+        for m, nom in modos:
+            l = [r for r in gr if r["modo"] == m]
+            filas.append([nom, f"{100 * sum(r['exito'] for r in l) / len(l):.1f}", f"{sum(r['contactos'] for r in l) / len(l):.2f}",
+                          f"{sum(r['rmse_cm'] for r in l) / len(l):.1f}", f"{sum(r['pico_cm'] for r in l) / len(l):.1f}", f"{sum(r['progreso'] for r in l) / len(l):.2f}"])
+        tabla(doc, filas, ["modo", "éxito %", "contactos/ep", "RMSE cm", "pico cm", "progreso"])
+        escs = sorted({(r["ent"], r["esc"]) for r in gr})
+        fig, ax = plt.subplots(figsize=(11, 4.4))
+        x = np.arange(len(escs))
+        for i, (m, nom) in enumerate(modos):
+            ax.bar(x + (i - 1) * 0.27, [np.mean([r["rmse_cm"] for r in gr if r["modo"] == m and (r["ent"], r["esc"]) == k]) for k in escs], 0.27, label=nom)
+        ax.set_xticks(x); ax.set_xticklabels([k[1] for k in escs], rotation=65, ha="right", fontsize=7); ax.set_ylabel("RMSE al sendero (cm)"); ax.set_yscale("log"); ax.legend(fontsize=7)
+        fig.tight_layout(); fig.savefig(FIG / "guardian_rmse.png", dpi=130); plt.close(fig)
+        figura(doc, FIG / "guardian_rmse.png", 16, "Error medio contra el sendero por escenario (escala log; 3 semillas nuevas por escenario).")
+        doc.add_paragraph("Lectura honesta: el grueso de la mejora viene de la ley de control (Stanley con el giro por pulso medido); la memoria por correlación de sensores "
+                          "es neutra-positiva en simulación (la física simulada es consistente, así que no tiene mucho que aprender). Su valor esperado está en el robot real, "
+                          "donde el suelo, el agarre y la deriva cambian: eso NO está demostrado. En la cámara del simulador el sendero se deriva del error verdadero con ruido (sintética). "
+                          "No mejora: curva_pasillo (empeora levemente), callejón de 1 m, eslalon, laberintos ni pasillos con esquina (esos dependen de las maniobras man_*).")
+    figura(doc, RAIZ / "docs" / "mapas_interiores.png", 16, "Mapas con las patas de mesas y sillas (fila inferior).")
+    mc = js(RAIZ / "docs" / "digitalizacion" / "mapa_scan_ancla.json")
+    if mc:
+        doc.add_paragraph("Ancla de rumbo por paredes en MapaScan (banco con deriva 1-3 %): precisión 94-97 % sin ella y no mejora con ella; se deja apagada.")
+
     # ---------------------------------------------------------------- 8 contradicciones
     doc.add_heading("8. Contradicciones y correcciones", 1)
     for t in [

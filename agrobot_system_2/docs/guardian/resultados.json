@@ -1,0 +1,4763 @@
+[
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 23.3,
+  "pico_cm": 52.8,
+  "correcciones": 0,
+  "t_s": 21.8,
+  "ent": "interior",
+  "esc": "sala_vacia",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 4.4,
+  "pico_cm": 6.6,
+  "correcciones": 8,
+  "t_s": 30.4,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 334,
+   "de_ley": 1036,
+   "mejoraron": 834,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.83,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_vacia",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 3.9,
+  "pico_cm": 5.8,
+  "correcciones": 8,
+  "t_s": 29.9,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 337,
+   "de_ley": 1033,
+   "mejoraron": 833,
+   "empeoraron": 537,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.49,
+    "derecha": 10.13
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_vacia",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 6.7,
+  "pico_cm": 9.5,
+  "correcciones": 0,
+  "t_s": 31.2,
+  "ent": "interior",
+  "esc": "sala_vacia",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 3.5,
+  "pico_cm": 5.1,
+  "correcciones": 9,
+  "t_s": 40.0,
+  "guardian": {
+   "correcciones": 1371,
+   "de_memoria": 334,
+   "de_ley": 1037,
+   "mejoraron": 834,
+   "empeoraron": 537,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 7.15
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_vacia",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 2.8,
+  "pico_cm": 4.4,
+  "correcciones": 9,
+  "t_s": 39.4,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 337,
+   "de_ley": 1033,
+   "mejoraron": 834,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.79,
+    "derecha": 4.45
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_vacia",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 18.8,
+  "pico_cm": 27.8,
+  "correcciones": 0,
+  "t_s": 22.1,
+  "ent": "interior",
+  "esc": "sala_vacia",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 4.7,
+  "pico_cm": 6.7,
+  "correcciones": 8,
+  "t_s": 29.9,
+  "guardian": {
+   "correcciones": 1369,
+   "de_memoria": 334,
+   "de_ley": 1035,
+   "mejoraron": 834,
+   "empeoraron": 535,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 9.76
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_vacia",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 3.7,
+  "pico_cm": 5.5,
+  "correcciones": 7,
+  "t_s": 29.5,
+  "guardian": {
+   "correcciones": 1369,
+   "de_memoria": 336,
+   "de_ley": 1033,
+   "mejoraron": 833,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.82,
+    "derecha": 7.55
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_vacia",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.2,
+  "correcciones": 7,
+  "t_s": 23.7,
+  "ent": "interior",
+  "esc": "pasillo_macetas",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 6.1,
+  "pico_cm": 8.7,
+  "correcciones": 0,
+  "t_s": 22.4,
+  "guardian": {
+   "correcciones": 1362,
+   "de_memoria": 334,
+   "de_ley": 1028,
+   "mejoraron": 829,
+   "empeoraron": 533,
+   "bloqueadas": 440,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 7.49,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_macetas",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 6.1,
+  "pico_cm": 8.7,
+  "correcciones": 0,
+  "t_s": 22.4,
+  "guardian": {
+   "correcciones": 1362,
+   "de_memoria": 334,
+   "de_ley": 1028,
+   "mejoraron": 829,
+   "empeoraron": 533,
+   "bloqueadas": 440,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 7.49,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_macetas",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 4.0,
+  "pico_cm": 7.5,
+  "correcciones": 18,
+  "t_s": 34.1,
+  "ent": "interior",
+  "esc": "pasillo_macetas",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 3.6,
+  "pico_cm": 5.7,
+  "correcciones": 1,
+  "t_s": 32.6,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 438,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_macetas",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 3.6,
+  "pico_cm": 5.7,
+  "correcciones": 1,
+  "t_s": 32.6,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 438,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_macetas",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.466,
+  "rmse_cm": 9.8,
+  "pico_cm": 10.6,
+  "correcciones": 87,
+  "t_s": 51.0,
+  "ent": "interior",
+  "esc": "pasillo_macetas",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.476,
+  "rmse_cm": 9.4,
+  "pico_cm": 10.4,
+  "correcciones": 1,
+  "t_s": 52.0,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 473,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.67,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_macetas",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.476,
+  "rmse_cm": 9.4,
+  "pico_cm": 10.4,
+  "correcciones": 1,
+  "t_s": 52.0,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 473,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.67,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_macetas",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.457,
+  "rmse_cm": 12.6,
+  "pico_cm": 14.0,
+  "correcciones": 0,
+  "t_s": 51.1,
+  "ent": "interior",
+  "esc": "eslalon_macetas",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.603,
+  "rmse_cm": 13.2,
+  "pico_cm": 15.0,
+  "correcciones": 1,
+  "t_s": 55.5,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 829,
+   "empeoraron": 534,
+   "bloqueadas": 474,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.44,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "eslalon_macetas",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.603,
+  "rmse_cm": 13.2,
+  "pico_cm": 15.0,
+  "correcciones": 1,
+  "t_s": 55.5,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 829,
+   "empeoraron": 534,
+   "bloqueadas": 474,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.44,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "eslalon_macetas",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.62,
+  "rmse_cm": 8.0,
+  "pico_cm": 9.1,
+  "correcciones": 2,
+  "t_s": 59.5,
+  "ent": "interior",
+  "esc": "eslalon_macetas",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 3.4,
+  "pico_cm": 5.7,
+  "correcciones": 7,
+  "t_s": 38.6,
+  "guardian": {
+   "correcciones": 1369,
+   "de_memoria": 334,
+   "de_ley": 1035,
+   "mejoraron": 834,
+   "empeoraron": 535,
+   "bloqueadas": 433,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 7.11
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "eslalon_macetas",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 3.6,
+  "pico_cm": 5.7,
+  "correcciones": 6,
+  "t_s": 37.4,
+  "guardian": {
+   "correcciones": 1368,
+   "de_memoria": 335,
+   "de_ley": 1033,
+   "mejoraron": 834,
+   "empeoraron": 534,
+   "bloqueadas": 433,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 6.91
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "eslalon_macetas",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.447,
+  "rmse_cm": 15.4,
+  "pico_cm": 16.9,
+  "correcciones": 1,
+  "t_s": 51.2,
+  "ent": "interior",
+  "esc": "eslalon_macetas",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 4.7,
+  "pico_cm": 6.7,
+  "correcciones": 8,
+  "t_s": 29.9,
+  "guardian": {
+   "correcciones": 1369,
+   "de_memoria": 334,
+   "de_ley": 1035,
+   "mejoraron": 834,
+   "empeoraron": 535,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 9.76
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "eslalon_macetas",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.981,
+  "rmse_cm": 3.7,
+  "pico_cm": 8.5,
+  "correcciones": 5,
+  "t_s": 27.4,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 335,
+   "de_ley": 1031,
+   "mejoraron": 831,
+   "empeoraron": 535,
+   "bloqueadas": 441,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.82,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "eslalon_macetas",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.897,
+  "rmse_cm": 10.6,
+  "pico_cm": 15.6,
+  "correcciones": 21,
+  "t_s": 28.5,
+  "ent": "interior",
+  "esc": "curva_pasillo",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.897,
+  "rmse_cm": 8.3,
+  "pico_cm": 11.3,
+  "correcciones": 17,
+  "t_s": 40.0,
+  "guardian": {
+   "correcciones": 1378,
+   "de_memoria": 334,
+   "de_ley": 1044,
+   "mejoraron": 836,
+   "empeoraron": 542,
+   "bloqueadas": 430,
+   "oscilacion": 72,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 3.54,
+    "derecha": 8.05
+   },
+   "zona_muerta_x": 1.8
+  },
+  "ent": "interior",
+  "esc": "curva_pasillo",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.897,
+  "rmse_cm": 8.3,
+  "pico_cm": 11.3,
+  "correcciones": 16,
+  "t_s": 39.8,
+  "guardian": {
+   "correcciones": 1378,
+   "de_memoria": 336,
+   "de_ley": 1042,
+   "mejoraron": 836,
+   "empeoraron": 542,
+   "bloqueadas": 430,
+   "oscilacion": 72,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 3.54,
+    "derecha": 8.37
+   },
+   "zona_muerta_x": 1.8
+  },
+  "ent": "interior",
+  "esc": "curva_pasillo",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.896,
+  "rmse_cm": 8.2,
+  "pico_cm": 14.2,
+  "correcciones": 34,
+  "t_s": 37.5,
+  "ent": "interior",
+  "esc": "curva_pasillo",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.897,
+  "rmse_cm": 9.2,
+  "pico_cm": 12.2,
+  "correcciones": 19,
+  "t_s": 51.2,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 334,
+   "de_ley": 1047,
+   "mejoraron": 836,
+   "empeoraron": 545,
+   "bloqueadas": 432,
+   "oscilacion": 72,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 2.65,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.64
+  },
+  "ent": "interior",
+  "esc": "curva_pasillo",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.897,
+  "rmse_cm": 9.2,
+  "pico_cm": 12.2,
+  "correcciones": 19,
+  "t_s": 51.2,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 334,
+   "de_ley": 1047,
+   "mejoraron": 836,
+   "empeoraron": 545,
+   "bloqueadas": 432,
+   "oscilacion": 72,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 2.65,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.64
+  },
+  "ent": "interior",
+  "esc": "curva_pasillo",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.896,
+  "rmse_cm": 8.5,
+  "pico_cm": 12.9,
+  "correcciones": 22,
+  "t_s": 25.8,
+  "ent": "interior",
+  "esc": "curva_pasillo",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.897,
+  "rmse_cm": 6.1,
+  "pico_cm": 9.2,
+  "correcciones": 19,
+  "t_s": 43.2,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 334,
+   "de_ley": 1047,
+   "mejoraron": 839,
+   "empeoraron": 542,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 3.2,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "curva_pasillo",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.897,
+  "rmse_cm": 6.5,
+  "pico_cm": 9.4,
+  "correcciones": 20,
+  "t_s": 44.8,
+  "guardian": {
+   "correcciones": 1382,
+   "de_memoria": 337,
+   "de_ley": 1045,
+   "mejoraron": 841,
+   "empeoraron": 541,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 2.92,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "curva_pasillo",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.558,
+  "rmse_cm": 5.3,
+  "pico_cm": 7.7,
+  "correcciones": 10,
+  "t_s": 53.4,
+  "ent": "interior",
+  "esc": "callejon_1m",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.568,
+  "rmse_cm": 8.9,
+  "pico_cm": 9.8,
+  "correcciones": 0,
+  "t_s": 52.7,
+  "guardian": {
+   "correcciones": 1362,
+   "de_memoria": 334,
+   "de_ley": 1028,
+   "mejoraron": 829,
+   "empeoraron": 533,
+   "bloqueadas": 432,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 7.49,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "callejon_1m",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.568,
+  "rmse_cm": 8.9,
+  "pico_cm": 9.8,
+  "correcciones": 0,
+  "t_s": 52.7,
+  "guardian": {
+   "correcciones": 1362,
+   "de_memoria": 334,
+   "de_ley": 1028,
+   "mejoraron": 829,
+   "empeoraron": 533,
+   "bloqueadas": 432,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 7.49,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "callejon_1m",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.572,
+  "rmse_cm": 7.6,
+  "pico_cm": 8.6,
+  "correcciones": 87,
+  "t_s": 57.6,
+  "ent": "interior",
+  "esc": "callejon_1m",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.588,
+  "rmse_cm": 4.9,
+  "pico_cm": 5.6,
+  "correcciones": 1,
+  "t_s": 59.6,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 439,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "callejon_1m",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.588,
+  "rmse_cm": 4.9,
+  "pico_cm": 5.6,
+  "correcciones": 1,
+  "t_s": 59.6,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 439,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "callejon_1m",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.338,
+  "rmse_cm": 7.3,
+  "pico_cm": 7.8,
+  "correcciones": 83,
+  "t_s": 48.1,
+  "ent": "interior",
+  "esc": "callejon_1m",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.559,
+  "rmse_cm": 7.9,
+  "pico_cm": 8.8,
+  "correcciones": 1,
+  "t_s": 53.7,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 459,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.67,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "callejon_1m",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.56,
+  "rmse_cm": 7.8,
+  "pico_cm": 8.7,
+  "correcciones": 1,
+  "t_s": 53.5,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 335,
+   "de_ley": 1028,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 457,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.59,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "callejon_1m",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.16,
+  "rmse_cm": 16.6,
+  "pico_cm": 19.7,
+  "correcciones": 9,
+  "t_s": 56.8,
+  "ent": "interior",
+  "esc": "laberinto_serpiente",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.159,
+  "rmse_cm": 16.6,
+  "pico_cm": 20.4,
+  "correcciones": 5,
+  "t_s": 62.4,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 831,
+   "empeoraron": 535,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.23,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_serpiente",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.159,
+  "rmse_cm": 16.6,
+  "pico_cm": 20.4,
+  "correcciones": 5,
+  "t_s": 62.4,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 335,
+   "de_ley": 1031,
+   "mejoraron": 831,
+   "empeoraron": 535,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.23,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_serpiente",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.123,
+  "rmse_cm": 16.6,
+  "pico_cm": 20.3,
+  "correcciones": 11,
+  "t_s": 62.9,
+  "ent": "interior",
+  "esc": "laberinto_serpiente",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.145,
+  "rmse_cm": 15.7,
+  "pico_cm": 20.0,
+  "correcciones": 2,
+  "t_s": 65.8,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 831,
+   "empeoraron": 533,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_serpiente",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.145,
+  "rmse_cm": 15.7,
+  "pico_cm": 20.0,
+  "correcciones": 2,
+  "t_s": 65.8,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 831,
+   "empeoraron": 533,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_serpiente",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.074,
+  "rmse_cm": 25.5,
+  "pico_cm": 28.9,
+  "correcciones": 15,
+  "t_s": 56.0,
+  "ent": "interior",
+  "esc": "laberinto_serpiente",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.133,
+  "rmse_cm": 16.2,
+  "pico_cm": 20.0,
+  "correcciones": 4,
+  "t_s": 61.1,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_serpiente",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.133,
+  "rmse_cm": 16.2,
+  "pico_cm": 20.0,
+  "correcciones": 4,
+  "t_s": 61.1,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_serpiente",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.529,
+  "rmse_cm": 8.9,
+  "pico_cm": 10.3,
+  "correcciones": 8,
+  "t_s": 55.1,
+  "ent": "interior",
+  "esc": "laberinto_estrecho",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.521,
+  "rmse_cm": 8.4,
+  "pico_cm": 9.6,
+  "correcciones": 2,
+  "t_s": 56.5,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 830,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.77,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_estrecho",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.521,
+  "rmse_cm": 8.4,
+  "pico_cm": 9.6,
+  "correcciones": 2,
+  "t_s": 56.5,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 830,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.77,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_estrecho",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.528,
+  "rmse_cm": 9.1,
+  "pico_cm": 11.2,
+  "correcciones": 5,
+  "t_s": 61.9,
+  "ent": "interior",
+  "esc": "laberinto_estrecho",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.524,
+  "rmse_cm": 8.4,
+  "pico_cm": 10.6,
+  "correcciones": 2,
+  "t_s": 62.6,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 831,
+   "empeoraron": 533,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_estrecho",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.524,
+  "rmse_cm": 8.4,
+  "pico_cm": 10.6,
+  "correcciones": 2,
+  "t_s": 62.6,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 831,
+   "empeoraron": 533,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_estrecho",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.517,
+  "rmse_cm": 10.7,
+  "pico_cm": 18.0,
+  "correcciones": 11,
+  "t_s": 54.8,
+  "ent": "interior",
+  "esc": "laberinto_estrecho",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.526,
+  "rmse_cm": 8.6,
+  "pico_cm": 10.3,
+  "correcciones": 4,
+  "t_s": 59.1,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_estrecho",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.526,
+  "rmse_cm": 8.6,
+  "pico_cm": 10.3,
+  "correcciones": 4,
+  "t_s": 59.1,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laberinto_estrecho",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.318,
+  "rmse_cm": 16.2,
+  "pico_cm": 19.9,
+  "correcciones": 8,
+  "t_s": 62.0,
+  "ent": "interior",
+  "esc": "pasillo_L",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.302,
+  "rmse_cm": 15.1,
+  "pico_cm": 19.8,
+  "correcciones": 8,
+  "t_s": 70.2,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 334,
+   "de_ley": 1036,
+   "mejoraron": 834,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.83,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_L",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.302,
+  "rmse_cm": 15.1,
+  "pico_cm": 19.8,
+  "correcciones": 8,
+  "t_s": 70.2,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 335,
+   "de_ley": 1035,
+   "mejoraron": 834,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.83,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_L",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.281,
+  "rmse_cm": 15.7,
+  "pico_cm": 20.0,
+  "correcciones": 26,
+  "t_s": 70.8,
+  "ent": "interior",
+  "esc": "pasillo_L",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.3,
+  "rmse_cm": 14.8,
+  "pico_cm": 19.9,
+  "correcciones": 5,
+  "t_s": 75.0,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 9.72
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_L",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.295,
+  "rmse_cm": 14.7,
+  "pico_cm": 19.8,
+  "correcciones": 4,
+  "t_s": 75.0,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 335,
+   "de_ley": 1031,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 9.58
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_L",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.2,
+  "rmse_cm": 24.6,
+  "pico_cm": 27.6,
+  "correcciones": 104,
+  "t_s": 57.2,
+  "ent": "interior",
+  "esc": "pasillo_L",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.28,
+  "rmse_cm": 15.8,
+  "pico_cm": 20.1,
+  "correcciones": 4,
+  "t_s": 66.6,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_L",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.28,
+  "rmse_cm": 15.8,
+  "pico_cm": 20.1,
+  "correcciones": 4,
+  "t_s": 66.6,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_L",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.334,
+  "rmse_cm": 22.8,
+  "pico_cm": 27.4,
+  "correcciones": 93,
+  "t_s": 61.4,
+  "ent": "interior",
+  "esc": "pasillo_S",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.255,
+  "rmse_cm": 15.5,
+  "pico_cm": 18.2,
+  "correcciones": 2,
+  "t_s": 56.9,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 830,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.77,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_S",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.255,
+  "rmse_cm": 15.5,
+  "pico_cm": 18.2,
+  "correcciones": 2,
+  "t_s": 56.9,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 830,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.77,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_S",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.283,
+  "rmse_cm": 16.6,
+  "pico_cm": 20.6,
+  "correcciones": 10,
+  "t_s": 64.6,
+  "ent": "interior",
+  "esc": "pasillo_S",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.262,
+  "rmse_cm": 14.0,
+  "pico_cm": 17.5,
+  "correcciones": 2,
+  "t_s": 63.3,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_S",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.262,
+  "rmse_cm": 14.0,
+  "pico_cm": 17.5,
+  "correcciones": 2,
+  "t_s": 63.3,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_S",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.234,
+  "rmse_cm": 22.8,
+  "pico_cm": 25.6,
+  "correcciones": 11,
+  "t_s": 54.5,
+  "ent": "interior",
+  "esc": "pasillo_S",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.257,
+  "rmse_cm": 14.4,
+  "pico_cm": 17.4,
+  "correcciones": 4,
+  "t_s": 59.5,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_S",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.257,
+  "rmse_cm": 14.4,
+  "pico_cm": 17.4,
+  "correcciones": 4,
+  "t_s": 59.5,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_S",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.0,
+  "rmse_cm": 16.3,
+  "pico_cm": 20.1,
+  "correcciones": 9,
+  "t_s": 61.6,
+  "ent": "interior",
+  "esc": "pasillo_U",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.0,
+  "rmse_cm": 15.5,
+  "pico_cm": 19.8,
+  "correcciones": 8,
+  "t_s": 67.8,
+  "guardian": {
+   "correcciones": 1369,
+   "de_memoria": 334,
+   "de_ley": 1035,
+   "mejoraron": 833,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.39,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_U",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.0,
+  "rmse_cm": 15.5,
+  "pico_cm": 19.8,
+  "correcciones": 8,
+  "t_s": 67.8,
+  "guardian": {
+   "correcciones": 1369,
+   "de_memoria": 335,
+   "de_ley": 1034,
+   "mejoraron": 833,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.39,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_U",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.0,
+  "rmse_cm": 16.1,
+  "pico_cm": 20.3,
+  "correcciones": 20,
+  "t_s": 68.0,
+  "ent": "interior",
+  "esc": "pasillo_U",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.0,
+  "rmse_cm": 14.9,
+  "pico_cm": 19.8,
+  "correcciones": 4,
+  "t_s": 72.2,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 9.72
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_U",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.0,
+  "rmse_cm": 14.9,
+  "pico_cm": 19.8,
+  "correcciones": 4,
+  "t_s": 72.2,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 9.72
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_U",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.0,
+  "rmse_cm": 24.2,
+  "pico_cm": 27.2,
+  "correcciones": 21,
+  "t_s": 56.3,
+  "ent": "interior",
+  "esc": "pasillo_U",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.0,
+  "rmse_cm": 15.8,
+  "pico_cm": 20.1,
+  "correcciones": 4,
+  "t_s": 64.9,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_U",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.0,
+  "rmse_cm": 15.8,
+  "pico_cm": 20.1,
+  "correcciones": 4,
+  "t_s": 64.9,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "pasillo_U",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.618,
+  "rmse_cm": 159.3,
+  "pico_cm": 209.4,
+  "correcciones": 60,
+  "t_s": 107.3,
+  "ent": "interior",
+  "esc": "laboratorio_bancos",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.679,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.6,
+  "correcciones": 8,
+  "t_s": 81.4,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 334,
+   "de_ley": 1036,
+   "mejoraron": 834,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.83,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_bancos",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.679,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.6,
+  "correcciones": 8,
+  "t_s": 81.4,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 335,
+   "de_ley": 1035,
+   "mejoraron": 834,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.83,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_bancos",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.654,
+  "rmse_cm": 53.8,
+  "pico_cm": 73.3,
+  "correcciones": 54,
+  "t_s": 90.5,
+  "ent": "interior",
+  "esc": "laboratorio_bancos",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.68,
+  "rmse_cm": 5.3,
+  "pico_cm": 7.3,
+  "correcciones": 12,
+  "t_s": 99.7,
+  "guardian": {
+   "correcciones": 1374,
+   "de_memoria": 334,
+   "de_ley": 1040,
+   "mejoraron": 835,
+   "empeoraron": 539,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 4.42
+   },
+   "zona_muerta_x": 1.35
+  },
+  "ent": "interior",
+  "esc": "laboratorio_bancos",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.68,
+  "rmse_cm": 5.1,
+  "pico_cm": 7.1,
+  "correcciones": 11,
+  "t_s": 99.5,
+  "guardian": {
+   "correcciones": 1373,
+   "de_memoria": 336,
+   "de_ley": 1037,
+   "mejoraron": 835,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.75,
+    "derecha": 4.23
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_bancos",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 2,
+  "progreso": 0.688,
+  "rmse_cm": 35.8,
+  "pico_cm": 46.9,
+  "correcciones": 47,
+  "t_s": 79.7,
+  "ent": "interior",
+  "esc": "laboratorio_bancos",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.682,
+  "rmse_cm": 5.8,
+  "pico_cm": 6.8,
+  "correcciones": 15,
+  "t_s": 90.7,
+  "guardian": {
+   "correcciones": 1377,
+   "de_memoria": 334,
+   "de_ley": 1043,
+   "mejoraron": 838,
+   "empeoraron": 539,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 4.27
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_bancos",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.682,
+  "rmse_cm": 4.1,
+  "pico_cm": 5.5,
+  "correcciones": 14,
+  "t_s": 88.1,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 336,
+   "de_ley": 1040,
+   "mejoraron": 836,
+   "empeoraron": 540,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.13,
+    "derecha": 5.05
+   },
+   "zona_muerta_x": 1.09
+  },
+  "ent": "interior",
+  "esc": "laboratorio_bancos",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.359,
+  "rmse_cm": 39.6,
+  "pico_cm": 48.8,
+  "correcciones": 115,
+  "t_s": 64.2,
+  "ent": "interior",
+  "esc": "laboratorio_mesas_sillas",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.322,
+  "rmse_cm": 5.6,
+  "pico_cm": 6.6,
+  "correcciones": 5,
+  "t_s": 62.4,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 831,
+   "empeoraron": 535,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.23,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_mesas_sillas",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.322,
+  "rmse_cm": 5.6,
+  "pico_cm": 6.6,
+  "correcciones": 5,
+  "t_s": 62.4,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 335,
+   "de_ley": 1031,
+   "mejoraron": 831,
+   "empeoraron": 535,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.23,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_mesas_sillas",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.318,
+  "rmse_cm": 45.0,
+  "pico_cm": 53.2,
+  "correcciones": 120,
+  "t_s": 64.7,
+  "ent": "interior",
+  "esc": "laboratorio_mesas_sillas",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.326,
+  "rmse_cm": 3.6,
+  "pico_cm": 5.2,
+  "correcciones": 2,
+  "t_s": 66.8,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 831,
+   "empeoraron": 533,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_mesas_sillas",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.327,
+  "rmse_cm": 1.4,
+  "pico_cm": 2.5,
+  "correcciones": 4,
+  "t_s": 68.4,
+  "guardian": {
+   "correcciones": 1365,
+   "de_memoria": 335,
+   "de_ley": 1030,
+   "mejoraron": 831,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.79,
+    "derecha": 9.01
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_mesas_sillas",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 2,
+  "progreso": 0.347,
+  "rmse_cm": 7.6,
+  "pico_cm": 17.1,
+  "correcciones": 19,
+  "t_s": 59.5,
+  "ent": "interior",
+  "esc": "laboratorio_mesas_sillas",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.339,
+  "rmse_cm": 2.2,
+  "pico_cm": 4.9,
+  "correcciones": 4,
+  "t_s": 62.4,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_mesas_sillas",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.331,
+  "rmse_cm": 3.4,
+  "pico_cm": 5.5,
+  "correcciones": 6,
+  "t_s": 64.0,
+  "guardian": {
+   "correcciones": 1368,
+   "de_memoria": 335,
+   "de_ley": 1033,
+   "mejoraron": 832,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.82,
+    "derecha": 8.45
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "laboratorio_mesas_sillas",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.435,
+  "rmse_cm": 32.0,
+  "pico_cm": 37.2,
+  "correcciones": 0,
+  "t_s": 57.5,
+  "ent": "interior",
+  "esc": "sala_con_puerta",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.941,
+  "rmse_cm": 3.8,
+  "pico_cm": 6.6,
+  "correcciones": 8,
+  "t_s": 41.8,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 334,
+   "de_ley": 1036,
+   "mejoraron": 834,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.83,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_con_puerta",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.941,
+  "rmse_cm": 3.5,
+  "pico_cm": 5.8,
+  "correcciones": 9,
+  "t_s": 42.3,
+  "guardian": {
+   "correcciones": 1371,
+   "de_memoria": 338,
+   "de_ley": 1033,
+   "mejoraron": 834,
+   "empeoraron": 537,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.14,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_con_puerta",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.941,
+  "rmse_cm": 7.5,
+  "pico_cm": 10.1,
+  "correcciones": 30,
+  "t_s": 49.7,
+  "ent": "interior",
+  "esc": "sala_con_puerta",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.941,
+  "rmse_cm": 3.4,
+  "pico_cm": 5.1,
+  "correcciones": 13,
+  "t_s": 61.6,
+  "guardian": {
+   "correcciones": 1375,
+   "de_memoria": 334,
+   "de_ley": 1041,
+   "mejoraron": 835,
+   "empeoraron": 540,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 3.81
+   },
+   "zona_muerta_x": 1.35
+  },
+  "ent": "interior",
+  "esc": "sala_con_puerta",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.941,
+  "rmse_cm": 3.1,
+  "pico_cm": 4.5,
+  "correcciones": 14,
+  "t_s": 63.6,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 337,
+   "de_ley": 1039,
+   "mejoraron": 839,
+   "empeoraron": 537,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.75,
+    "derecha": 3.18
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_con_puerta",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.419,
+  "rmse_cm": 27.4,
+  "pico_cm": 31.2,
+  "correcciones": 1,
+  "t_s": 56.1,
+  "ent": "interior",
+  "esc": "sala_con_puerta",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.941,
+  "rmse_cm": 4.8,
+  "pico_cm": 6.7,
+  "correcciones": 17,
+  "t_s": 53.7,
+  "guardian": {
+   "correcciones": 1379,
+   "de_memoria": 334,
+   "de_ley": 1045,
+   "mejoraron": 840,
+   "empeoraron": 539,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 3.9
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_con_puerta",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.941,
+  "rmse_cm": 3.6,
+  "pico_cm": 5.5,
+  "correcciones": 16,
+  "t_s": 50.8,
+  "guardian": {
+   "correcciones": 1377,
+   "de_memoria": 336,
+   "de_ley": 1041,
+   "mejoraron": 839,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.82,
+    "derecha": 3.33
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sala_con_puerta",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.372,
+  "rmse_cm": 18.7,
+  "pico_cm": 21.2,
+  "correcciones": 0,
+  "t_s": 53.6,
+  "ent": "interior",
+  "esc": "puerta_descentrada",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.373,
+  "rmse_cm": 10.1,
+  "pico_cm": 11.6,
+  "correcciones": 2,
+  "t_s": 55.8,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 830,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.77,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "puerta_descentrada",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.373,
+  "rmse_cm": 10.1,
+  "pico_cm": 11.6,
+  "correcciones": 2,
+  "t_s": 55.8,
+  "guardian": {
+   "correcciones": 1364,
+   "de_memoria": 334,
+   "de_ley": 1030,
+   "mejoraron": 830,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.77,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "puerta_descentrada",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.374,
+  "rmse_cm": 3.9,
+  "pico_cm": 7.2,
+  "correcciones": 0,
+  "t_s": 59.5,
+  "ent": "interior",
+  "esc": "puerta_descentrada",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.374,
+  "rmse_cm": 2.0,
+  "pico_cm": 5.1,
+  "correcciones": 1,
+  "t_s": 60.7,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "puerta_descentrada",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.374,
+  "rmse_cm": 2.0,
+  "pico_cm": 5.1,
+  "correcciones": 1,
+  "t_s": 60.7,
+  "guardian": {
+   "correcciones": 1363,
+   "de_memoria": 334,
+   "de_ley": 1029,
+   "mejoraron": 830,
+   "empeoraron": 533,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.56,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "puerta_descentrada",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.371,
+  "rmse_cm": 22.6,
+  "pico_cm": 25.4,
+  "correcciones": 0,
+  "t_s": 53.9,
+  "ent": "interior",
+  "esc": "puerta_descentrada",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.374,
+  "rmse_cm": 1.8,
+  "pico_cm": 4.5,
+  "correcciones": 4,
+  "t_s": 58.6,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "puerta_descentrada",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.374,
+  "rmse_cm": 1.8,
+  "pico_cm": 4.5,
+  "correcciones": 4,
+  "t_s": 58.6,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "puerta_descentrada",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.649,
+  "rmse_cm": 7.8,
+  "pico_cm": 16.3,
+  "correcciones": 33,
+  "t_s": 77.4,
+  "ent": "interior",
+  "esc": "almacen_estanterias",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.651,
+  "rmse_cm": 4.9,
+  "pico_cm": 6.6,
+  "correcciones": 8,
+  "t_s": 80.6,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 334,
+   "de_ley": 1036,
+   "mejoraron": 834,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.83,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "almacen_estanterias",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.651,
+  "rmse_cm": 4.9,
+  "pico_cm": 6.6,
+  "correcciones": 8,
+  "t_s": 80.6,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 335,
+   "de_ley": 1035,
+   "mejoraron": 834,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.83,
+    "derecha": 9.54
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "almacen_estanterias",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.666,
+  "rmse_cm": 12.2,
+  "pico_cm": 15.4,
+  "correcciones": 62,
+  "t_s": 92.9,
+  "ent": "interior",
+  "esc": "almacen_estanterias",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.647,
+  "rmse_cm": 7.0,
+  "pico_cm": 10.0,
+  "correcciones": 12,
+  "t_s": 98.0,
+  "guardian": {
+   "correcciones": 1373,
+   "de_memoria": 334,
+   "de_ley": 1039,
+   "mejoraron": 834,
+   "empeoraron": 539,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 4.82
+   },
+   "zona_muerta_x": 1.5
+  },
+  "ent": "interior",
+  "esc": "almacen_estanterias",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.654,
+  "rmse_cm": 2.3,
+  "pico_cm": 4.8,
+  "correcciones": 8,
+  "t_s": 94.6,
+  "guardian": {
+   "correcciones": 1370,
+   "de_memoria": 337,
+   "de_ley": 1033,
+   "mejoraron": 835,
+   "empeoraron": 535,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.79,
+    "derecha": 4.86
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "almacen_estanterias",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.45,
+  "rmse_cm": 26.6,
+  "pico_cm": 32.4,
+  "correcciones": 28,
+  "t_s": 66.7,
+  "ent": "interior",
+  "esc": "almacen_estanterias",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.652,
+  "rmse_cm": 4.2,
+  "pico_cm": 6.7,
+  "correcciones": 14,
+  "t_s": 88.2,
+  "guardian": {
+   "correcciones": 1375,
+   "de_memoria": 334,
+   "de_ley": 1041,
+   "mejoraron": 837,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 4.83
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "almacen_estanterias",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.653,
+  "rmse_cm": 3.7,
+  "pico_cm": 6.1,
+  "correcciones": 11,
+  "t_s": 84.9,
+  "guardian": {
+   "correcciones": 1373,
+   "de_memoria": 336,
+   "de_ley": 1037,
+   "mejoraron": 835,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.82,
+    "derecha": 4.65
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "almacen_estanterias",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.496,
+  "rmse_cm": 66.2,
+  "pico_cm": 80.4,
+  "correcciones": 21,
+  "t_s": 69.2,
+  "ent": "interior",
+  "esc": "lab_patas_mesas",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.6,
+  "correcciones": 14,
+  "t_s": 66.8,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 334,
+   "de_ley": 1042,
+   "mejoraron": 838,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.35,
+    "derecha": 7.49
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "lab_patas_mesas",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.6,
+  "correcciones": 14,
+  "t_s": 66.8,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 335,
+   "de_ley": 1041,
+   "mejoraron": 838,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.35,
+    "derecha": 7.49
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "lab_patas_mesas",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.833,
+  "rmse_cm": 48.6,
+  "pico_cm": 78.3,
+  "correcciones": 70,
+  "t_s": 133.1,
+  "ent": "interior",
+  "esc": "lab_patas_mesas",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.4,
+  "pico_cm": 5.1,
+  "correcciones": 19,
+  "t_s": 94.7,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 334,
+   "de_ley": 1047,
+   "mejoraron": 841,
+   "empeoraron": 540,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 3.07
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "lab_patas_mesas",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.0,
+  "pico_cm": 5.4,
+  "correcciones": 23,
+  "t_s": 100.2,
+  "guardian": {
+   "correcciones": 1385,
+   "de_memoria": 337,
+   "de_ley": 1048,
+   "mejoraron": 846,
+   "empeoraron": 539,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.27,
+    "derecha": 2.76
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "lab_patas_mesas",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.673,
+  "rmse_cm": 139.9,
+  "pico_cm": 200.2,
+  "correcciones": 44,
+  "t_s": 98.8,
+  "ent": "interior",
+  "esc": "lab_patas_mesas",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.9,
+  "pico_cm": 6.7,
+  "correcciones": 28,
+  "t_s": 84.1,
+  "guardian": {
+   "correcciones": 1389,
+   "de_memoria": 334,
+   "de_ley": 1055,
+   "mejoraron": 848,
+   "empeoraron": 541,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 2.27
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "lab_patas_mesas",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.2,
+  "pico_cm": 6.1,
+  "correcciones": 27,
+  "t_s": 83.1,
+  "guardian": {
+   "correcciones": 1389,
+   "de_memoria": 337,
+   "de_ley": 1052,
+   "mejoraron": 845,
+   "empeoraron": 544,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.82,
+    "derecha": 2.59
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "lab_patas_mesas",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.888,
+  "rmse_cm": 15.9,
+  "pico_cm": 30.8,
+  "correcciones": 58,
+  "t_s": 103.2,
+  "ent": "interior",
+  "esc": "aula_sillas",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.6,
+  "correcciones": 14,
+  "t_s": 66.8,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 334,
+   "de_ley": 1042,
+   "mejoraron": 838,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.35,
+    "derecha": 7.49
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "aula_sillas",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.6,
+  "pico_cm": 7.3,
+  "correcciones": 14,
+  "t_s": 68.1,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 336,
+   "de_ley": 1040,
+   "mejoraron": 838,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 3.78,
+    "derecha": 6.9
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "aula_sillas",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 6.4,
+  "pico_cm": 9.5,
+  "correcciones": 90,
+  "t_s": 76.5,
+  "ent": "interior",
+  "esc": "aula_sillas",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.4,
+  "pico_cm": 5.1,
+  "correcciones": 19,
+  "t_s": 94.7,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 334,
+   "de_ley": 1047,
+   "mejoraron": 841,
+   "empeoraron": 540,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 3.07
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "aula_sillas",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.1,
+  "pico_cm": 6.0,
+  "correcciones": 19,
+  "t_s": 95.6,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 341,
+   "de_ley": 1040,
+   "mejoraron": 839,
+   "empeoraron": 542,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.48,
+    "derecha": 2.67
+   },
+   "zona_muerta_x": 1.5
+  },
+  "ent": "interior",
+  "esc": "aula_sillas",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.236,
+  "rmse_cm": 36.3,
+  "pico_cm": 39.2,
+  "correcciones": 12,
+  "t_s": 93.1,
+  "ent": "interior",
+  "esc": "aula_sillas",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.9,
+  "pico_cm": 6.7,
+  "correcciones": 28,
+  "t_s": 84.1,
+  "guardian": {
+   "correcciones": 1389,
+   "de_memoria": 334,
+   "de_ley": 1055,
+   "mejoraron": 848,
+   "empeoraron": 541,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 2.27
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "aula_sillas",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 5.0,
+  "pico_cm": 6.7,
+  "correcciones": 25,
+  "t_s": 80.7,
+  "guardian": {
+   "correcciones": 1386,
+   "de_memoria": 350,
+   "de_ley": 1036,
+   "mejoraron": 843,
+   "empeoraron": 543,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 2.15
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "aula_sillas",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.451,
+  "rmse_cm": 70.7,
+  "pico_cm": 86.9,
+  "correcciones": 0,
+  "t_s": 67.6,
+  "ent": "interior",
+  "esc": "comedor_mesas_sillas",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.288,
+  "rmse_cm": 15.4,
+  "pico_cm": 18.2,
+  "correcciones": 3,
+  "t_s": 59.3,
+  "guardian": {
+   "correcciones": 1365,
+   "de_memoria": 334,
+   "de_ley": 1031,
+   "mejoraron": 830,
+   "empeoraron": 535,
+   "bloqueadas": 474,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.8,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "comedor_mesas_sillas",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.288,
+  "rmse_cm": 15.4,
+  "pico_cm": 18.2,
+  "correcciones": 3,
+  "t_s": 59.3,
+  "guardian": {
+   "correcciones": 1365,
+   "de_memoria": 334,
+   "de_ley": 1031,
+   "mejoraron": 830,
+   "empeoraron": 535,
+   "bloqueadas": 474,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.8,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "comedor_mesas_sillas",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.582,
+  "rmse_cm": 26.8,
+  "pico_cm": 37.8,
+  "correcciones": 12,
+  "t_s": 89.3,
+  "ent": "interior",
+  "esc": "comedor_mesas_sillas",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.576,
+  "rmse_cm": 12.9,
+  "pico_cm": 28.5,
+  "correcciones": 17,
+  "t_s": 107.9,
+  "guardian": {
+   "correcciones": 1379,
+   "de_memoria": 334,
+   "de_ley": 1045,
+   "mejoraron": 836,
+   "empeoraron": 543,
+   "bloqueadas": 484,
+   "oscilacion": 72,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 3.28,
+    "derecha": 3.78
+   },
+   "zona_muerta_x": 1.06
+  },
+  "ent": "interior",
+  "esc": "comedor_mesas_sillas",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.577,
+  "rmse_cm": 14.1,
+  "pico_cm": 31.7,
+  "correcciones": 19,
+  "t_s": 110.4,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 337,
+   "de_ley": 1044,
+   "mejoraron": 836,
+   "empeoraron": 545,
+   "bloqueadas": 482,
+   "oscilacion": 72,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 3.58,
+    "derecha": 4.1
+   },
+   "zona_muerta_x": 1.18
+  },
+  "ent": "interior",
+  "esc": "comedor_mesas_sillas",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.582,
+  "rmse_cm": 18.6,
+  "pico_cm": 27.8,
+  "correcciones": 17,
+  "t_s": 74.2,
+  "ent": "interior",
+  "esc": "comedor_mesas_sillas",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.289,
+  "rmse_cm": 14.3,
+  "pico_cm": 17.0,
+  "correcciones": 4,
+  "t_s": 65.9,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 334,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 534,
+   "bloqueadas": 478,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "comedor_mesas_sillas",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.235,
+  "rmse_cm": 4.4,
+  "pico_cm": 5.5,
+  "correcciones": 4,
+  "t_s": 58.0,
+  "guardian": {
+   "correcciones": 1366,
+   "de_memoria": 335,
+   "de_ley": 1031,
+   "mejoraron": 831,
+   "empeoraron": 535,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.82,
+    "derecha": 11.31
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "comedor_mesas_sillas",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 12.2,
+  "pico_cm": 23.1,
+  "correcciones": 15,
+  "t_s": 55.3,
+  "ent": "interior",
+  "esc": "bajo_mesa_larga",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.6,
+  "correcciones": 14,
+  "t_s": 66.8,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 334,
+   "de_ley": 1042,
+   "mejoraron": 838,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.35,
+    "derecha": 7.49
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "bajo_mesa_larga",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.6,
+  "correcciones": 14,
+  "t_s": 66.8,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 334,
+   "de_ley": 1042,
+   "mejoraron": 838,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.35,
+    "derecha": 7.49
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "bajo_mesa_larga",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.66,
+  "rmse_cm": 20.7,
+  "pico_cm": 29.7,
+  "correcciones": 11,
+  "t_s": 93.6,
+  "ent": "interior",
+  "esc": "bajo_mesa_larga",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.4,
+  "pico_cm": 5.1,
+  "correcciones": 19,
+  "t_s": 94.7,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 334,
+   "de_ley": 1047,
+   "mejoraron": 841,
+   "empeoraron": 540,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 3.07
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "bajo_mesa_larga",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.3,
+  "pico_cm": 6.1,
+  "correcciones": 20,
+  "t_s": 96.0,
+  "guardian": {
+   "correcciones": 1382,
+   "de_memoria": 339,
+   "de_ley": 1043,
+   "mejoraron": 840,
+   "empeoraron": 542,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.97,
+    "derecha": 2.71
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "bajo_mesa_larga",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.243,
+  "rmse_cm": 17.5,
+  "pico_cm": 19.9,
+  "correcciones": 6,
+  "t_s": 54.4,
+  "ent": "interior",
+  "esc": "bajo_mesa_larga",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.9,
+  "pico_cm": 6.7,
+  "correcciones": 28,
+  "t_s": 84.1,
+  "guardian": {
+   "correcciones": 1389,
+   "de_memoria": 334,
+   "de_ley": 1055,
+   "mejoraron": 848,
+   "empeoraron": 541,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 2.27
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "bajo_mesa_larga",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.3,
+  "pico_cm": 6.8,
+  "correcciones": 29,
+  "t_s": 85.4,
+  "guardian": {
+   "correcciones": 1391,
+   "de_memoria": 340,
+   "de_ley": 1051,
+   "mejoraron": 849,
+   "empeoraron": 542,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.07,
+    "derecha": 2.59
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "bajo_mesa_larga",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.284,
+  "rmse_cm": 19.4,
+  "pico_cm": 21.9,
+  "correcciones": 2,
+  "t_s": 56.2,
+  "ent": "interior",
+  "esc": "sillas_sueltas",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.6,
+  "correcciones": 14,
+  "t_s": 66.8,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 334,
+   "de_ley": 1042,
+   "mejoraron": 838,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.35,
+    "derecha": 7.49
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sillas_sueltas",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.6,
+  "pico_cm": 6.6,
+  "correcciones": 14,
+  "t_s": 66.8,
+  "guardian": {
+   "correcciones": 1376,
+   "de_memoria": 334,
+   "de_ley": 1042,
+   "mejoraron": 838,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 4.35,
+    "derecha": 7.49
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sillas_sueltas",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.414,
+  "rmse_cm": 146.8,
+  "pico_cm": 202.0,
+  "correcciones": 46,
+  "t_s": 98.1,
+  "ent": "interior",
+  "esc": "sillas_sueltas",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.4,
+  "pico_cm": 5.1,
+  "correcciones": 19,
+  "t_s": 94.7,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 334,
+   "de_ley": 1047,
+   "mejoraron": 841,
+   "empeoraron": 540,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.44,
+    "derecha": 3.07
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sillas_sueltas",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 3.1,
+  "pico_cm": 4.9,
+  "correcciones": 22,
+  "t_s": 98.2,
+  "guardian": {
+   "correcciones": 1384,
+   "de_memoria": 338,
+   "de_ley": 1046,
+   "mejoraron": 848,
+   "empeoraron": 536,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.07,
+    "derecha": 2.61
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sillas_sueltas",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 3,
+  "progreso": 0.273,
+  "rmse_cm": 149.7,
+  "pico_cm": 211.6,
+  "correcciones": 62,
+  "t_s": 99.9,
+  "ent": "interior",
+  "esc": "sillas_sueltas",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.7,
+  "pico_cm": 6.7,
+  "correcciones": 25,
+  "t_s": 80.6,
+  "guardian": {
+   "correcciones": 1387,
+   "de_memoria": 334,
+   "de_ley": 1053,
+   "mejoraron": 848,
+   "empeoraron": 539,
+   "bloqueadas": 431,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 5.45,
+    "derecha": 1.92
+   },
+   "zona_muerta_x": 1.09
+  },
+  "ent": "interior",
+  "esc": "sillas_sueltas",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.961,
+  "rmse_cm": 4.9,
+  "pico_cm": 7.2,
+  "correcciones": 27,
+  "t_s": 82.7,
+  "guardian": {
+   "correcciones": 1389,
+   "de_memoria": 341,
+   "de_ley": 1048,
+   "mejoraron": 847,
+   "empeoraron": 542,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.29,
+    "derecha": 2.08
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "interior",
+  "esc": "sillas_sueltas",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 2,
+  "progreso": 0.414,
+  "rmse_cm": 27.0,
+  "pico_cm": 37.1,
+  "correcciones": 89,
+  "t_s": 91.4,
+  "ent": "exterior",
+  "esc": "huerta_hileras",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.991,
+  "rmse_cm": 2.5,
+  "pico_cm": 5.6,
+  "correcciones": 12,
+  "t_s": 59.1,
+  "guardian": {
+   "correcciones": 1374,
+   "de_memoria": 334,
+   "de_ley": 1040,
+   "mejoraron": 837,
+   "empeoraron": 537,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 10.35,
+    "derecha": 13.22
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "huerta_hileras",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.991,
+  "rmse_cm": 2.8,
+  "pico_cm": 8.1,
+  "correcciones": 11,
+  "t_s": 58.1,
+  "guardian": {
+   "correcciones": 1373,
+   "de_memoria": 335,
+   "de_ley": 1038,
+   "mejoraron": 836,
+   "empeoraron": 537,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 9.99,
+    "derecha": 12.89
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "huerta_hileras",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 3,
+  "progreso": 0.266,
+  "rmse_cm": 13.5,
+  "pico_cm": 21.8,
+  "correcciones": 17,
+  "t_s": 77.8,
+  "ent": "exterior",
+  "esc": "huerta_hileras",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.99,
+  "rmse_cm": 3.8,
+  "pico_cm": 6.0,
+  "correcciones": 19,
+  "t_s": 86.4,
+  "guardian": {
+   "correcciones": 1381,
+   "de_memoria": 334,
+   "de_ley": 1047,
+   "mejoraron": 841,
+   "empeoraron": 540,
+   "bloqueadas": 430,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 7.42,
+    "derecha": 11.58
+   },
+   "zona_muerta_x": 1.09
+  },
+  "ent": "exterior",
+  "esc": "huerta_hileras",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.99,
+  "rmse_cm": 4.1,
+  "pico_cm": 7.2,
+  "correcciones": 24,
+  "t_s": 98.3,
+  "guardian": {
+   "correcciones": 1386,
+   "de_memoria": 343,
+   "de_ley": 1043,
+   "mejoraron": 842,
+   "empeoraron": 544,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 7.7,
+    "derecha": 9.97
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "huerta_hileras",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 3,
+  "progreso": 0.36,
+  "rmse_cm": 22.7,
+  "pico_cm": 26.6,
+  "correcciones": 122,
+  "t_s": 75.0,
+  "ent": "exterior",
+  "esc": "huerta_hileras",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.99,
+  "rmse_cm": 5.4,
+  "pico_cm": 7.2,
+  "correcciones": 22,
+  "t_s": 70.4,
+  "guardian": {
+   "correcciones": 1384,
+   "de_memoria": 334,
+   "de_ley": 1050,
+   "mejoraron": 846,
+   "empeoraron": 538,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 12.13,
+    "derecha": 10.24
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "huerta_hileras",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.99,
+  "rmse_cm": 6.7,
+  "pico_cm": 9.1,
+  "correcciones": 47,
+  "t_s": 110.6,
+  "guardian": {
+   "correcciones": 1409,
+   "de_memoria": 353,
+   "de_ley": 1056,
+   "mejoraron": 850,
+   "empeoraron": 559,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 10.8,
+    "derecha": 11.9
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "huerta_hileras",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.274,
+  "rmse_cm": 2.0,
+  "pico_cm": 2.7,
+  "correcciones": 0,
+  "t_s": 55.2,
+  "ent": "exterior",
+  "esc": "campo_rocas",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.241,
+  "rmse_cm": 2.5,
+  "pico_cm": 3.5,
+  "correcciones": 11,
+  "t_s": 81.9,
+  "guardian": {
+   "correcciones": 1373,
+   "de_memoria": 334,
+   "de_ley": 1039,
+   "mejoraron": 834,
+   "empeoraron": 539,
+   "bloqueadas": 471,
+   "oscilacion": 71,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 7.49,
+    "derecha": 6.04
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "campo_rocas",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.218,
+  "rmse_cm": 2.9,
+  "pico_cm": 4.1,
+  "correcciones": 6,
+  "t_s": 62.0,
+  "guardian": {
+   "correcciones": 1368,
+   "de_memoria": 336,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 536,
+   "bloqueadas": 440,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 7.49,
+    "derecha": 7.55
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "campo_rocas",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.993,
+  "rmse_cm": 231.8,
+  "pico_cm": 440.1,
+  "correcciones": 31,
+  "t_s": 117.7,
+  "ent": "exterior",
+  "esc": "campo_rocas",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.548,
+  "rmse_cm": 3.2,
+  "pico_cm": 6.0,
+  "correcciones": 9,
+  "t_s": 95.9,
+  "guardian": {
+   "correcciones": 1371,
+   "de_memoria": 334,
+   "de_ley": 1037,
+   "mejoraron": 834,
+   "empeoraron": 537,
+   "bloqueadas": 464,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 8.8,
+    "derecha": 10.5
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "campo_rocas",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.588,
+  "rmse_cm": 5.8,
+  "pico_cm": 7.7,
+  "correcciones": 10,
+  "t_s": 101.2,
+  "guardian": {
+   "correcciones": 1372,
+   "de_memoria": 336,
+   "de_ley": 1036,
+   "mejoraron": 835,
+   "empeoraron": 537,
+   "bloqueadas": 437,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 8.66,
+    "derecha": 10.24
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "campo_rocas",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.731,
+  "rmse_cm": 88.5,
+  "pico_cm": 127.6,
+  "correcciones": 46,
+  "t_s": 98.2,
+  "ent": "exterior",
+  "esc": "campo_rocas",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 3,
+  "progreso": 0.47,
+  "rmse_cm": 2.5,
+  "pico_cm": 6.1,
+  "correcciones": 33,
+  "t_s": 170.0,
+  "guardian": {
+   "correcciones": 1394,
+   "de_memoria": 334,
+   "de_ley": 1060,
+   "mejoraron": 844,
+   "empeoraron": 550,
+   "bloqueadas": 435,
+   "oscilacion": 72,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 6.8,
+    "derecha": 18.14
+   },
+   "zona_muerta_x": 1.5
+  },
+  "ent": "exterior",
+  "esc": "campo_rocas",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.47,
+  "rmse_cm": 2.8,
+  "pico_cm": 7.4,
+  "correcciones": 5,
+  "t_s": 82.4,
+  "guardian": {
+   "correcciones": 1367,
+   "de_memoria": 335,
+   "de_ley": 1032,
+   "mejoraron": 832,
+   "empeoraron": 535,
+   "bloqueadas": 468,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 9.48,
+    "derecha": 10.11
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "campo_rocas",
+  "modo": "memoria",
+  "seed": 2
+ },
+ {
+  "exito": false,
+  "contactos": 2,
+  "progreso": 0.331,
+  "rmse_cm": 27.4,
+  "pico_cm": 49.7,
+  "correcciones": 47,
+  "t_s": 80.9,
+  "ent": "exterior",
+  "esc": "camino_plantas",
+  "modo": "base",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.992,
+  "rmse_cm": 3.3,
+  "pico_cm": 6.8,
+  "correcciones": 18,
+  "t_s": 73.4,
+  "guardian": {
+   "correcciones": 1379,
+   "de_memoria": 334,
+   "de_ley": 1045,
+   "mejoraron": 840,
+   "empeoraron": 539,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 11.96,
+    "derecha": 13.52
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "camino_plantas",
+  "modo": "ley",
+  "seed": 0
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.992,
+  "rmse_cm": 4.1,
+  "pico_cm": 8.8,
+  "correcciones": 24,
+  "t_s": 85.4,
+  "guardian": {
+   "correcciones": 1386,
+   "de_memoria": 341,
+   "de_ley": 1045,
+   "mejoraron": 844,
+   "empeoraron": 542,
+   "bloqueadas": 430,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 11.06,
+    "derecha": 10.74
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "camino_plantas",
+  "modo": "memoria",
+  "seed": 0
+ },
+ {
+  "exito": false,
+  "contactos": 2,
+  "progreso": 0.188,
+  "rmse_cm": 24.8,
+  "pico_cm": 55.9,
+  "correcciones": 24,
+  "t_s": 82.3,
+  "ent": "exterior",
+  "esc": "camino_plantas",
+  "modo": "base",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.992,
+  "rmse_cm": 3.5,
+  "pico_cm": 6.9,
+  "correcciones": 18,
+  "t_s": 98.2,
+  "guardian": {
+   "correcciones": 1380,
+   "de_memoria": 334,
+   "de_ley": 1046,
+   "mejoraron": 841,
+   "empeoraron": 539,
+   "bloqueadas": 436,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 7.92,
+    "derecha": 10.69
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "camino_plantas",
+  "modo": "ley",
+  "seed": 1
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.992,
+  "rmse_cm": 3.9,
+  "pico_cm": 6.9,
+  "correcciones": 20,
+  "t_s": 101.4,
+  "guardian": {
+   "correcciones": 1382,
+   "de_memoria": 338,
+   "de_ley": 1044,
+   "mejoraron": 842,
+   "empeoraron": 540,
+   "bloqueadas": 436,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 8.43,
+    "derecha": 9.08
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "camino_plantas",
+  "modo": "memoria",
+  "seed": 1
+ },
+ {
+  "exito": false,
+  "contactos": 1,
+  "progreso": 0.181,
+  "rmse_cm": 45.0,
+  "pico_cm": 51.9,
+  "correcciones": 90,
+  "t_s": 54.8,
+  "ent": "exterior",
+  "esc": "camino_plantas",
+  "modo": "base",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.992,
+  "rmse_cm": 4.4,
+  "pico_cm": 6.4,
+  "correcciones": 20,
+  "t_s": 78.2,
+  "guardian": {
+   "correcciones": 1382,
+   "de_memoria": 334,
+   "de_ley": 1048,
+   "mejoraron": 845,
+   "empeoraron": 537,
+   "bloqueadas": 436,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 11.15,
+    "derecha": 12.61
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "camino_plantas",
+  "modo": "ley",
+  "seed": 2
+ },
+ {
+  "exito": true,
+  "contactos": 0,
+  "progreso": 0.992,
+  "rmse_cm": 5.3,
+  "pico_cm": 8.2,
+  "correcciones": 24,
+  "t_s": 87.5,
+  "guardian": {
+   "correcciones": 1386,
+   "de_memoria": 344,
+   "de_ley": 1042,
+   "mejoraron": 844,
+   "empeoraron": 542,
+   "bloqueadas": 436,
+   "oscilacion": 70,
+   "casos_memoria": 4000,
+   "efecto_deg_por_pulso": {
+    "izquierda": 11.06,
+    "derecha": 10.77
+   },
+   "zona_muerta_x": 1.0
+  },
+  "ent": "exterior",
+  "esc": "camino_plantas",
+  "modo": "memoria",
+  "seed": 2
+ }
+]

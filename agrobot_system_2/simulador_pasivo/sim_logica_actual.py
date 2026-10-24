@@ -1071,6 +1071,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         guardian = cfg.guardian_obj or GS.GuardianSendero(GS.MemoriaCorrecciones(None), log_dir=None, tol_cm=cfg.guardian_tol_cm,
                                                            tol_deg=cfg.guardian_tol_deg, usar_memoria=cfg.guardian_usar_memoria)
         guardian.explorar = cfg.guardian_explorar
+        guardian.usar_memoria = cfg.guardian_usar_memoria        # manda la config del episodio, no lo que traiga el objeto
         guardian.pend = None
         if esc.linea_central:
             guardian.fijar_polilinea(esc.linea_central)

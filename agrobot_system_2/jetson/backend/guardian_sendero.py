@@ -24,6 +24,8 @@ import random
 import time
 from pathlib import Path
 
+# Una recomendación de la memoria solo se usa si en situaciones parecidas redujo el error al menos esto (en fracción del error previo): con menos es ruido.
+MEJORA_MIN_MEMORIA = 0.30
 DIR_CORRECCIONES = Path.home() / ".agrobot" / "aprendizaje" / "correcciones"
 RUTA_MEMORIA = Path.home() / ".agrobot" / "aprendizaje" / "guardian_memoria.json"
 
@@ -134,7 +136,7 @@ class MemoriaCorrecciones:
             return None
         a, e = mejor
         m = e["m"] / e["p"]
-        if m <= 0.05:
+        if m <= MEJORA_MIN_MEMORIA:
             return None
         peso_util = sum(max(c["m"], 0.0) / (0.05 + d) for d, c in vec if c["a"] == a)
         escala = e["s"] / peso_util if peso_util > 0 else 1.0
@@ -220,7 +222,7 @@ class GuardianSendero:
             if rec is not None:
                 a, s, m, n, ex = rec
                 # la memoria manda solo si coincide en el SENTIDO de la corrección que pide la ley (no gira lejos del sendero)
-                if a == accion or abs(e_y) < self.tol_y:
+                if a == accion:
                     accion, escala, origen, expl, mejora_esp = a, s, "memoria", ex, m
         if self.explorar > 0 and self.rng.random() < self.explorar:
             escala = _clip(escala * self.rng.choice((0.6, 0.8, 1.25, 1.5)), 0.25, 1.6)

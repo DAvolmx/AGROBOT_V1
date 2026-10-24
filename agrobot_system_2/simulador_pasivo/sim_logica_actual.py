@@ -219,6 +219,13 @@ class Config:
     paredes_solidas: bool = True
     # --- Guardián del sendero (2026-10-24, jetson/backend/guardian_sendero.py): mantiene el sendero con pulsos correctivos que aprende de
     # la correlación LIDAR + IMU + cámara + error de pose. `guardian_obj` = instancia compartida entre episodios (su memoria aprende) o None.
+    # --- misión (mision_sim.py): escanear y contar plantas mientras se conduce
+    mision: bool = False
+    mis_inspeccionar: bool = True
+    mis_escaneo_s: float = 8.0
+    mis_dist_insp_m: float = 0.5
+    mis_fov_deg: float = 70.0
+    mis_rango_m: float = 2.0
     guardian: bool = False
     guardian_obj: object = None
     guardian_explorar: float = 0.0
@@ -825,6 +832,7 @@ class Escenario:
     descripcion: str = ""
     meta_xy: tuple | None = None       # si no es solo avanzar en x
     linea_central: list | None = None  # polilinea [(x,y)...]; None = la recta y=centro_y
+    plantas: list | None = None        # [(x, y)] plantas a inspeccionar y contar en una MISIÓN (mision_sim.py); None = sin misión
 
     def desvio(self, x, y):
         """Distancia con signo a la línea central (m)."""
@@ -1066,6 +1074,10 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     contactos, prev_choque = 0, False
     ultima_ok, t_choque = None, -9.0
     guardian, g_libre_desde, g_reg = None, None, []
+    mision = None
+    if cfg.mision and esc.plantas:
+        import mision_sim
+        mision = mision_sim.MisionSim(esc, cfg, np.random.default_rng(777 + semilla))
     if cfg.guardian:
         import guardian_sendero as GS
         guardian = cfg.guardian_obj or GS.GuardianSendero(GS.MemoriaCorrecciones(None), log_dir=None, tol_cm=cfg.guardian_tol_cm,
@@ -1135,6 +1147,12 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 if ref is not None:
                     rf.actualizar(*ref)
                 desvio_ult = RF.desvio_lateral(pi, pd, y_max=1.6) if cfg.rumbo_mirada_m > 0 else None
+            if mision is not None:
+                cmx, cmy = robot.centro()
+                pedir = mision.tick(t, cmx, cmy, robot.psi_real(), TICK_EXPLORADOR)
+                if pedir > 0:
+                    pausa_hasta = max(pausa_hasta, t + pedir)       # el robot se queda quieto escaneando
+                    cola_man = []
             frente = d["adelante"] if d["adelante"] is not None else math.inf
             izq = d["izquierda"]
             der = d["derecha"]
@@ -1327,6 +1345,8 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     }
     if guardian is not None:
         res["guardian"] = guardian.resumen()
+    if mision is not None:
+        res["mision"] = mision.resumen()
     if traza:
         res["traza"] = traj
     return res

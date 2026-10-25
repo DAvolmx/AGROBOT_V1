@@ -904,23 +904,25 @@ def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=None, rango=8.0):
     dx, dy = np.cos(ang), np.sin(ang)
     dist = np.full(360, np.inf)
     macetas_visibles = esc.macetas if ALTURA_MACETA_M >= ALTURA_LIDAR_M - GROSOR_HAZ_M else []
-    for (x, y, r) in macetas_visibles:            # círculos
-        fx, fy = cx - x, cy - y
-        b = fx * dx + fy * dy
-        c = fx * fx + fy * fy - r * r
+    if macetas_visibles:                          # círculos, todos a la vez: (360 rayos x M círculos)
+        M_ = np.asarray(macetas_visibles, dtype=float)
+        fx, fy = cx - M_[:, 0][None, :], cy - M_[:, 1][None, :]
+        b = fx * dx[:, None] + fy * dy[:, None]
+        c = fx * fx + fy * fy - (M_[:, 2] ** 2)[None, :]
         disc = b * b - c
         ok = disc >= 0
         t = np.where(ok, -b - np.sqrt(np.where(ok, disc, 0.0)), np.inf)
         t = np.where(t > 0.02, t, np.inf)
-        dist = np.minimum(dist, t)
-    for (x0, y0, x1, y1) in esc.paredes:          # segmentos
-        ex, ey = x1 - x0, y1 - y0
-        den = dx * ey - dy * ex
+        dist = np.minimum(dist, t.min(axis=1))
+    if len(esc.paredes):                          # segmentos, todos a la vez: (360 rayos x W paredes)
+        W_ = np.asarray(esc.paredes, dtype=float)
+        x0_, y0_, ex_, ey_ = W_[:, 0][None, :], W_[:, 1][None, :], (W_[:, 2] - W_[:, 0])[None, :], (W_[:, 3] - W_[:, 1])[None, :]
+        den = dx[:, None] * ey_ - dy[:, None] * ex_
         with np.errstate(divide="ignore", invalid="ignore"):
-            tt = ((x0 - cx) * ey - (y0 - cy) * ex) / den
-            uu = ((x0 - cx) * dy - (y0 - cy) * dx) / den
+            tt = ((x0_ - cx) * ey_ - (y0_ - cy) * ex_) / den
+            uu = ((x0_ - cx) * dy[:, None] - (y0_ - cy) * dx[:, None]) / den
         ok = (np.abs(den) > 1e-9) & (tt > 0.02) & (uu >= 0) & (uu <= 1)
-        dist = np.minimum(dist, np.where(ok, tt, np.inf))
+        dist = np.minimum(dist, np.where(ok, tt, np.inf).min(axis=1))
     if ruido is None:                      # σ(r) = a + b·r medida con el robot PARADO, por el factor de marcha (hipótesis), y rayos perdidos
         sigma = (CAL["lidar_sigma_a"] + CAL["lidar_sigma_b"] * np.where(np.isfinite(dist), dist, 0.0)) * CAL["lidar_factor_marcha"]
         ruido = sigma
@@ -1123,28 +1125,24 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         else:
             guardian.fijar_polilinea([(x0 - 1.0, esc.centro_y), (x0 + 400.0, esc.centro_y)])
 
+    scan_xy = (np.zeros(0), np.zeros(0))
     PRED = {"adelante": 0, "atras": 0, "giro": 0, "cambiadas": 0}
     FRENTE_LIDAR, ATRAS_LIDAR, MEDIO_ANCHO, CENTRO_X = 0.185, 0.305, 0.19, -0.06   # huella en ejes del LIDAR (x adelante); centro del cuerpo a -6 cm
 
     def _despejado(accion, scan_):
-        """¿Se puede ejecutar este pulso sin tocar nada de lo que ve el scan? Barre la huella (ejes del LIDAR)."""
+        """¿Se puede ejecutar este pulso sin tocar nada de lo que ve el scan? Barre la huella (ejes del LIDAR). Vectorizado con numpy."""
         m = cfg.mx_pred_margen_m
-        for q_ in scan_:
-            a_ = math.radians(q_["angle_deg"])
-            px_, py_ = q_["distance_m"] * math.cos(a_), q_["distance_m"] * math.sin(a_)
-            dentro = -ATRAS_LIDAR - 0.01 <= px_ <= FRENTE_LIDAR + 0.01 and abs(py_) <= MEDIO_ANCHO + 0.01       # el propio chasis
-            if dentro:
-                continue
-            if accion == "adelante":
-                if FRENTE_LIDAR < px_ < FRENTE_LIDAR + cfg.mx_pred_avance_m + m and abs(py_) < MEDIO_ANCHO + m:
-                    return False
-            elif accion == "atras":
-                if -ATRAS_LIDAR - cfg.mx_pred_atras_m - m < px_ < -ATRAS_LIDAR and abs(py_) < MEDIO_ANCHO + m:
-                    return False
-            else:                                                         # giro: la esquina más lejana barre un círculo alrededor del centro
-                if math.hypot(px_ - CENTRO_X, py_) < cfg.mx_pred_giro_m + m:
-                    return False
-        return True
+        px_, py_ = scan_xy
+        if px_.size == 0:
+            return True
+        chasis = (px_ >= -ATRAS_LIDAR - 0.01) & (px_ <= FRENTE_LIDAR + 0.01) & (np.abs(py_) <= MEDIO_ANCHO + 0.01)       # el propio chasis
+        if accion == "adelante":
+            hit = (px_ > FRENTE_LIDAR) & (px_ < FRENTE_LIDAR + cfg.mx_pred_avance_m + m) & (np.abs(py_) < MEDIO_ANCHO + m)
+        elif accion == "atras":
+            hit = (px_ > -ATRAS_LIDAR - cfg.mx_pred_atras_m - m) & (px_ < -ATRAS_LIDAR) & (np.abs(py_) < MEDIO_ANCHO + m)
+        else:                                                         # giro: la esquina más lejana barre un círculo alrededor del centro
+            hit = np.hypot(px_ - CENTRO_X, py_) < cfg.mx_pred_giro_m + m
+        return not bool(np.any(hit & ~chasis))
 
     def _ord(accion, tt, **kw):
         """cond.ordenar con el predictor: si el pulso chocaría, no se ejecuta (o se cambia por el giro contrario / retroceso despejado)."""
@@ -1266,6 +1264,12 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
             prox_expl += TICK_EXPLORADOR
             lx, ly = robot.lidar_pos()
             scan = lidar_scan(esc, lx, ly, robot.psi_real(), rng)
+            if scan:
+                _a = np.radians([q_["angle_deg"] for q_ in scan])
+                _d = np.array([q_["distance_m"] for q_ in scan])
+                scan_xy = (_d * np.cos(_a), _d * np.sin(_a))
+            else:
+                scan_xy = (np.zeros(0), np.zeros(0))
             lidar.ingest_scan(scan)
             d = lidar.distancias(cfg.slam_cfg())
             if rf is not None and cfg.rumbo_paredes and not cond.activo and not cola_man:
@@ -1289,13 +1293,9 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     cola_man = []
             frente = d["adelante"] if d["adelante"] is not None else math.inf
             if cfg.mx_barrido:
-                fb = math.inf
-                for q_ in scan:
-                    a_ = math.radians(q_["angle_deg"])
-                    px_, py_ = q_["distance_m"] * math.cos(a_), q_["distance_m"] * math.sin(a_)
-                    if px_ > 0 and abs(py_) < cfg.mx_ancho_half_m:
-                        fb = min(fb, px_)
-                frente = min(frente, fb - cfg.lidar_adelante_cm / 100.0)
+                sel = (scan_xy[0] > 0) & (np.abs(scan_xy[1]) < cfg.mx_ancho_half_m)
+                if sel.any():
+                    frente = min(frente, float(scan_xy[0][sel].min()) - cfg.lidar_adelante_cm / 100.0)
             izq = d["izquierda"]
             der = d["derecha"]
             li = izq if izq is not None else math.inf
@@ -1478,13 +1478,15 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         cerca_cada -= 1
         choque = H.choca(mundo_cerca, cx, cy, q[2], q[3], geo=robot.geo) if cerca_cada == 4 else prev_choque
         if cfg.paredes_solidas and cerca_cada == 4:
-            if choque and ultima_ok is not None:
-                robot.d = copy.deepcopy(ultima_ok)             # choque inelástico: vuelve a donde no tocaba y se para
-                robot.d.dq[:] = 0.0
-                if hasattr(robot.d, "wheels"):
-                    robot.d.wheels[:] = 0.0
+            if choque and ultima_ok is not None:                # choque inelástico: vuelve a donde no tocaba y se para
+                d_ = robot.d
+                d_.q[:] = ultima_ok[0]
+                d_.dq[:] = 0.0
+                d_.wheels[:] = 0.0
+                d_.stop_impacts, d_.stop_energy_loss, d_.slip, d_.max_force_ratio = ultima_ok[1:]
             elif not choque:
-                ultima_ok = copy.deepcopy(robot.d)
+                d_ = robot.d
+                ultima_ok = (d_.q.copy(), d_.stop_impacts, d_.stop_energy_loss, d_.slip, d_.max_force_ratio)
         if choque and not prev_choque and (t - t_choque > 1.0 or not cfg.paredes_solidas):
             contactos += 1
             if len(contacto_info) < 12:                 # diagnóstico: dónde está lo que tocó, en ejes del robot (x adelante, y izquierda), y qué veía de frente

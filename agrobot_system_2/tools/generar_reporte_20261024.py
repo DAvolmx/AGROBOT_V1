@@ -219,6 +219,26 @@ def main():
     if mc:
         doc.add_paragraph("Ancla de rumbo por paredes en MapaScan (banco con deriva 1-3 %): precisión 94-97 % sin ella y no mejora con ella; se deja apagada.")
 
+    # ---------------------------------------------------------------- 7c misiones
+    doc.add_heading("7c. Entrenamiento por misiones (4 h, 71 generaciones)", 1)
+    mc = sorted(glob.glob(str(HOME / ".agrobot" / "aprendizaje" / "misiones_2026*" / "informe.json")))
+    mi = js(mc[-1]) if mc else None
+    if mi:
+        doc.add_paragraph("7 misiones largas (huerta de 14 m, campo extenso, camino curvo, laberinto con macetas, laboratorio con patas, dos salas con puerta, pasillo en L) en las que el robot "
+                          "debe llegar sin contactos, escanear y contar las plantas. Éxito = llegó + 0 contactos + error de conteo <= 15 % + recall >= 80 %. "
+                          "Validación: 6 semillas nuevas por misión (42 episodios por candidato). El detector/escaneo/conteo son hipótesis del simulador (mision_sim.py), sin calibrar.")
+        tabla(doc, [[f["nombre"], f["todo"]["exito_pct"], f["todo"]["llego_pct"], f["todo"]["contactos_por_ep"], f["todo"]["recall"], f["todo"]["error_conteo"], f["todo"]["t_s"]]
+                    for f in mi["validacion"]], ["candidato", "éxito %", "llegó %", "contactos/ep", "recall", "error conteo", "t (s)"])
+        mej = next(f for f in mi["validacion"] if f["nombre"] == mi["mejor"]["nombre"])
+        hoy = next(f for f in mi["validacion"] if f["nombre"] == "ROBOT_DE_HOY")
+        tabla(doc, [[k, v["exito_pct"], v["llego_pct"], v["contactos_por_ep"], v["error_conteo"], hoy["por_mision"][k]["exito_pct"], hoy["por_mision"][k]["llego_pct"]]
+                    for k, v in mej["por_mision"].items()], ["misión", "éxito % (mejor)", "llegó %", "contactos/ep", "error conteo", "éxito % (hoy)", "llegó % (hoy)"])
+        doc.add_paragraph("Estrés (hardware flojo): " + "; ".join(f"{k}: éxito {v['todo']['exito_pct']} %, llegó {v['todo']['llego_pct']} %, contactos/ep {v['todo']['contactos_por_ep']}" for k, v in mi["estres"].items()))
+        doc.add_paragraph("Parámetros del mejor candidato (NO desplegados): " + json.dumps(mi["mejor"]["params"], ensure_ascii=False))
+        doc.add_paragraph("Sigue fallando: campo_extenso (0 % éxito, 3,2 contactos/ep), laberinto_macetas (0 %, 6 contactos/ep, conteo con 105 % de error) y salas_puerta (llega siempre pero el conteo falla).")
+    else:
+        doc.add_paragraph("[PENDIENTE]")
+
     # ---------------------------------------------------------------- 8 contradicciones
     doc.add_heading("8. Contradicciones y correcciones", 1)
     for t in [

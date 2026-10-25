@@ -17,8 +17,28 @@ E = S.Escenario
 R = 0.12
 
 
+def misiones(semilla: int = 0) -> dict:
+    """Las 10 misiones de la semilla, SOLO con distribuciones factibles (hay un camino libre para un robot de 25 cm de radio): las que salen
+    infactibles se vuelven a sortear con otro intento determinista."""
+    out, ref = {}, None
+    for intento in range(60):
+        d = _misiones(semilla, intento)
+        ref = ref or d
+        for n, (ent, esc) in d.items():
+            if n not in out and factible(esc):
+                out[n] = (ent, esc)
+        if len(out) == len(d):
+            break
+    for n, v in ref.items():                       # si alguna no se logró (no debería), se deja la primera con aviso en la descripción
+        if n not in out:
+            v[1].descripcion += " [INFACTIBLE]"
+            out[n] = v
+    return {n: out[n] for n in ref}
+
+
 def _con_plantas(nombre, paredes, plantas, extra_obst, goal, t_max, desc, meta=None, centro=None):
     macetas = [(x, y, R) for x, y in plantas] + list(extra_obst)
+    t_max = t_max + 12.0 * len(plantas)             # escanear cada planta cuesta tiempo (parada + acercamiento): el límite crece con el número de plantas
     return E(nombre, paredes, macetas, goal_x=goal, t_max=t_max, meta_xy=meta, linea_central=centro, descripcion=desc, plantas=list(plantas))
 
 
@@ -35,8 +55,8 @@ def _sobre_camino(centro, s_m, lateral):
     return centro[-1]
 
 
-def misiones(semilla: int = 0) -> dict:
-    rng = np.random.default_rng(31_000 + semilla)
+def _misiones(semilla: int = 0, intento: int = 0) -> dict:
+    rng = np.random.default_rng(31_000 + semilla + 7919 * intento)
     out = {}
     # 1) huerta larga: dos hileras de 14 m (≈50 plantas), paso libre 90 cm  [exterior]
     b = 0.45 + R
@@ -140,6 +160,31 @@ def misiones(semilla: int = 0) -> dict:
     out["lab_sillas_plantas"] = ("interior", _con_plantas("lab_sillas_plantas", sala + muro + segs, pl, patas, 8.4, 700.0,
                                                          "Laboratorio de 9,8 m: puerta de 90 cm, 16 patas de mesa, 3 sillas y 8 macetas.", meta=(8.4, 0.0)))
     return out
+
+
+def factible(esc, radio=0.25, res=0.05):
+    """¿Existe un camino libre de inicio a meta para un robot de `radio` m? Rasteriza paredes y círculos, los ensancha por el radio y busca
+    por inundación. Las misiones infactibles no miden nada del robot (se descubrió el 2026-10-25: macetas en la esquina de un laberinto tapaban el paso)."""
+    import cv2
+    xs = [v for w in esc.paredes for v in (w[0], w[2])] + [0.0, (esc.meta_xy or (esc.goal_x, 0.0))[0]] + [o[0] for o in esc.macetas]
+    ys = [v for w in esc.paredes for v in (w[1], w[3])] + [0.0, (esc.meta_xy or (esc.goal_x, 0.0))[1]] + [o[1] for o in esc.macetas]
+    x0, y0 = min(xs) - 1.0, min(ys) - 1.0
+    W, H = int((max(xs) + 1.0 - x0) / res) + 1, int((max(ys) + 1.0 - y0) / res) + 1
+    occ = np.zeros((H, W), np.uint8)
+    for (a, b, c, d) in esc.paredes:
+        cv2.line(occ, (int((a - x0) / res), int((b - y0) / res)), (int((c - x0) / res), int((d - y0) / res)), 1, 1)
+    for (a, b, r) in esc.macetas:
+        cv2.circle(occ, (int((a - x0) / res), int((b - y0) / res)), max(1, int(r / res)), 1, -1)
+    k = int(radio / res)
+    occ = cv2.dilate(occ, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1)))
+    libre = (1 - occ).astype(np.uint8)
+    ini = (int((esc.inicio[0] - x0) / res), int((esc.inicio[1] - y0) / res))
+    meta = esc.meta_xy or (esc.goal_x, esc.centro_y)
+    fin = (int((meta[0] - x0) / res), int((meta[1] - y0) / res))
+    if not libre[ini[1], ini[0]] or not libre[fin[1], fin[0]]:
+        return False
+    n, lab = cv2.connectedComponents(libre, connectivity=8)
+    return bool(lab[ini[1], ini[0]] == lab[fin[1], fin[0]])
 
 
 def costo(r: dict) -> float:

@@ -246,9 +246,27 @@ class Config:
     mx_pred_avance_m: float = 0.30      # cuánto puede avanzar un pulso hacia delante (barrido de la huella)
     mx_pred_atras_m: float = 0.22       # idem hacia atrás
     mx_pred_margen_m: float = 0.05      # holgura lateral/frontal añadida a la huella
-    mx_pred_giro_m: float = 0.31        # radio que barre el chasis al girar (esquina más lejana al centro)
+    mx_pred_giro_m: float = 0.31        # (en desuso: era el radio de un círculo completo, demasiado conservador en pasillos con macetas)
+    mx_pred_relajar_s: float = 0.0      # >0: tras una trampa (el escape de nicho se dispara 2 veces seguidas en el mismo sitio) el predictor relaja sus márgenes (x0,3) este tiempo para poder salir
+    mx_pred_giro_extra_m: float = 0.06  # al girar se barre la huella del robot ensanchada tanto (una esquina se mueve ~r·θ ≈ 4-6 cm por pulso)
     # --- IDA Y VUELTA: al llegar a la meta da la vuelta y regresa al punto de inicio; el éxito exige volver
     mx_regreso: bool = False
+    # --- REGRESO POR MIGAS (enseñar y repetir): en la ida deja una miga de pan cada `mx_miga_m` m; al volver la sigue al revés con persecución pura
+    # (lo ya recorrido sin chocar es el camino más seguro), con el predictor de colisión; si se atasca 4 veces seguidas cede al modo reactivo 15 s
+    # --- PLANIFICADOR (2026-10-25): A* sobre el mapa que va acumulando el scan (planificador.py); lo desconocido cuenta como libre. Va a la meta/inicio/planta
+    # siguiendo la ruta con persecución pura y pulsos (el predictor sigue vigilando); si se atasca, cede al modo reactivo un rato.
+    mx_planner: bool = False
+    mx_plan_inflar_m: float = 0.27
+    mx_plan_mirada_m: float = 0.7
+    mx_plan_cada_s: float = 2.0
+    mx_plan_giro_deg: float = 14.0
+    mx_plan_solo_regreso: bool = False  # el planificador solo guía el REGRESO (mapa ya conocido); la ida la lleva la estrategia reactiva
+    mx_migas: bool = False
+    mx_sendero: bool = False            # en pasillos/senderos la "meta" de las maniobras es el punto del sendero a `mx_sendero_mirada_m` por delante (no la meta lejana a través de las paredes)
+    mx_sendero_mirada_m: float = 1.0
+    mx_miga_m: float = 0.15
+    mx_miga_mirada_m: float = 0.7
+    mx_miga_giro_deg: float = 14.0      # error de rumbo a partir del cual gira en vez de avanzar
     mx_visitar: bool = False            # ir a las plantas vistas y aún sin escanear (el objetivo pasa a ser la planta, no la meta)
     mx_visitar_m: float = 3.5
     mx_memoria_w: float = 0.0           # peso de la memoria de zonas visitadas al elegir hueco: prefiere lo menos pisado
@@ -1108,6 +1126,12 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     guardian, g_libre_desde, g_reg = None, None, []
     mx_hist, mx_commit, mx_commit_hasta, mx_rectos, mx_escapes = [], None, 0.0, 0, 0
     visitas = {}
+    plan, pl_ruta, pl_t, pl_obj, pl_fallos, pl_pausa_hasta = None, None, -99.0, None, 0, 0.0
+    if cfg.mx_planner:
+        from planificador import Planificador
+        plan = Planificador(inflar_m=cfg.mx_plan_inflar_m, centro=(x0, y0))
+    relajar_hasta, mx_esc_pos = 0.0, []
+    migas, mig_idx, mig_fallos, mig_pausa_hasta = [], None, 0, 0.0
     mx_meta_xy = esc.meta_xy if esc.meta_xy is not None else (esc.goal_x, esc.centro_y)
     mision = None
     if cfg.mision and esc.plantas:
@@ -1131,17 +1155,19 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
 
     def _despejado(accion, scan_):
         """¿Se puede ejecutar este pulso sin tocar nada de lo que ve el scan? Barre la huella (ejes del LIDAR). Vectorizado con numpy."""
-        m = cfg.mx_pred_margen_m
+        rel = t < relajar_hasta
+        m = cfg.mx_pred_margen_m * (0.3 if rel else 1.0)
         px_, py_ = scan_xy
         if px_.size == 0:
             return True
         chasis = (px_ >= -ATRAS_LIDAR - 0.01) & (px_ <= FRENTE_LIDAR + 0.01) & (np.abs(py_) <= MEDIO_ANCHO + 0.01)       # el propio chasis
         if accion == "adelante":
-            hit = (px_ > FRENTE_LIDAR) & (px_ < FRENTE_LIDAR + cfg.mx_pred_avance_m + m) & (np.abs(py_) < MEDIO_ANCHO + m)
+            hit = (px_ > FRENTE_LIDAR) & (px_ < FRENTE_LIDAR + cfg.mx_pred_avance_m * (0.6 if rel else 1.0) + m) & (np.abs(py_) < MEDIO_ANCHO + m)
         elif accion == "atras":
-            hit = (px_ > -ATRAS_LIDAR - cfg.mx_pred_atras_m - m) & (px_ < -ATRAS_LIDAR) & (np.abs(py_) < MEDIO_ANCHO + m)
-        else:                                                         # giro: la esquina más lejana barre un círculo alrededor del centro
-            hit = np.hypot(px_ - CENTRO_X, py_) < cfg.mx_pred_giro_m + m
+            hit = (px_ > -ATRAS_LIDAR - cfg.mx_pred_atras_m * (0.6 if rel else 1.0) - m) & (px_ < -ATRAS_LIDAR) & (np.abs(py_) < MEDIO_ANCHO + m)
+        else:                                                         # giro: la huella ensanchada (la esquina se desplaza ~4-6 cm por pulso)
+            e_ = m + cfg.mx_pred_giro_extra_m * (0.4 if rel else 1.0)
+            hit = (px_ > -ATRAS_LIDAR - e_) & (px_ < FRENTE_LIDAR + e_) & (np.abs(py_) < MEDIO_ANCHO + e_)
         return not bool(np.any(hit & ~chasis))
 
     def _ord(accion, tt, **kw):
@@ -1198,10 +1224,44 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 i += 1
         return mejor
 
+    meta_ok = esc.linea_central is None or cfg.mx_sendero
+    camino_ida = [(float(a), float(b)) for a, b in (esc.linea_central or [])]
+
+    def _punto_sendero(px, py, ruta):
+        """Punto de la polilínea `ruta` a `mx_sendero_mirada_m` por delante de la proyección de (px, py)."""
+        mejor, bi, bu = 1e9, 0, 0.0
+        for k_ in range(len(ruta) - 1):
+            ax_, ay_ = ruta[k_]
+            bx_, by_ = ruta[k_ + 1]
+            ex2, ey2 = bx_ - ax_, by_ - ay_
+            L2_ = ex2 * ex2 + ey2 * ey2
+            if L2_ < 1e-9:
+                continue
+            u2 = max(0.0, min(1.0, ((px - ax_) * ex2 + (py - ay_) * ey2) / L2_))
+            dd2 = math.hypot(px - (ax_ + u2 * ex2), py - (ay_ + u2 * ey2))
+            if dd2 < mejor:
+                mejor, bi, bu = dd2, k_, u2
+        resto = cfg.mx_sendero_mirada_m
+        k_, u2 = bi, bu
+        while k_ < len(ruta) - 1:
+            ax_, ay_ = ruta[k_]
+            bx_, by_ = ruta[k_ + 1]
+            L_seg = math.hypot(bx_ - ax_, by_ - ay_)
+            disp = (1.0 - u2) * L_seg
+            if resto <= disp:
+                f_ = u2 + resto / max(L_seg, 1e-9)
+                return ax_ + (bx_ - ax_) * f_, ay_ + (by_ - ay_) * f_
+            resto -= disp
+            k_ += 1
+            u2 = 0.0
+        return ruta[-1]
+
     def _rumbo_meta():
         """Error de rumbo hacia la meta (rad, + = la meta queda a la izquierda), con la pose tipo SLAM (1° de ruido)."""
         gx, gy = robot.centro()
         tgt = mx_meta_xy
+        if camino_ida and cfg.mx_sendero:
+            tgt = _punto_sendero(gx, gy, camino_ida if fase == "ida" else camino_ida[::-1])
         if cfg.mx_visitar and mision is not None:
             tgt = mision.objetivo(t, gx, gy, cfg.mx_visitar_m) or mx_meta_xy        # primero las plantas vistas y pendientes, luego la meta
         b = math.atan2(tgt[1] - gy, tgt[0] - gx) - (robot.psi_real() + math.radians(float(rng.normal(0, 1.0))))
@@ -1281,6 +1341,12 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 if ref is not None:
                     rf.actualizar(*ref)
                 desvio_ult = RF.desvio_lateral(pi, pd, y_max=1.6) if cfg.rumbo_mirada_m > 0 else None
+            if plan is not None and scan:
+                plan.actualizar(lx + float(rng.normal(0, 0.02)), ly + float(rng.normal(0, 0.02)), robot.psi_real(), scan)
+            if cfg.mx_migas and fase == "ida":
+                mgx, mgy = robot.centro()
+                if not migas or math.hypot(mgx - migas[-1][0], mgy - migas[-1][1]) >= cfg.mx_miga_m:
+                    migas.append((mgx + float(rng.normal(0, 0.02)), mgy + float(rng.normal(0, 0.02))))
             if cfg.mx_memoria_w > 0:
                 vx_, vy_ = robot.centro()
                 kk = (round(vx_ / 0.5), round(vy_ / 0.5))
@@ -1322,6 +1388,11 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 mx_commit, mx_commit_hasta = lado_op, t + 2 * cfg.mx_bordear_s
                 ultimo_giro = lado_op
                 mx_escapes += 1
+                if cfg.mx_pred_relajar_s > 0:                       # ¿segunda trampa en el mismo sitio (< 0,6 m) en 150 s? relaja el predictor un rato
+                    mx_esc_pos = [e_ for e_ in mx_esc_pos if t - e_[0] < 150.0]
+                    if any(math.hypot(cx_ - e_[1], cy_ - e_[2]) < 0.6 for e_ in mx_esc_pos):
+                        relajar_hasta = t + cfg.mx_pred_relajar_s
+                    mx_esc_pos.append((t, cx_, cy_))
                 mx_hist.clear()
                 prog_ref, prog_t = (cx_, cy_), t
             elif cfg.man_escape_s > 0 and t - prog_t > cfg.man_escape_s:
@@ -1329,18 +1400,67 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 cola_man = ["atras", "atras", lado, lado, lado]
                 escapes += 1
                 prog_ref, prog_t = (cx_, cy_), t
+            elif plan is not None and t >= pl_pausa_hasta and (not cfg.mx_plan_solo_regreso or fase == "regreso"):
+                # --- ir al objetivo siguiendo la ruta planificada ---
+                px_r, py_r = robot.centro()
+                tgt = None
+                if cfg.mx_visitar and mision is not None:
+                    tgt = mision.objetivo(t, px_r, py_r, cfg.mx_visitar_m)
+                if tgt is None:
+                    tgt = mx_meta_xy
+                if pl_ruta is None or t - pl_t >= cfg.mx_plan_cada_s or pl_obj != tgt:
+                    pl_ruta = plan.ruta((px_r, py_r), tgt, tol_m=0.45 if tgt != mx_meta_xy else 0.3)
+                    pl_t, pl_obj = t, tgt
+                    if pl_ruta is None:                               # sin camino conocido: reactivo 6 s
+                        pl_pausa_hasta = t + 6.0
+                if pl_ruta and not cond.activo:
+                    wp = plan.siguiente(pl_ruta, (px_r, py_r), cfg.mx_plan_mirada_m)
+                    eb = math.atan2(wp[1] - py_r, wp[0] - px_r) - (robot.psi_real() + math.radians(float(rng.normal(0, 1.0))))
+                    eb = math.atan2(math.sin(eb), math.cos(eb))
+                    acc = ("izquierda" if eb > 0 else "derecha") if abs(math.degrees(eb)) > cfg.mx_plan_giro_deg else "adelante"
+                    if _ord(acc, t, maniobra=False):
+                        pl_fallos = 0
+                    else:
+                        pl_fallos += 1
+                        pl_ruta = None                                 # replanifica en el próximo tick
+                        if pl_fallos >= 4:
+                            pl_pausa_hasta, pl_fallos = t + 10.0, 0
+                            relajar_hasta = max(relajar_hasta, t + max(cfg.mx_pred_relajar_s, 25.0))      # todo bloqueado: márgenes del predictor al 30 % un rato para despegarse
+            elif cfg.mx_migas and fase == "regreso" and len(migas) > 3 and t >= mig_pausa_hasta:
+                # --- seguir las migas al revés ---
+                px_r, py_r = robot.centro()
+                px_r += float(rng.normal(0, 0.02))
+                py_r += float(rng.normal(0, 0.02))
+                if mig_idx is None:
+                    mig_idx = len(migas) - 1
+                # la miga "actual" es la más cercana de las que quedan hacia el inicio (nunca retrocede a las ya pasadas)
+                ventana = range(max(0, mig_idx - 25), mig_idx + 1)
+                mig_idx = min(ventana, key=lambda k: math.hypot(migas[k][0] - px_r, migas[k][1] - py_r))
+                k = mig_idx
+                while k > 0 and math.hypot(migas[k][0] - px_r, migas[k][1] - py_r) < cfg.mx_miga_mirada_m:
+                    k -= 1
+                tx, ty = migas[k]
+                eb = math.atan2(ty - py_r, tx - px_r) - (robot.psi_real() + math.radians(float(rng.normal(0, 1.0))))
+                eb = math.atan2(math.sin(eb), math.cos(eb))
+                if not cond.activo:
+                    acc = ("izquierda" if eb > 0 else "derecha") if abs(math.degrees(eb)) > cfg.mx_miga_giro_deg else "adelante"
+                    if acc == "adelante" and frente < 0.12:
+                        acc = "izquierda" if li >= ld else "derecha"            # pegado a algo: no empuja, gira hacia el lado libre
+                    mig_fallos = 0 if _ord(acc, t, maniobra=False) else mig_fallos + 1
+                    if mig_fallos >= 4:
+                        mig_pausa_hasta, mig_fallos = t + 15.0, 0               # se atasca siguiendo las migas: 15 s de reactivo
             elif frente < cfg.avance_libre_cm / 100.0:
                 bloqueos += 1
-                gap = _mejor_hueco(scan, cfg.mx_hueco_m, 1.0 if esc.linea_central is None else 0.2) if cfg.mx_hueco else None
+                gap = _mejor_hueco(scan, cfg.mx_hueco_m, 1.0 if meta_ok else 0.2) if cfg.mx_hueco else None
                 if gap is None and cfg.mx_hueco:
-                    gap = _mejor_hueco(scan, 0.6, 1.0 if esc.linea_central is None else 0.2)
+                    gap = _mejor_hueco(scan, 0.6, 1.0 if meta_ok else 0.2)
                 if gap is not None and abs(math.degrees(gap)) >= 4.0:
                     lado = "izquierda" if gap > 0 else "derecha"
                 elif gap is not None:
                     lado = "izquierda" if li >= ld else "derecha"
-                elif cfg.mx_meta and esc.linea_central is None and mx_commit and t < mx_commit_hasta and (li if mx_commit == "izquierda" else ld) >= 0.30:
+                elif cfg.mx_meta and meta_ok and mx_commit and t < mx_commit_hasta and (li if mx_commit == "izquierda" else ld) >= 0.30:
                     lado = mx_commit                            # bordear: sigue por el mismo lado hasta rodear el obstáculo
-                elif cfg.mx_meta and esc.linea_central is None:
+                elif cfg.mx_meta and meta_ok:
                     eb = _rumbo_meta()
                     if abs(eb) < math.radians(10):
                         lado = "izquierda" if li >= ld else "derecha"
@@ -1377,7 +1497,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 if pulso_recto_pend and not cond.activo and rf is not None:
                     corr_rumbo.fin_pulso_recto(rf.e)
                     pulso_recto_pend = False
-                if (cfg.mx_meta and esc.linea_central is None and corr is None and not cond.activo and (guardian is None or guardian.pend is None)
+                if (cfg.mx_meta and meta_ok and corr is None and not cond.activo and (guardian is None or guardian.pend is None)
                         and frente > 1.0 and li > 0.6 and ld > 0.6 and mx_rectos >= 3 and abs(_rumbo_meta()) > math.radians(cfg.mx_rumbo_tol_deg)):
                     _ord("izquierda" if _rumbo_meta() > 0 else "derecha", t, maniobra=False)
                     mx_rectos = 0

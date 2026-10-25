@@ -100,6 +100,45 @@ def misiones(semilla: int = 0) -> dict:
         pl.append(_sobre_camino(centro, float(s_m), (0.5 if k % 2 == 0 else -0.5)))
     out["pasillo_L_plantas"] = ("interior", _con_plantas("pasillo_L_plantas", pared, pl, [], centro[-1][0], 560.0,
                                                         "Pasillo de 1,4 m en L con 10 plantas alternadas a lo largo de las paredes.", meta=centro[-1], centro=centro))
+    # ------------------------------------------------------------------ MISIONES DIFÍCILES (2026-10-24, segunda ronda)
+    # 8) laberinto grande: 8 esquinas, pasillo de 1,1 m, 10 macetas
+    centro = [(-0.7, 0), (3.6, 0), (3.6, 1.8), (0.0, 1.8), (0.0, 3.6), (3.6, 3.6), (3.6, 5.4), (0.0, 5.4), (0.0, 7.2), (3.4, 7.2)]
+    pared = MI.pasillo(centro, 1.1)
+    longitud = sum(math.hypot(b_[0] - a[0], b_[1] - a[1]) for a, b_ in zip(centro, centro[1:]))
+    pl = [_sobre_camino(centro, float(s_m + rng.normal(0, 0.12)), (0.34 if k % 2 == 0 else -0.34)) for k, s_m in enumerate(np.linspace(1.8, longitud - 1.2, 10))]
+    out["laberinto_grande"] = ("interior", _con_plantas("laberinto_grande", pared, pl, [], centro[-1][0], 900.0,
+                                                        "Laberinto de 1,1 m con 8 esquinas y 10 macetas contra las paredes.", meta=centro[-1], centro=centro))
+    # 9) campo denso: 20 m, 26 plantas y 12 rocas
+    pl = []
+    while len(pl) < 26:
+        c = (float(rng.uniform(1.2, 19.0)), float(rng.uniform(-1.6, 1.6)))
+        if all(math.hypot(c[0] - a, c[1] - b_) > 0.9 for a, b_ in pl):
+            pl.append(c)
+    rocas = []
+    while len(rocas) < 12:
+        c = (float(rng.uniform(1.5, 19.0)), float(rng.uniform(-2.2, 2.2)), float(rng.uniform(0.12, 0.25)))
+        if all(math.hypot(c[0] - a, c[1] - b_) > 0.75 for a, b_ in pl) and all(math.hypot(c[0] - a, c[1] - b_) > 0.9 for a, b_, _r in rocas):
+            rocas.append(c)
+    out["campo_denso"] = ("exterior", _con_plantas("campo_denso", [], pl, rocas, 20.0, 800.0, "Campo de 20 m con 26 plantas y 12 rocas."))
+    # 10) laboratorio con sillas, patas de mesa, puerta de 90 cm y 8 macetas
+    sala = MI._sala(-0.6, 9.2, -2.4, 2.4)
+    muro = [(4.0, -2.4, 4.0, -0.45), (4.0, 0.45, 4.0, 2.4)]
+    patas, segs = [], []
+    for x_ in (1.6, 6.2):
+        for y_ in (-1.6, 1.6):
+            patas += MI.patas_mesa(x_, y_, 1.3, 0.7)
+    for cx_, cy_, rum in ((2.8, 0.7, 20.0), (5.4, -0.8, 200.0), (7.4, 0.9, 90.0)):
+        p_, sg_ = MI.silla(cx_, cy_, rum)
+        patas += p_
+        segs += sg_
+    pl = []
+    while len(pl) < 8:
+        c = (float(rng.uniform(0.8, 8.2)), float(rng.uniform(-1.4, 1.4)))
+        if abs(c[0] - 4.0) > 0.9 and all(math.hypot(c[0] - a, c[1] - b_) > 0.9 for a, b_ in pl) and all(math.hypot(c[0] - a, c[1] - b_) > 0.55 for a, b_, _r in patas) \
+                and math.hypot(c[0], c[1]) > 0.9:
+            pl.append(c)
+    out["lab_sillas_plantas"] = ("interior", _con_plantas("lab_sillas_plantas", sala + muro + segs, pl, patas, 8.4, 700.0,
+                                                         "Laboratorio de 9,8 m: puerta de 90 cm, 16 patas de mesa, 3 sillas y 8 macetas.", meta=(8.4, 0.0)))
     return out
 
 

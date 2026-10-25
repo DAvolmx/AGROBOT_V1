@@ -236,6 +236,13 @@ class Config:
     mis_dist_insp_m: float = 0.5
     mis_fov_deg: float = 70.0
     mis_rango_m: float = 2.0
+    mis_dist_visita_m: float = 0.9      # una planta pendiente que se está visitando se escanea desde esta distancia (0,9 = a la distancia de seguridad)
+    mis_reintentos: int = 0             # repetir el escaneo si no detectó nada
+    mx_barrido: bool = False            # el frente se mide en un CORREDOR del ancho del robot (no en un cono): ve lo que está a los costados de la trayectoria
+    mx_ancho_half_m: float = 0.24       # media anchura del corredor de barrido (robot 38 cm = 0,19 + margen)
+    mx_visitar: bool = False            # ir a las plantas vistas y aún sin escanear (el objetivo pasa a ser la planta, no la meta)
+    mx_visitar_m: float = 3.5
+    mx_memoria_w: float = 0.0           # peso de la memoria de zonas visitadas al elegir hueco: prefiere lo menos pisado
     guardian: bool = False
     guardian_obj: object = None
     guardian_explorar: float = 0.0
@@ -766,6 +773,7 @@ class Conductor:
         self.clock = 0.0
         self.aceptadas = 0
         self.descartadas = 0
+        self.ultima_accion = None
 
     @property
     def activo(self) -> bool:
@@ -787,6 +795,7 @@ class Conductor:
             self.descartadas += 1
             return False
         self._gen = self._ejecutar(segs)
+        self.ultima_accion = accion
         self.aceptadas += 1
         self.paso(t)                              # asyncio.create_task: arranca ya
         return True
@@ -1083,8 +1092,10 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     correcciones = corr_ejec = bloqueos = avances = 0
     contactos, prev_choque = 0, False
     ultima_ok, t_choque = None, -9.0
+    contactos_por_accion = {}
     guardian, g_libre_desde, g_reg = None, None, []
     mx_hist, mx_commit, mx_commit_hasta, mx_rectos, mx_escapes = [], None, 0.0, 0, 0
+    visitas = {}
     mx_meta_xy = esc.meta_xy if esc.meta_xy is not None else (esc.goal_x, esc.centro_y)
     mision = None
     if cfg.mision and esc.plantas:
@@ -1105,28 +1116,35 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     def _clamp_(v, lo, hi):
         return max(lo, min(hi, v))
 
-    def _mejor_hueco(scan_, necesita, peso_meta):
+    def _mejor_hueco(scan_, necesita, peso_meta, full=False):
         """Ángulo (rad, + = izquierda) hacia el centro del hueco libre más conveniente, o None. Un rumbo es libre si el rayo llega a `necesita` m;
         se erosiona ±12° (media anchura del robot a 1 m) para que el hueco quepa. Puntúa: cercanía a la meta (peso `peso_meta`) y anchura."""
-        r = np.full(181, np.inf)                                    # -90..90° de 1° en 1°
+        ab = 180 if full else 90                                    # ±90° (hacia delante) o ±180° (para dar la vuelta al escapar de un nicho)
+        n_ = 2 * ab + 1
+        r = np.full(n_, np.inf)
         for q in scan_:
             a = int(round(q["angle_deg"]))
             a = a - 360 if a > 180 else a
-            if -90 <= a <= 90:
-                r[a + 90] = min(r[a + 90], q["distance_m"])
+            if -ab <= a <= ab:
+                r[a + ab] = min(r[a + ab], q["distance_m"])
         libre = (r >= necesita).astype(np.uint8)
         k = 12
-        er = np.array([libre[max(0, i - k):i + k + 1].min() if i - k >= 0 and i + k <= 180 else 0 for i in range(181)])
+        er = np.array([libre[max(0, i - k):i + k + 1].min() if i - k >= 0 and i + k <= n_ - 1 else 0 for i in range(n_)])
         mejor, mejor_p = None, -1e9
         i = 0
         meta = _rumbo_meta()
-        while i <= 180:
+        mx0, my0 = robot.centro()
+        psi0 = robot.psi_real()
+        while i <= n_ - 1:
             if er[i]:
                 j = i
-                while j + 1 <= 180 and er[j + 1]:
+                while j + 1 <= n_ - 1 and er[j + 1]:
                     j += 1
-                c = math.radians((i + j) / 2 - 90)
+                c = math.radians((i + j) / 2 - ab)
                 pt = -peso_meta * abs(c - meta) + 0.01 * (j - i)
+                if cfg.mx_memoria_w > 0:                           # prefiere lo menos pisado: visitas cerca de 1,2 m en esa dirección
+                    vx, vy = mx0 + 1.2 * math.cos(psi0 + c), my0 + 1.2 * math.sin(psi0 + c)
+                    pt -= cfg.mx_memoria_w * visitas.get((round(vx / 0.5), round(vy / 0.5)), 0) / 20.0
                 if pt > mejor_p:
                     mejor, mejor_p = c, pt
                 i = j + 1
@@ -1137,7 +1155,10 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     def _rumbo_meta():
         """Error de rumbo hacia la meta (rad, + = la meta queda a la izquierda), con la pose tipo SLAM (1° de ruido)."""
         gx, gy = robot.centro()
-        b = math.atan2(mx_meta_xy[1] - gy, mx_meta_xy[0] - gx) - (robot.psi_real() + math.radians(float(rng.normal(0, 1.0))))
+        tgt = mx_meta_xy
+        if cfg.mx_visitar and mision is not None:
+            tgt = mision.objetivo(t, gx, gy, cfg.mx_visitar_m) or mx_meta_xy        # primero las plantas vistas y pendientes, luego la meta
+        b = math.atan2(tgt[1] - gy, tgt[0] - gx) - (robot.psi_real() + math.radians(float(rng.normal(0, 1.0))))
         return math.atan2(math.sin(b), math.cos(b))
 
     def _atrapado(tt, gx, gy, nb):
@@ -1206,6 +1227,10 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 if ref is not None:
                     rf.actualizar(*ref)
                 desvio_ult = RF.desvio_lateral(pi, pd, y_max=1.6) if cfg.rumbo_mirada_m > 0 else None
+            if cfg.mx_memoria_w > 0:
+                vx_, vy_ = robot.centro()
+                kk = (round(vx_ / 0.5), round(vy_ / 0.5))
+                visitas[kk] = visitas.get(kk, 0) + 1
             if mision is not None:
                 cmx, cmy = robot.centro()
                 pedir = mision.tick(t, cmx, cmy, robot.psi_real(), TICK_EXPLORADOR)
@@ -1213,6 +1238,14 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     pausa_hasta = max(pausa_hasta, t + pedir)       # el robot se queda quieto escaneando
                     cola_man = []
             frente = d["adelante"] if d["adelante"] is not None else math.inf
+            if cfg.mx_barrido:
+                fb = math.inf
+                for q_ in scan:
+                    a_ = math.radians(q_["angle_deg"])
+                    px_, py_ = q_["distance_m"] * math.cos(a_), q_["distance_m"] * math.sin(a_)
+                    if px_ > 0 and abs(py_) < cfg.mx_ancho_half_m:
+                        fb = min(fb, px_)
+                frente = min(frente, fb - cfg.lidar_adelante_cm / 100.0)
             izq = d["izquierda"]
             der = d["derecha"]
             li = izq if izq is not None else math.inf
@@ -1229,7 +1262,13 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
             elif cfg.mx_anti_dither and _atrapado(t, cx_, cy_, bloqueos):
                 lado_op = ("derecha" if ultimo_giro == "izquierda" else "izquierda") if ultimo_giro else ("izquierda" if li >= ld else "derecha")
                 atras_ok = d.get("atras") is None or d["atras"] >= 0.30
-                cola_man = (["atras"] * 3 if atras_ok else []) + [lado_op] * max(1, int(cfg.mx_giro_largo)) + ["adelante"] * 3
+                n_largo = max(1, int(cfg.mx_giro_largo))
+                if cfg.mx_memoria_w > 0:                           # escape inteligente: el hueco menos pisado en TODAS las direcciones (incluida dar la vuelta)
+                    g360 = _mejor_hueco(scan, 0.8, 0.0, full=True)
+                    if g360 is not None:
+                        lado_op = "izquierda" if g360 > 0 else "derecha"
+                        n_largo = int(_clamp_(round(abs(math.degrees(g360)) / cfg.mx_grados_pulso), 2, 30))
+                cola_man = (["atras"] * 3 if atras_ok else []) + [lado_op] * n_largo + ["adelante"] * 3
                 mx_commit, mx_commit_hasta = lado_op, t + 2 * cfg.mx_bordear_s
                 ultimo_giro = lado_op
                 mx_escapes += 1
@@ -1398,6 +1437,8 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 ultima_ok = copy.deepcopy(robot.d)
         if choque and not prev_choque and (t - t_choque > 1.0 or not cfg.paredes_solidas):
             contactos += 1
+            k_ac = (cond.ultima_accion or "?") + ("" if cond.activo else "·parado")
+            contactos_por_accion[k_ac] = contactos_por_accion.get(k_ac, 0) + 1
         if choque:
             t_choque = t
         prev_choque = choque
@@ -1440,6 +1481,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         "mu": hip.mu, "dead": hip.dead, "bias": hip.bias, "drag": hip.drag,
     }
     res["mx_escapes"] = mx_escapes
+    res["contactos_por_accion"] = contactos_por_accion
     if guardian is not None:
         res["guardian"] = guardian.resumen()
     if mision is not None:

@@ -144,14 +144,16 @@ def misiones(semilla: int = 0) -> dict:
 
 def costo(r: dict) -> float:
     m = r["mision"]
-    c = 35.0 * (1 - r["progreso"]) + 12.0 * min(r["contactos"], 5) + 30.0 * min(m["error_conteo"], 1.0) + 15.0 * (1 - m["recall"]) + 0.012 * r["t_s"]
-    c += 10.0 * bool(r["atascado"]) + 10.0 * (not r["llego"])
+    c = 35.0 * (1 - r["progreso"]) + 12.0 * min(r["contactos"], 5) + 20.0 * min(m["error_conteo"], 1.0) + 15.0 * (1 - m["recall"])
+    c += 15.0 * (1 - m.get("cobertura_escaneo", 0.0)) + 0.008 * r["t_s"] + 10.0 * bool(r["atascado"]) + 10.0 * (not r["llego"])
     return round(c, 3)
 
 
 def exito(r: dict) -> bool:
+    """Misión cumplida: recorrió todo el camino y VOLVIÓ al inicio (con mx_regreso), sin un solo choque, escaneó >= 90 % de las plantas que vio y
+    vio >= 80 % de las plantas. (El error de conteo cuenta en el costo y se informa, pero ya no decide el éxito.)"""
     m = r["mision"]
-    return bool(r["llego"] and r["contactos"] == 0 and m["error_conteo"] <= 0.15 and m["recall"] >= 0.8)
+    return bool(r["llego"] and r["contactos"] == 0 and m.get("cobertura_escaneo", 0.0) >= 0.9 and m["recall"] >= 0.8)
 
 
 if __name__ == "__main__":

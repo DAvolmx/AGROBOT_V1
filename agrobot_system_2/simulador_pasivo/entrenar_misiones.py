@@ -27,14 +27,17 @@ ESPACIO.update({"mis_dist_insp_m": ("u", 0.30, 0.90), "mis_escaneo_s": ("u", 3.0
                 "mx_rumbo_tol_deg": ("u", 12.0, 40.0), "mx_ventana_s": ("u", 15.0, 40.0),
                 # segunda ronda: visitar plantas pendientes, repetir escaneos fallidos y memoria de zonas
                 "mx_visitar_m": ("u", 1.5, 5.0), "mis_dist_visita_m": ("u", 0.5, 1.2), "mis_reintentos": ("u", 0, 2), "mx_memoria_w": ("u", 0.0, 3.0),
-                "mx_ancho_half_m": ("u", 0.20, 0.34)})
+                "mx_ancho_half_m": ("u", 0.20, 0.34),
+                # predictor de colisión por pulso
+                "mx_pred_avance_m": ("u", 0.18, 0.40), "mx_pred_atras_m": ("u", 0.12, 0.30), "mx_pred_margen_m": ("u", 0.02, 0.07), "mx_pred_giro_m": ("u", 0.28, 0.36)})
 ESPACIO_ENTEROS = ("mx_giro_largo", "mis_reintentos")
 CLAVES = list(ESPACIO)
 EI.ESPACIO, EI.CLAVES = ESPACIO, CLAVES
 EI.ENTEROS = ESPACIO_ENTEROS + tuple(k for k in EI.ENTEROS if k not in ESPACIO_ENTEROS)               # a_unidad / de_unidad de entrenar_intensivo usan estas globales
 EXTRA_HOY = {"mis_dist_insp_m": 0.5, "mis_escaneo_s": 8.0, "guardian_tol_cm": 6.0, "guardian_tol_deg": 4.0,
              "mx_hueco_m": 1.0, "mx_grados_pulso": 6.0, "mx_giro_largo": 5, "mx_bordear_s": 12.0, "mx_rumbo_tol_deg": 25.0, "mx_ventana_s": 25.0,
-             "mx_visitar_m": 3.5, "mis_dist_visita_m": 0.9, "mis_reintentos": 0, "mx_memoria_w": 0.0, "mx_ancho_half_m": 0.26}
+             "mx_visitar_m": 3.5, "mis_dist_visita_m": 0.9, "mis_reintentos": 0, "mx_memoria_w": 0.0, "mx_ancho_half_m": 0.26,
+             "mx_pred_avance_m": 0.30, "mx_pred_atras_m": 0.22, "mx_pred_margen_m": 0.05, "mx_pred_giro_m": 0.31}
 HOY = dict(EI.HOY, **EXTRA_HOY)
 MAN = dict(EI.MAN, **EXTRA_HOY)
 NOMBRES = list(MS.misiones(0))
@@ -46,9 +49,11 @@ def campos(p, entorno, guardian=True, mx=True):
         c.update(mx_hueco=True, mx_meta=True, mx_anti_dither=True, mx_hueco_m=p.get("mx_hueco_m", 1.0), mx_grados_pulso=p.get("mx_grados_pulso", 6.0),
                  mx_giro_largo=int(round(p.get("mx_giro_largo", 5))), mx_bordear_s=p.get("mx_bordear_s", 12.0),
                  mx_rumbo_tol_deg=p.get("mx_rumbo_tol_deg", 25.0), mx_ventana_s=p.get("mx_ventana_s", 25.0),
+                 mx_prediccion=True, mx_pred_avance_m=p.get("mx_pred_avance_m", 0.30), mx_pred_atras_m=p.get("mx_pred_atras_m", 0.22),
+                 mx_pred_margen_m=p.get("mx_pred_margen_m", 0.05), mx_pred_giro_m=p.get("mx_pred_giro_m", 0.31),
                  mx_barrido=True, mx_ancho_half_m=p.get("mx_ancho_half_m", 0.26), mx_visitar=True, mx_visitar_m=p.get("mx_visitar_m", 3.5), mis_dist_visita_m=p.get("mis_dist_visita_m", 0.9),
                  mis_reintentos=int(round(p.get("mis_reintentos", 0))), mx_memoria_w=p.get("mx_memoria_w", 0.0))
-    c.update(mision=True, guardian=guardian, guardian_usar_memoria=False, guardian_tol_cm=p.get("guardian_tol_cm", 6.0),
+    c.update(mx_regreso=True, mision=True, guardian=guardian, guardian_usar_memoria=False, guardian_tol_cm=p.get("guardian_tol_cm", 6.0),
              guardian_tol_deg=p.get("guardian_tol_deg", 4.0), mis_dist_insp_m=p.get("mis_dist_insp_m", 0.5), mis_escaneo_s=p.get("mis_escaneo_s", 8.0))
     return c
 

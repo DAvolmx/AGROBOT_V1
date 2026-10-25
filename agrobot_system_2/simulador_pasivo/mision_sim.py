@@ -29,6 +29,7 @@ class MisionSim:
         self.escaneos_fallidos = 0
         self.t_parado = 0.0
         self.intentos = [0] * len(self.plantas)
+        self.escaneadas_ok: set[int] = set()
         self.pend: dict[int, list] = {}                     # plantas vistas pero aún sin escanear: i -> [x_est, y_est, t_primera_vez]
         self.abandonadas: set[int] = set()
         self.off = [0.0, 0.0]                                 # deriva acumulada de la pose (m)
@@ -57,6 +58,7 @@ class MisionSim:
             self.pend.setdefault(i, [ex, ey, t])                  # queda pendiente de visita y escaneo
         elif tipo == "escaneo":
             self.pend.pop(i, None)
+            self.escaneadas_ok.add(i)
 
     def objetivo(self, t, cx, cy, alcance_m, max_s=45.0):
         """Planta pendiente más cercana (x, y estimados) a <= alcance_m, o None. Una planta que no se logra escanear en `max_s` s se abandona."""
@@ -151,5 +153,5 @@ class MisionSim:
         return {"plantas": n, "detectadas": len(gs), "plantas_vistas": int(sum(self.ver_gt)), "emparejadas": emparejados,
                 "recall": round(emparejados / max(n, 1), 3), "precision": round(emparejados / max(len(gs), 1), 3),
                 "error_conteo": round((fn + fp) / max(n, 1), 3), "error_neto": round(abs(len(gs) - n) / max(n, 1), 3),
-                "faltan": fn, "sobran": fp, "escaneos": self.escaneos, "escaneos_fallidos": self.escaneos_fallidos,
+                "faltan": fn, "sobran": fp, "cobertura_escaneo": round(len(self.escaneadas_ok) / max(int(sum(self.ver_gt)), 1), 3), "escaneos": self.escaneos, "escaneos_fallidos": self.escaneos_fallidos,
                 "t_parado_s": round(self.t_parado, 1), "recorrido_m": round(self.recorrido, 1)}

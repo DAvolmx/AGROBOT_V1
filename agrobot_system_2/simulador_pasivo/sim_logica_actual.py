@@ -240,6 +240,15 @@ class Config:
     mis_reintentos: int = 0             # repetir el escaneo si no detectó nada
     mx_barrido: bool = False            # el frente se mide en un CORREDOR del ancho del robot (no en un cono): ve lo que está a los costados de la trayectoria
     mx_ancho_half_m: float = 0.24       # media anchura del corredor de barrido (robot 38 cm = 0,19 + margen)
+    # --- PREDICTOR DE COLISIÓN POR PULSO (2026-10-24): antes de cada pulso se barre la huella del robot con lo que se ve en el scan.
+    # Diagnóstico previo: la mayoría de los contactos eran en marcha ATRÁS y en giros con el obstáculo detrás/al costado, no al avanzar.
+    mx_prediccion: bool = False
+    mx_pred_avance_m: float = 0.30      # cuánto puede avanzar un pulso hacia delante (barrido de la huella)
+    mx_pred_atras_m: float = 0.22       # idem hacia atrás
+    mx_pred_margen_m: float = 0.05      # holgura lateral/frontal añadida a la huella
+    mx_pred_giro_m: float = 0.31        # radio que barre el chasis al girar (esquina más lejana al centro)
+    # --- IDA Y VUELTA: al llegar a la meta da la vuelta y regresa al punto de inicio; el éxito exige volver
+    mx_regreso: bool = False
     mx_visitar: bool = False            # ir a las plantas vistas y aún sin escanear (el objetivo pasa a ser la planta, no la meta)
     mx_visitar_m: float = 3.5
     mx_memoria_w: float = 0.0           # peso de la memoria de zonas visitadas al elegir hueco: prefiere lo menos pisado
@@ -1093,6 +1102,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     contactos, prev_choque = 0, False
     ultima_ok, t_choque = None, -9.0
     contactos_por_accion = {}
+    contacto_info = []
     guardian, g_libre_desde, g_reg = None, None, []
     mx_hist, mx_commit, mx_commit_hasta, mx_rectos, mx_escapes = [], None, 0.0, 0, 0
     visitas = {}
@@ -1112,6 +1122,44 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
             guardian.fijar_polilinea(esc.linea_central)
         else:
             guardian.fijar_polilinea([(x0 - 1.0, esc.centro_y), (x0 + 400.0, esc.centro_y)])
+
+    PRED = {"adelante": 0, "atras": 0, "giro": 0, "cambiadas": 0}
+    FRENTE_LIDAR, ATRAS_LIDAR, MEDIO_ANCHO, CENTRO_X = 0.185, 0.305, 0.19, -0.06   # huella en ejes del LIDAR (x adelante); centro del cuerpo a -6 cm
+
+    def _despejado(accion, scan_):
+        """¿Se puede ejecutar este pulso sin tocar nada de lo que ve el scan? Barre la huella (ejes del LIDAR)."""
+        m = cfg.mx_pred_margen_m
+        for q_ in scan_:
+            a_ = math.radians(q_["angle_deg"])
+            px_, py_ = q_["distance_m"] * math.cos(a_), q_["distance_m"] * math.sin(a_)
+            dentro = -ATRAS_LIDAR - 0.01 <= px_ <= FRENTE_LIDAR + 0.01 and abs(py_) <= MEDIO_ANCHO + 0.01       # el propio chasis
+            if dentro:
+                continue
+            if accion == "adelante":
+                if FRENTE_LIDAR < px_ < FRENTE_LIDAR + cfg.mx_pred_avance_m + m and abs(py_) < MEDIO_ANCHO + m:
+                    return False
+            elif accion == "atras":
+                if -ATRAS_LIDAR - cfg.mx_pred_atras_m - m < px_ < -ATRAS_LIDAR and abs(py_) < MEDIO_ANCHO + m:
+                    return False
+            else:                                                         # giro: la esquina más lejana barre un círculo alrededor del centro
+                if math.hypot(px_ - CENTRO_X, py_) < cfg.mx_pred_giro_m + m:
+                    return False
+        return True
+
+    def _ord(accion, tt, **kw):
+        """cond.ordenar con el predictor: si el pulso chocaría, no se ejecuta (o se cambia por el giro contrario / retroceso despejado)."""
+        if not cfg.mx_prediccion or accion not in ("adelante", "atras", "izquierda", "derecha"):
+            return cond.ordenar(accion, tt, **kw)
+        clave = "adelante" if accion == "adelante" else "atras" if accion == "atras" else "giro"
+        if _despejado(clave, scan):
+            return cond.ordenar(accion, tt, **kw)
+        PRED[clave] += 1
+        if clave == "giro":
+            for alt in (("derecha" if accion == "izquierda" else "izquierda"), "atras"):
+                if _despejado("giro" if alt != "atras" else "atras", scan):
+                    PRED["cambiadas"] += 1
+                    return cond.ordenar(alt, tt, **kw)
+        return False
 
     def _clamp_(v, lo, hi):
         return max(lo, min(hi, v))
@@ -1198,7 +1246,9 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     duty_max_visto = 0.0
     ok = False
 
-    while t < esc.t_max:
+    t_lim = esc.t_max * (2.2 if cfg.mx_regreso else 1.0)
+    fase, ida_ok, inicio_xy = "ida", False, (x0, y0)
+    while t < t_lim:
         # ---- conducción CONTINUA (control_pasillo): LIDAR a 10 Hz, mando a 20 Hz ----
         if ctrl is not None:
             if t + 1e-9 >= prox_scan_cc:
@@ -1258,7 +1308,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 pass
             elif cola_man:                                      # maniobra en curso: se ejecuta el siguiente pulso cuando el conductor queda libre
                 if not cond.activo:
-                    cond.ordenar(cola_man.pop(0), t, maniobra=False)
+                    _ord(cola_man.pop(0), t, maniobra=False)
             elif cfg.mx_anti_dither and _atrapado(t, cx_, cy_, bloqueos):
                 lado_op = ("derecha" if ultimo_giro == "izquierda" else "izquierda") if ultimo_giro else ("izquierda" if li >= ld else "derecha")
                 atras_ok = d.get("atras") is None or d["atras"] >= 0.30
@@ -1314,10 +1364,10 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     n_giro = int(_clamp_(round(abs(math.degrees(gap)) / cfg.mx_grados_pulso), 1, 9))
                 seq += [lado] * n_giro
                 if len(seq) == 1 and cfg.man_pausa_s <= 0:
-                    cond.ordenar(seq[0], t, maniobra=False)
+                    _ord(seq[0], t, maniobra=False)
                 else:
                     cola_man = seq[1:]
-                    cond.ordenar(seq[0], t, maniobra=False)
+                    _ord(seq[0], t, maniobra=False)
                 if cfg.man_pausa_s > 0:
                     pausa_hasta = t + cfg.man_pausa_s + 0.4 * len(seq)
                 sin_corregir = 0
@@ -1329,7 +1379,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     pulso_recto_pend = False
                 if (cfg.mx_meta and esc.linea_central is None and corr is None and not cond.activo and (guardian is None or guardian.pend is None)
                         and frente > 1.0 and li > 0.6 and ld > 0.6 and mx_rectos >= 3 and abs(_rumbo_meta()) > math.radians(cfg.mx_rumbo_tol_deg)):
-                    cond.ordenar("izquierda" if _rumbo_meta() > 0 else "derecha", t, maniobra=False)
+                    _ord("izquierda" if _rumbo_meta() > 0 else "derecha", t, maniobra=False)
                     mx_rectos = 0
                     corr = "hecho"
                     correcciones += 1
@@ -1347,7 +1397,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                         dec = guardian.decidir(pg, sg)
                         if dec:
                             guardian.iniciar(dec, pg, sg)
-                            cond.ordenar(dec["accion"], t, maniobra=False, esc_dur=dec["escala"])
+                            _ord(dec["accion"], t, maniobra=False, esc_dur=dec["escala"])
                             correcciones += 1
                             corr = "hecho"
                             sin_corregir = 0
@@ -1357,7 +1407,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     if corr:
                         rumbo_corr += 1
                         correcciones += 1
-                        if cond.ordenar(corr, t, maniobra=False, esc_dur=cfg.rumbo_pulso_escala):
+                        if _ord(corr, t, maniobra=False, esc_dur=cfg.rumbo_pulso_escala):
                             corr_ejec += 1
                         sin_corregir = 0
                         corr = "hecho"
@@ -1375,7 +1425,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     correcciones += 1
                     if n_corr == 2:
                         cola_man = [corr]
-                    if cond.ordenar(corr, t, maniobra=False):
+                    if _ord(corr, t, maniobra=False):
                         corr_ejec += 1
                     sin_corregir = 0
                 else:
@@ -1384,7 +1434,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     if rf is not None and cfg.rumbo_modo == "arco":
                         e_eff = RF.error_con_mirada(rf.e, desvio_ult, cfg.rumbo_mirada_m)
                         w_arco = max(-cfg.rumbo_arco_max, min(cfg.rumbo_arco_max, -cfg.rumbo_arco_k * e_eff))
-                    if cond.ordenar("adelante", t, esc_v=esc_v, w_extra=w_arco):
+                    if _ord("adelante", t, esc_v=esc_v, w_extra=w_arco):
                         mx_rectos += 1
                         if rf is not None:
                             corr_rumbo.inicio_pulso_recto(rf.e)
@@ -1437,6 +1487,25 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 ultima_ok = copy.deepcopy(robot.d)
         if choque and not prev_choque and (t - t_choque > 1.0 or not cfg.paredes_solidas):
             contactos += 1
+            if len(contacto_info) < 12:                 # diagnóstico: dónde está lo que tocó, en ejes del robot (x adelante, y izquierda), y qué veía de frente
+                psi_c = robot.psi_real()
+                mejor_o = None
+                for (ox, oy, orr) in esc.macetas:
+                    dd_ = math.hypot(ox - cx, oy - cy) - orr
+                    if mejor_o is None or dd_ < mejor_o[0]:
+                        mejor_o = (dd_, ox - cx, oy - cy, "obj")
+                for (x0w, y0w, x1w, y1w) in esc.paredes:
+                    ex_, ey_ = x1w - x0w, y1w - y0w
+                    L2_ = max(ex_ * ex_ + ey_ * ey_, 1e-9)
+                    u_ = max(0.0, min(1.0, ((cx - x0w) * ex_ + (cy - y0w) * ey_) / L2_))
+                    qx, qy = x0w + u_ * ex_, y0w + u_ * ey_
+                    dd_ = math.hypot(qx - cx, qy - cy)
+                    if mejor_o is None or dd_ < mejor_o[0]:
+                        mejor_o = (dd_, qx - cx, qy - cy, "pared")
+                rx = math.cos(psi_c) * mejor_o[1] + math.sin(psi_c) * mejor_o[2]
+                ry = -math.sin(psi_c) * mejor_o[1] + math.cos(psi_c) * mejor_o[2]
+                contacto_info.append({"t": round(t), "accion": cond.ultima_accion, "activo": bool(cond.activo), "tipo": mejor_o[3],
+                                      "rel_x": round(rx, 2), "rel_y": round(ry, 2), "d": round(mejor_o[0], 2), "frente_leido": round(float(frente), 2) if math.isfinite(frente) else None})
             k_ac = (cond.ultima_accion or "?") + ("" if cond.activo else "·parado")
             contactos_por_accion[k_ac] = contactos_por_accion.get(k_ac, 0) + 1
         if choque:
@@ -1452,11 +1521,21 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         if traza and int(round(t / dt)) % 10 == 0:
             traj.append((t, cx, cy, robot.psi_real(), robot.delta(), choque,
                          max(abs(x) for x in duties), int(cond.activo)))
-        if esc.meta_xy is not None:
-            if math.hypot(cx - esc.meta_xy[0], cy - esc.meta_xy[1]) < 0.25:
+        if cfg.mx_regreso and fase == "regreso":
+            if math.hypot(cx - inicio_xy[0], cy - inicio_xy[1]) < 0.5:
                 ok = True
                 break
-        elif cx >= esc.goal_x - 0.05:
+            continue
+        llego_ida = (math.hypot(cx - esc.meta_xy[0], cy - esc.meta_xy[1]) < 0.25) if esc.meta_xy is not None else (cx >= esc.goal_x - 0.05)
+        if llego_ida:
+            if cfg.mx_regreso:                                   # da la vuelta: el punto de inicio pasa a ser la meta
+                fase, ida_ok = "regreso", True
+                mx_meta_xy = inicio_xy
+                mx_commit, mx_hist = None, []
+                if guardian is not None:
+                    guardian.pend = None
+                    guardian.fijar_polilinea(list(reversed(esc.linea_central)) if esc.linea_central else [(cx, cy), inicio_xy])
+                continue
             ok = True
             break
 
@@ -1464,6 +1543,13 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     avance = (s_max - x0) if esc.meta_xy is None else max(0.0, 1 - math.hypot(
         ultimo[0] - esc.meta_xy[0], ultimo[1] - esc.meta_xy[1]) / max(recorrido, 1e-6)) * recorrido
     progreso = max(0.0, min(1.0, avance / max(recorrido, 1e-6)))
+    if cfg.mx_regreso:                                           # ida y vuelta: la mitad del progreso es llegar a la meta y la otra mitad volver
+        if ok:
+            progreso = 1.0
+        elif fase == "regreso":
+            progreso = 0.5 + 0.5 * max(0.0, 1.0 - math.hypot(ultimo[0] - inicio_xy[0], ultimo[1] - inicio_xy[1]) / max(recorrido, 1e-6))
+        else:
+            progreso = 0.5 * progreso
     e = np.asarray(err) if err else np.zeros(1)
     res = {
         "escenario": esc.nombre, "config": cfg.nombre, "semilla": semilla,
@@ -1481,7 +1567,11 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         "mu": hip.mu, "dead": hip.dead, "bias": hip.bias, "drag": hip.drag,
     }
     res["mx_escapes"] = mx_escapes
+    res["pred"] = dict(PRED)
+    res["fase"] = fase
+    res["ida_ok"] = bool(ida_ok)
     res["contactos_por_accion"] = contactos_por_accion
+    res["contacto_info"] = contacto_info
     if guardian is not None:
         res["guardian"] = guardian.resumen()
     if mision is not None:

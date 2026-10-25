@@ -3746,6 +3746,55 @@ async def mapas_digital_archivo_handler(request: web.Request):
     return web.FileResponse(ruta)
 
 
+async def simulador_subir_datos_handler(request: web.Request):
+    """POST /api/simulador/subir_datos {"nombre"?: "...", "mapa"?: "<mapa ya guardado>"}
+
+    Sube lo que el robot recolectó (mapa del SLAM, recorrido, plantas escaneadas, punto de inicio) al simulador: guarda un paquete en
+    ~/.agrobot/datos_simulador/<nombre>/ y escribe el mundo `real_<nombre>` en simulador_pasivo/mundos/, que el editor de terrenos del simulador
+    abre y deja corregir. Si el SLAM no está corriendo, usa `mapa` o el último mapa guardado."""
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    try:
+        nombre = validar_nombre_mapa(body.get("nombre") or time.strftime("salida_%Y%m%d_%H%M"))
+    except ErrorMapa as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    waypoints = list(patrol.waypoints) if patrol else []
+    plantas = [dict(p) for p in (mision_plantas.plantas if mision_plantas is not None else [])]
+    aviso = None
+    carpeta = None
+    try:
+        await mapas.guardar(nombre, waypoints, True)             # congela el mapa actual del SLAM con su recorrido
+        carpeta = mapas.carpeta / nombre
+        (carpeta / "plantas.json").write_text(json.dumps(mision_plantas.estado_dict() if mision_plantas is not None else {"plantas": plantas}, indent=1, ensure_ascii=False))
+    except Exception as exc:  # noqa: BLE001  (SLAM caído u otro fallo: se usa un mapa que ya esté guardado)
+        previo = body.get("mapa") or (mapas.listar()[0]["nombre"] if mapas.listar() else None)
+        if previo is None or not (mapas.carpeta / validar_nombre_mapa(previo) / "mapa.yaml").exists():
+            return web.json_response({"ok": False, "error": f"no hay mapa para subir ({exc}). Guarda un mapa primero."}, status=409)
+        carpeta = mapas.carpeta / validar_nombre_mapa(previo)
+        aviso = f"el SLAM no respondió ({exc}); se usó el mapa guardado «{previo}»"
+        if not waypoints:
+            try:
+                waypoints = json.loads((carpeta / "waypoints.json").read_text())
+            except (OSError, ValueError):
+                waypoints = []
+        if not plantas:
+            try:
+                plantas = json.loads((carpeta / "plantas.json").read_text()).get("plantas", [])
+            except (OSError, ValueError):
+                plantas = []
+    import subir_datos_simulador
+    mundos_dir = _AQUI.parent.parent / "simulador_pasivo" / "mundos"
+    try:
+        res = await asyncio.to_thread(subir_datos_simulador.exportar, nombre, carpeta, plantas, waypoints, mundos_dir)
+    except Exception as exc:  # noqa: BLE001
+        return web.json_response({"ok": False, "error": f"no se pudo exportar al simulador: {exc}"}, status=500)
+    await state.broadcast({"type": "toast", "data": {"kind": "success", "title": "Datos subidos al simulador",
+                                                     "message": f"Mundo «{res['mundo']}»: {res['muros']} muros, {res['plantas']} planta(s). Ábrelo en el editor de terrenos del simulador."}})
+    return web.json_response({"ok": True, "aviso": aviso, **res})
+
+
 async def nav_mode_handler(request: web.Request):
     """GET: modo actual. POST {"mode": "mapping"|"localization"}: solo lo anota
     para la UI — relanzar los nodos ROS correctos se hace a mano (ver README),
@@ -4851,6 +4900,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)
     app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
     app.router.add_post("/api/mapas/digitalizar", mapas_digitalizar_handler)
+    app.router.add_post("/api/simulador/subir_datos", simulador_subir_datos_handler)
     app.router.add_get("/api/mapas/digital/{nombre}/{archivo}", mapas_digital_archivo_handler)
     app.router.add_get("/api/giro_cerrado", giro_cerrado_handler)
     app.router.add_post("/api/giro_cerrado", giro_cerrado_handler)

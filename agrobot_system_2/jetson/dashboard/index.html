@@ -1118,6 +1118,10 @@ input[type="text"], select { font-family: inherit; }
                           background:var(--panel); color:var(--ink); font-size:15px;">
             <button class="btn primary" id="mapa-guardar-btn">Guardar mapa</button>
           </div>
+          <div style="margin-bottom:12px;">
+            <button class="btn" id="subir-simulador-btn" title="Guarda el mapa, el recorrido y las plantas escaneadas y los exporta al simulador para corregirlos en el editor de terrenos">Subir datos recolectados a simulador</button>
+            <span id="subir-simulador-estado" class="hint" style="margin-left:8px;"></span>
+          </div>
           <div id="mapas-lista" class="hint">cargando…</div>
         </div>
       </div>
@@ -2573,6 +2577,26 @@ input[type="text"], select { font-family: inherit; }
     }
   }
 
+  async function subirDatosSimulador() {
+    const btn = $("subir-simulador-btn"), est = $("subir-simulador-estado");
+    btn.disabled = true; btn.textContent = "Subiendo…"; est.textContent = "";
+    try {
+      const nombre = $("mapa-nombre").value.trim();
+      const res = await fetch("/api/simulador/subir_datos", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nombre ? { nombre } : {}),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { toast("error", "No se subió", d.error || `HTTP ${res.status}`); est.textContent = d.error || ""; return; }
+      est.textContent = `${d.mundo}: ${d.muros} muros · ${d.plantas} planta(s) · recorrido ${d.puntos_sendero} pts` + (d.aviso ? ` · ${d.aviso}` : "");
+      toast("success", "Datos subidos al simulador", `Abre «${d.mundo}» en el editor de terrenos del simulador.`);
+      refrescarMapas();
+    } catch (_) {
+      toast("error", "Sin conexión", "No llegó la orden a la Jetson.");
+    } finally {
+      btn.disabled = false; btn.textContent = "Subir datos recolectados a simulador";
+    }
+  }
+
   async function digitalizarMapa(nombre, btn) {
     btn.disabled = true; btn.textContent = "Digitalizando…";
     try {
@@ -2824,6 +2848,7 @@ input[type="text"], select { font-family: inherit; }
 
   $("mapa-guardar-btn").addEventListener("click", () => guardarMapa());
   $("mapa-nombre").addEventListener("keydown", (e) => { if (e.key === "Enter") guardarMapa(); });
+  $("subir-simulador-btn").addEventListener("click", subirDatosSimulador);
   refrescarMapas();
 
   function setDonut(id, valId, value, unit) {

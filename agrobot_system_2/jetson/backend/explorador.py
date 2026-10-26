@@ -296,8 +296,10 @@ class ExploradorReactivo:
             return frente
         f, _a, _h = self._geom()
         medio = float(cfg.get("e11_barrido_half_m", 0.256))
-        xs = [q["distance_m"] * math.cos(math.radians(q["angle_deg"])) for q in scan
-              if math.cos(math.radians(q["angle_deg"])) > 0 and abs(q["distance_m"] * math.sin(math.radians(q["angle_deg"]))) < medio]
+        # Solo cuenta lo que está DELANTE de la cara frontal (x > f). Con x > 0 una pared a menos de 25 cm del costado (x entre 0 y f, junto al cuerpo)
+        # daba un «frente» NEGATIVO y disparaba «esquina: retrocedo» sin tener nada delante (grabaciones del 2026-10-26: frente de −0,18 m).
+        xs = [x for x, y in ((q["distance_m"] * math.cos(math.radians(q["angle_deg"])), q["distance_m"] * math.sin(math.radians(q["angle_deg"]))) for q in scan)
+              if x > f and abs(y) < medio]
         return min(frente, min(xs) - f) if xs else frente
 
     def _conducir(self, accion, maniobra=True, esc_dur=1.0):

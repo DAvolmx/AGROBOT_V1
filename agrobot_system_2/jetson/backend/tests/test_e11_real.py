@@ -94,3 +94,15 @@ def test_regreso_sin_planificador_se_rechaza():
     e, cfg, ac = _expl(_scan([]), {"x": 1, "y": 0, "theta_deg": 0})
     e.activo = True
     assert e.iniciar_regreso()[0] is False
+
+
+def test_el_barrido_no_cuenta_una_pared_pegada_al_costado():
+    """Pared a 22 cm del costado, junto al cuerpo (x entre 0 y la cara frontal): NO es un obstáculo de frente (error visto el 2026-10-26)."""
+    scan = [{"angle_deg": 90.0 + a, "distance_m": 0.22 / max(math.sin(math.radians(90.0 + a)), 0.2)} for a in range(-30, 31)]   # pared recta a y = 0,22
+    e, cfg, ac = _expl(scan, {"x": 0, "y": 0, "theta_deg": 0})
+    assert e._frente_barrido(3.0, cfg) == 3.0
+
+
+def test_el_barrido_si_cuenta_lo_que_esta_delante():
+    e, cfg, ac = _expl(_scan([(0, 0.60)]), {"x": 0, "y": 0, "theta_deg": 0})
+    assert 0.35 < e._frente_barrido(3.0, cfg) < 0.45

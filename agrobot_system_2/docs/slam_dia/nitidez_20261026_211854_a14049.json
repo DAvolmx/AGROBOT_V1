@@ -1,0 +1,50 @@
+{
+ "sin alinear (pose SLAM tal cual)": {
+  "celdas_ocupadas": 6906,
+  "nitidez": 0.584,
+  "corr_final_cm": 0.0,
+  "corr_final_deg": 0.0,
+  "corr_max_cm": 0.0,
+  "s": 12.8
+ },
+ "actual (±6 cm, ±2°)": {
+  "celdas_ocupadas": 6424,
+  "nitidez": 0.625,
+  "corr_final_cm": 15.3,
+  "corr_final_deg": 6.0,
+  "corr_max_cm": 30.0,
+  "s": 22.3
+ },
+ "búsqueda ±10 cm, ±3°": {
+  "celdas_ocupadas": 6353,
+  "nitidez": 0.624,
+  "corr_final_cm": 9.0,
+  "corr_final_deg": 5.0,
+  "corr_max_cm": 30.0,
+  "s": 40.9
+ },
+ "búsqueda fina ±6 cm paso 1,5 cm": {
+  "celdas_ocupadas": 6245,
+  "nitidez": 0.628,
+  "corr_final_cm": 15.3,
+  "corr_final_deg": 5.0,
+  "corr_max_cm": 30.0,
+  "s": 52.9
+ },
+ "±10 cm ±3° paso 2 cm 0,5°": {
+  "celdas_ocupadas": 6344,
+  "nitidez": 0.622,
+  "corr_final_cm": 10.2,
+  "corr_final_deg": 4.5,
+  "corr_max_cm": 30.0,
+  "s": 151.9
+ },
+ "giro permitido hasta 1,0 rad/s": {
+  "celdas_ocupadas": 6451,
+  "nitidez": 0.625,
+  "corr_final_cm": 15.3,
+  "corr_final_deg": 3.0,
+  "corr_max_cm": 30.0,
+  "s": 22.1
+ }
+}

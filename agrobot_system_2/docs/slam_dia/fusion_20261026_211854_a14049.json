@@ -1,0 +1,22 @@
+{
+ "slam": {
+  "celdas_ocupadas": 6906,
+  "nitidez": 0.584
+ },
+ "icp": {
+  "celdas_ocupadas": 6930,
+  "nitidez": 0.608
+ },
+ "fusion_k=0.02": {
+  "celdas_ocupadas": 7696,
+  "nitidez": 0.621
+ },
+ "fusion_k=0.05": {
+  "celdas_ocupadas": 7507,
+  "nitidez": 0.603
+ },
+ "fusion_k=0.15": {
+  "celdas_ocupadas": 7427,
+  "nitidez": 0.578
+ }
+}

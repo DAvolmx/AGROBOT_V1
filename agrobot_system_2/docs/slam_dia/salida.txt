@@ -1,0 +1,240 @@
+20261026_210806_5afbd3 {
+ "muestras": 2220,
+ "error_por_paso": {
+  "pares_usados": 1392,
+  "pares_total": 1392,
+  "todo": {
+   "pares": 1392,
+   "err_cm_medio": 1.96,
+   "err_cm_p95": 5.85,
+   "err_deg_medio_abs": 0.58,
+   "err_deg_p95": 1.98,
+   "err_deg_sesgo": -0.03,
+   "mov_cm_medio": 4.1,
+   "a_lo_largo_cm_sesgo": -0.29,
+   "lateral_cm_sesgo": 0.05,
+   "escala_mediana_%": -7.8
+  },
+  "parado (<0,5 cm y <0,5°)": {
+   "pares": 472,
+   "err_cm_medio": 0.49,
+   "err_cm_p95": 1.21,
+   "err_deg_medio_abs": 0.22,
+   "err_deg_p95": 0.62,
+   "err_deg_sesgo": -0.02,
+   "mov_cm_medio": 0.1,
+   "a_lo_largo_cm_sesgo": -0.04,
+   "lateral_cm_sesgo": -0.0,
+   "escala_mediana_%": -7.4
+  },
+  "avanzando recto (>2 cm, <2°)": {
+   "pares": 521,
+   "err_cm_medio": 2.96,
+   "err_cm_p95": 6.88,
+   "err_deg_medio_abs": 0.61,
+   "err_deg_p95": 1.62,
+   "err_deg_sesgo": -0.0,
+   "mov_cm_medio": 8.8,
+   "a_lo_largo_cm_sesgo": -0.57,
+   "lateral_cm_sesgo": 0.43,
+   "escala_mediana_%": -5.7
+  },
+  "girando (>3°)": {
+   "pares": 197,
+   "err_cm_medio": 2.75,
+   "err_cm_p95": 5.71,
+   "err_deg_medio_abs": 1.32,
+   "err_deg_p95": 3.82,
+   "err_deg_sesgo": -0.08,
+   "mov_cm_medio": 3.2,
+   "a_lo_largo_cm_sesgo": -0.07,
+   "lateral_cm_sesgo": -0.75,
+   "escala_mediana_%": -0.8
+  },
+  "mov. rápido (>6 cm/paso)": {
+   "pares": 442,
+   "err_cm_medio": 2.8,
+   "err_cm_p95": 6.7,
+   "err_deg_medio_abs": 0.65,
+   "err_deg_p95": 1.78,
+   "err_deg_sesgo": -0.06,
+   "mov_cm_medio": 10.2,
+   "a_lo_largo_cm_sesgo": -1.01,
+   "lateral_cm_sesgo": 0.53,
+   "escala_mediana_%": -8.3
+  }
+ },
+ "giroscopio": {
+  "ventanas": 88,
+  "ventanas_con_giro_>10°": 41,
+  "razon_pose/giroscopio (mediana, solo con giro)": 1.06,
+  "diferencia_media_abs_deg": 6.05,
+  "diferencia_p95_deg": 15.35
+ },
+ "consistencia": {
+  "scans": 200,
+  "coinciden_<4cm_en_zona_vista_%": 66.5,
+  "p10_%": 35.5,
+  "desfase_mediano_cm": 2.4
+ }
+}
+20261026_211854_a14049 {
+ "muestras": 4402,
+ "error_por_paso": {
+  "pares_usados": 1443,
+  "pares_total": 1464,
+  "todo": {
+   "pares": 1443,
+   "err_cm_medio": 1.71,
+   "err_cm_p95": 5.84,
+   "err_deg_medio_abs": 0.49,
+   "err_deg_p95": 1.73,
+   "err_deg_sesgo": -0.04,
+   "mov_cm_medio": 2.1,
+   "a_lo_largo_cm_sesgo": -0.44,
+   "lateral_cm_sesgo": -0.0,
+   "escala_mediana_%": -14.0
+  },
+  "parado (<0,5 cm y <0,5°)": {
+   "pares": 748,
+   "err_cm_medio": 0.62,
+   "err_cm_p95": 1.52,
+   "err_deg_medio_abs": 0.2,
+   "err_deg_p95": 0.55,
+   "err_deg_sesgo": -0.01,
+   "mov_cm_medio": 0.1,
+   "a_lo_largo_cm_sesgo": -0.01,
+   "lateral_cm_sesgo": -0.03,
+   "escala_mediana_%": -6.5
+  },
+  "avanzando recto (>2 cm, <2°)": {
+   "pares": 348,
+   "err_cm_medio": 3.22,
+   "err_cm_p95": 7.34,
+   "err_deg_medio_abs": 0.67,
+   "err_deg_p95": 1.92,
+   "err_deg_sesgo": -0.01,
+   "mov_cm_medio": 6.7,
+   "a_lo_largo_cm_sesgo": -1.32,
+   "lateral_cm_sesgo": 0.1,
+   "escala_mediana_%": -20.8
+  },
+  "girando (>3°)": {
+   "pares": 100,
+   "err_cm_medio": 2.83,
+   "err_cm_p95": 9.03,
+   "err_deg_medio_abs": 1.24,
+   "err_deg_p95": 3.23,
+   "err_deg_sesgo": -0.46,
+   "mov_cm_medio": 3.5,
+   "a_lo_largo_cm_sesgo": -0.17,
+   "lateral_cm_sesgo": -0.11,
+   "escala_mediana_%": 4.7
+  },
+  "mov. rápido (>6 cm/paso)": {
+   "pares": 215,
+   "err_cm_medio": 3.69,
+   "err_cm_p95": 8.97,
+   "err_deg_medio_abs": 0.81,
+   "err_deg_p95": 2.45,
+   "err_deg_sesgo": -0.03,
+   "mov_cm_medio": 9.1,
+   "a_lo_largo_cm_sesgo": -2.26,
+   "lateral_cm_sesgo": 0.48,
+   "escala_mediana_%": -24.1
+  }
+ },
+ "giroscopio": {
+  "ventanas": 176,
+  "ventanas_con_giro_>10°": 49,
+  "razon_pose/giroscopio (mediana, solo con giro)": 0.99,
+  "diferencia_media_abs_deg": 5.49,
+  "diferencia_p95_deg": 17.69
+ },
+ "consistencia": {
+  "scans": 199,
+  "coinciden_<4cm_en_zona_vista_%": 57.9,
+  "p10_%": 18.2,
+  "desfase_mediano_cm": 3.3
+ }
+}
+20261026_213624_41e2b1 {
+ "muestras": 2551,
+ "error_por_paso": {
+  "pares_usados": 1495,
+  "pares_total": 1497,
+  "todo": {
+   "pares": 1495,
+   "err_cm_medio": 2.22,
+   "err_cm_p95": 6.32,
+   "err_deg_medio_abs": 0.63,
+   "err_deg_p95": 2.07,
+   "err_deg_sesgo": 0.1,
+   "mov_cm_medio": 3.1,
+   "a_lo_largo_cm_sesgo": -0.58,
+   "lateral_cm_sesgo": -0.16,
+   "escala_mediana_%": -10.4
+  },
+  "parado (<0,5 cm y <0,5°)": {
+   "pares": 454,
+   "err_cm_medio": 0.62,
+   "err_cm_p95": 1.42,
+   "err_deg_medio_abs": 0.24,
+   "err_deg_p95": 0.67,
+   "err_deg_sesgo": 0.01,
+   "mov_cm_medio": 0.0,
+   "a_lo_largo_cm_sesgo": 0.02,
+   "lateral_cm_sesgo": -0.0,
+   "escala_mediana_%": -1.9
+  },
+  "avanzando recto (>2 cm, <2°)": {
+   "pares": 449,
+   "err_cm_medio": 3.36,
+   "err_cm_p95": 7.79,
+   "err_deg_medio_abs": 0.72,
+   "err_deg_p95": 2.25,
+   "err_deg_sesgo": -0.01,
+   "mov_cm_medio": 7.2,
+   "a_lo_largo_cm_sesgo": -1.34,
+   "lateral_cm_sesgo": 0.53,
+   "escala_mediana_%": -15.6
+  },
+  "girando (>3°)": {
+   "pares": 427,
+   "err_cm_medio": 2.6,
+   "err_cm_p95": 5.46,
+   "err_deg_medio_abs": 0.94,
+   "err_deg_p95": 2.53,
+   "err_deg_sesgo": 0.41,
+   "mov_cm_medio": 2.2,
+   "a_lo_largo_cm_sesgo": -0.47,
+   "lateral_cm_sesgo": -1.14,
+   "escala_mediana_%": -7.3
+  },
+  "mov. rápido (>6 cm/paso)": {
+   "pares": 355,
+   "err_cm_medio": 3.21,
+   "err_cm_p95": 8.16,
+   "err_deg_medio_abs": 0.75,
+   "err_deg_p95": 2.27,
+   "err_deg_sesgo": -0.03,
+   "mov_cm_medio": 8.6,
+   "a_lo_largo_cm_sesgo": -1.91,
+   "lateral_cm_sesgo": 0.63,
+   "escala_mediana_%": -17.4
+  }
+ },
+ "giroscopio": {
+  "ventanas": 102,
+  "ventanas_con_giro_>10°": 60,
+  "razon_pose/giroscopio (mediana, solo con giro)": 1.02,
+  "diferencia_media_abs_deg": 4.98,
+  "diferencia_p95_deg": 13.31
+ },
+ "consistencia": {
+  "scans": 200,
+  "coinciden_<4cm_en_zona_vista_%": 56.1,
+  "p10_%": 21.4,
+  "desfase_mediano_cm": 3.2
+ }
+}

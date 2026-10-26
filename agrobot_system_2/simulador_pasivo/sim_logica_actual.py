@@ -260,6 +260,7 @@ class Config:
     mx_plan_mirada_m: float = 0.7
     mx_plan_cada_s: float = 2.0
     mx_plan_giro_deg: float = 14.0
+    mx_plan_tol_planta_m: float = 0.45  # al ir a una planta, el planificador se detiene a esta distancia de ella (0,78 = parar a ~80 cm)
     mx_plan_solo_regreso: bool = False  # el planificador solo guía el REGRESO (mapa ya conocido); la ida la lleva la estrategia reactiva
     mx_migas: bool = False
     mx_sendero: bool = False            # en pasillos/senderos la "meta" de las maniobras es el punto del sendero a `mx_sendero_mirada_m` por delante (no la meta lejana a través de las paredes)
@@ -1409,7 +1410,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 if tgt is None:
                     tgt = mx_meta_xy
                 if pl_ruta is None or t - pl_t >= cfg.mx_plan_cada_s or pl_obj != tgt:
-                    pl_ruta = plan.ruta((px_r, py_r), tgt, tol_m=0.45 if tgt != mx_meta_xy else 0.3)
+                    pl_ruta = plan.ruta((px_r, py_r), tgt, tol_m=cfg.mx_plan_tol_planta_m if tgt != mx_meta_xy else 0.3)
                     pl_t, pl_obj = t, tgt
                     if pl_ruta is None:                               # sin camino conocido: reactivo 6 s
                         pl_pausa_hasta = t + 6.0

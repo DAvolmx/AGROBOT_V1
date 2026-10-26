@@ -19,9 +19,12 @@ NUEVOS = {
     "mx_plan_inflar_m": ("u", 0.18, 0.30), "mx_plan_mirada_m": ("u", 0.5, 1.4), "mx_plan_cada_s": ("u", 1.0, 4.0), "mx_plan_giro_deg": ("u", 8.0, 25.0),
     "mx_plan_tol_planta_m": ("u", 0.60, 1.00), "mx_pred_relajar_s": ("u", 10.0, 60.0), "mx_pred_giro_extra_m": ("u", 0.02, 0.08),
     "mis_dist_visita_m": ("u", 0.60, 1.10), "mis_dist_insp_m": ("u", 0.30, 1.00), "mis_reintentos": ("u", 0, 2), "usar_hueco": ("u", 0, 1),
+    # sonar sobre el mapa acumulado (2026-10-26)
+    "usar_sonar": ("u", 0, 1), "mx_sonar_prof_m": ("u", 0.7, 1.5), "mx_sonar_w_meta": ("u", 0.3, 2.0), "mx_sonar_w_visitas": ("u", 0.0, 1.5),
 }
 E11 = {"mx_plan_inflar_m": 0.22, "mx_plan_mirada_m": 1.0, "mx_plan_cada_s": 2.0, "mx_plan_giro_deg": 14.0, "mx_plan_tol_planta_m": 0.78, "mx_pred_relajar_s": 30.0,
-       "mx_pred_giro_extra_m": 0.04, "mis_dist_visita_m": 0.8, "mis_dist_insp_m": 0.8, "mis_reintentos": 1, "usar_hueco": 0, "mis_escaneo_s": 6.4}
+       "mx_pred_giro_extra_m": 0.04, "mis_dist_visita_m": 0.8, "mis_dist_insp_m": 0.8, "mis_reintentos": 1, "usar_hueco": 0, "mis_escaneo_s": 6.4,
+       "usar_sonar": 0, "mx_sonar_prof_m": 1.0, "mx_sonar_w_meta": 1.0, "mx_sonar_w_visitas": 0.5}
 
 
 def costo(r: dict) -> float:
@@ -45,6 +48,9 @@ def campos(p, entorno, guardian=True, mx=True):
              mx_hueco_m=p.get("mx_hueco_m", 1.0), mx_grados_pulso=p.get("mx_grados_pulso", 6.0), mx_giro_largo=int(round(p.get("mx_giro_largo", 5))),
              mx_bordear_s=p.get("mx_bordear_s", 12.0), mx_rumbo_tol_deg=p.get("mx_rumbo_tol_deg", 25.0), mx_ventana_s=p.get("mx_ventana_s", 25.0),
              mx_ancho_half_m=p.get("mx_ancho_half_m", 0.26))
+    if round(g("usar_sonar", 0)):                           # el sonar sustituye al «seguir el hueco» del scan de ahora
+        c.update(mx_sonar=True, mx_hueco=False, mx_sonar_prof_m=g("mx_sonar_prof_m", 1.0), mx_sonar_w_meta=g("mx_sonar_w_meta", 1.0),
+                 mx_sonar_w_visitas=g("mx_sonar_w_visitas", 0.5), mx_memoria_w=p.get("mx_memoria_w", 0.5))
     if mx:                                                  # E11: visitar cada planta vista y parar a ~0,8 m
         c.update(mx_visitar=True, mx_visitar_m=p.get("mx_visitar_m", 3.5), mx_plan_tol_planta_m=g("mx_plan_tol_planta_m", 0.78),
                  mis_dist_visita_m=g("mis_dist_visita_m", 0.8), mis_dist_insp_m=g("mis_dist_insp_m", 0.8), mis_reintentos=int(round(g("mis_reintentos", 1))))

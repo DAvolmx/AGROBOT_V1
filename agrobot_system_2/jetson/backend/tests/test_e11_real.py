@@ -106,3 +106,38 @@ def test_el_barrido_no_cuenta_una_pared_pegada_al_costado():
 def test_el_barrido_si_cuenta_lo_que_esta_delante():
     e, cfg, ac = _expl(_scan([(0, 0.60)]), {"x": 0, "y": 0, "theta_deg": 0})
     assert 0.35 < e._frente_barrido(3.0, cfg) < 0.45
+
+
+def test_giro_con_pared_en_la_esquina_segura_si_pasa():
+    """Pared a la izquierda, a la altura de la cara delantera (x>0, y=+0,22): al girar a la DERECHA esa esquina se aleja (pasa); a la izquierda choca."""
+    scan = [{"angle_deg": math.degrees(math.atan2(0.22, x)), "distance_m": math.hypot(x, 0.22)} for x in (0.02, 0.06, 0.10, 0.14)]
+    e, cfg, ac = _expl(scan, {"x": 0, "y": 0, "theta_deg": 0})
+    assert e._despejado("giro", cfg, "derecha") is True
+    assert e._despejado("giro", cfg, "izquierda") is False
+
+
+def test_el_sonar_elige_el_hueco_del_mapa_al_bloquearse():
+    """Frente tapado a 30 cm; hueco libre a +60° (izquierda): el robot gira a la izquierda los pulsos que pide el ángulo."""
+    from planificador import Planificador
+    from sonar_mapa import Sonar
+    scan = [{"angle_deg": a % 360, "distance_m": 5.0 if abs(a - 60) <= 22 else 0.3} for a in range(-180, 180)]
+    ac = []
+    e, cfg, _ = _expl(scan, {"x": 0, "y": 0, "theta_deg": 0}, {"e11_predictor": False, "e11_sonar": True, "mx_grados_pulso": 30.0}, ac)
+    e.plan = Planificador(centro=(0, 0))
+    e.sonar = Sonar(e.plan)
+    e.activo = True
+    e._inicio_xy = (0.0, 0.0)
+
+    async def go():
+        t = asyncio.create_task(e._bucle())
+        await asyncio.sleep(3.0)
+        e.activo = False
+        t.cancel()
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+    d = {"adelante": 0.1, "atras": 3.0, "izquierda": 2.0, "derecha": 2.0, "cerca": None}
+    e._distancias = lambda: d
+    asyncio.run(go())
+    assert ac and ac[0] == "izquierda" and ac[:2] == ["izquierda", "izquierda"]

@@ -153,7 +153,9 @@ DEFAULTS = {
         "e11_pred_avance_m": 0.289, "e11_pred_atras_m": 0.166, "e11_pred_margen_m": 0.067, "e11_pred_giro_extra_m": 0.033, "e11_pred_relajar_s": 25.0,
         "e11_barrido": True, "e11_barrido_half_m": 0.256,
         "e11_plan_inflar_m": 0.23, "e11_plan_mirada_m": 0.75, "e11_plan_cada_s": 2.6, "e11_plan_giro_deg": 19.6, "e11_regreso_radio_m": 0.5,
-        "e11_ida_max_m": 0.0, "e11_ida_max_s": 0.0,          # disparadores automáticos del regreso (0 = solo manual)
+        "e11_ida_max_m": 0.0, "e11_ida_max_s": 0.0,
+        # Sonar sobre el mapa acumulado (sonar_mapa.py): elige el hueco al bloquearse en 360°, no solo con los conos.
+        "e11_sonar": False, "e11_sonar_prof_m": 1.0, "e11_sonar_w_meta": 1.0, "e11_sonar_w_visitas": 0.5,          # disparadores automáticos del regreso (0 = solo manual)
         # Guardián del sendero (2026-10-24, guardian_sendero.py). APAGADO: se prueba primero en un pasillo con el robot en el suelo.
         "guardian_sendero_activo": False,
         "guardian_tol_cm": 6.0,

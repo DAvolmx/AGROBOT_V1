@@ -983,7 +983,8 @@ input[type="text"], select { font-family: inherit; }
             <button class="btn" id="btn-expl-volver" title="E11: da la vuelta y vuelve al punto de salida por una ruta A* sobre el mapa que acumuló">↩ Regresar al inicio</button>
             <button class="btn peligro" id="btn-expl-off">■ Detener</button>
           </div>
-          <div class="hint" id="expl-e11" style="margin:-4px 0 10px;"></div>
+          <div class="hint" id="expl-e11" style="margin:-4px 0 6px;"></div>
+          <canvas id="expl-sonar" width="190" height="190" title="Sonar: distancia libre en 72 direcciones sobre el mapa acumulado + scan (adelante = arriba)" style="display:none; margin:0 0 10px; border:1px solid var(--line); border-radius:10px;"></canvas>
           <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; align-items:center;">
             <button class="btn primary" id="btn-mision-on">🌱 Misión plantas en maceta</button>
             <button class="btn peligro" id="btn-mision-off">■ Detener misión</button>
@@ -2661,7 +2662,31 @@ input[type="text"], select { font-family: inherit; }
     $("btn-expl-on").disabled = !!d.activo;
     $("btn-expl-off").disabled = !d.activo;
     $("btn-expl-volver").disabled = !d.activo || !(d.e11 && d.e11.plan);
+    pintarSonar(d.e11 && d.e11.sonar);
     if (d.e11) $("expl-e11").textContent = `E11 · regreso: ${d.e11.regreso} · predictor rechazó: adelante ${d.e11.predictor_rechazados.adelante}, atrás ${d.e11.predictor_rechazados.atras}, giro ${d.e11.predictor_rechazados.giro}`;
+  }
+
+  function pintarSonar(s) {
+    const cv = $("expl-sonar");
+    if (!s || !s.r) { cv.style.display = "none"; return; }
+    cv.style.display = "block";
+    const c = cv.getContext("2d"), W = cv.width, R = W / 2 - 6, n = s.r.length, rmax = 4.0;
+    c.clearRect(0, 0, W, W);
+    c.strokeStyle = "rgba(128,128,128,.35)"; c.lineWidth = 1;
+    for (const m of [1, 2, 3, 4]) { c.beginPath(); c.arc(W / 2, W / 2, R * m / rmax, 0, 7); c.stroke(); }
+    c.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const k = i % n, ang = (k / n) * 2 * Math.PI - Math.PI, rr = Math.min(s.r[k], rmax) / rmax * R;
+      const x = W / 2 - Math.sin(ang) * rr, y = W / 2 - Math.cos(ang) * rr;      // adelante = arriba, izquierda = a la izquierda
+      i ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.fillStyle = s.sin_salida ? "rgba(220,60,60,.35)" : "rgba(60,160,90,.35)"; c.fill();
+    c.strokeStyle = s.sin_salida ? "#d33" : "#2a9d4b"; c.lineWidth = 2; c.stroke();
+    c.fillStyle = "#222"; c.fillRect(W / 2 - 4, W / 2 - 6, 8, 12);
+    for (const h of s.huecos) {                                                    // flechas hacia cada hueco
+      const a = h.centro_deg * Math.PI / 180, x = W / 2 - Math.sin(a) * R * 0.55, y = W / 2 - Math.cos(a) * R * 0.55;
+      c.fillStyle = "#1565c0"; c.beginPath(); c.arc(x, y, 4, 0, 7); c.fill();
+    }
   }
 
   $("btn-expl-on").addEventListener("click", async () => {

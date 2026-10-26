@@ -33,8 +33,10 @@ import traceback
 
 try:                                    # E11 (2026-10-26): planificador A* para el regreso al inicio
     from planificador import Planificador as _Planificador
+    from sonar_mapa import Sonar as _Sonar
 except Exception:                       # noqa: BLE001
     _Planificador = None
+    _Sonar = None
 
 try:
     import rumbo_fusion as _RF
@@ -156,6 +158,9 @@ class ExploradorReactivo:
         # --- E11 (2026-10-26): predictor de colisión por pulso, barrido de corredor y regreso planificado al punto de inicio. TODO bajo autonomia.e11_*.
         self.geom_cb = None                 # () -> sección slam de la config (lidar_adelante_cm, lidar_atras_cm, robot_ancho_cm)
         self.plan = None                    # planificador.Planificador (se crea al iniciar con la pose de salida)
+        self.sonar = None                   # sonar_mapa.Sonar sobre el mapa del planificador
+        self.sonar_ultimo = None            # último análisis (dict) para el dashboard
+        self._visitas: dict = {}            # celdas de 0,5 m -> veces pisadas (el sonar prefiere lo poco pisado)
         self._inicio_xy = None
         self._t_inicio = 0.0
         self._regresando = False
@@ -198,6 +203,8 @@ class ExploradorReactivo:
         if _Planificador is not None and self._get_config().get("e11_activo", False):
             c0 = self._get_config()
             self.plan = _Planificador(inflar_m=float(c0.get("e11_plan_inflar_m", 0.23)), centro=self._inicio_xy or (0.0, 0.0))
+            self.sonar = _Sonar(self.plan) if _Sonar is not None else None
+            self._visitas = {}
         if self.guardian is not None:
             self.guardian.ref, self.guardian.pend = [], None
         self._grabar_recorrido(True)      # deja el rastro del recorrido
@@ -231,7 +238,10 @@ class ExploradorReactivo:
         self.estado = "detenido"
 
     def snapshot(self) -> dict:
-        d = {"e11": {"regreso": self.regreso_estado, "predictor_rechazados": dict(self.pred_rechazados), "plan": self.plan is not None},
+        d = {"e11": {"regreso": self.regreso_estado, "predictor_rechazados": dict(self.pred_rechazados), "plan": self.plan is not None,
+                "sonar": (None if self.sonar_ultimo is None else {"huecos": self.sonar_ultimo["huecos"], "pasillo": self.sonar_ultimo["pasillo"],
+                                                                  "sin_salida": self.sonar_ultimo["sin_salida"], "libre_360_m": self.sonar_ultimo["libre_360_m"],
+                                                                  "r": self.sonar_ultimo["r"]})},
              "activo": self.activo, "estado": self.estado, "pulsos": self.pulsos,
              "giros": self.giros, "desatascos": self.desatascos,
              "escaneos": self.escaneos, "correcciones": self.correcciones,
@@ -261,7 +271,7 @@ class ExploradorReactivo:
         g = (self.geom_cb() if self.geom_cb else None) or {}
         return (float(g.get("lidar_adelante_cm", 18.5)) / 100.0, float(g.get("lidar_atras_cm", 30.5)) / 100.0, float(g.get("robot_ancho_cm", 38.0)) / 200.0)
 
-    def _despejado(self, clave: str, cfg) -> bool:
+    def _despejado(self, clave: str, cfg, giro: str | None = None) -> bool:
         """¿Cabe este pulso ('adelante' | 'atras' | 'giro') sin tocar nada de lo que ve el último scan? Barre la huella del robot (ejes del LIDAR)."""
         if self.scan_cb is None:
             return True                                    # E11 sin LIDAR conectado al explorador (pruebas): no se puede juzgar, no se frena
@@ -284,9 +294,16 @@ class ExploradorReactivo:
                 if -a - float(cfg.get("e11_pred_atras_m", 0.17)) * fr - m < px < -a and abs(py) < h + m:
                     return False
             else:
+                # Giro en el sitio: las esquinas que barren hacia fuera son (adelante, lado hacia el que gira) y (atrás, lado contrario): lo que queda en las
+                # otras dos esquinas no se toca. Con la huella completa se rechazaban giros seguros junto a paredes (183 el 2026-10-26).
                 e = m + float(cfg.get("e11_pred_giro_extra_m", 0.033)) * (0.4 if relajado else 1.0)
                 if -a - e < px < f + e and abs(py) < h + e:
-                    return False
+                    if giro is None:
+                        return False
+                    lado = 1.0 if giro == "izquierda" else -1.0
+                    cx_ = px - (f - a) / 2.0
+                    if cx_ * py * lado > -0.0 or abs(py) < 0.02 or abs(cx_) < 0.03:
+                        return False
         return True
 
     def _frente_barrido(self, frente: float, cfg) -> float:
@@ -307,7 +324,7 @@ class ExploradorReactivo:
         cfg = self._get_config() or {}
         if cfg.get("e11_activo", False) and cfg.get("e11_predictor", True) and accion in ("adelante", "atras", "izquierda", "derecha"):
             clave = "giro" if accion in ("izquierda", "derecha") else accion
-            if not self._despejado(clave, cfg):
+            if not self._despejado(clave, cfg, accion if clave == "giro" else None):
                 self.pred_rechazados[clave] += 1
                 ahora = time.monotonic()
                 self._rechazos = [t for t in self._rechazos if ahora - t < 20.0] + [ahora]
@@ -317,7 +334,7 @@ class ExploradorReactivo:
                     self._emitir(evento="predictor_relaja", segundos=round(float(cfg.get("e11_pred_relajar_s", 25.0))))
                 if clave == "giro":
                     for alt, k in (("derecha" if accion == "izquierda" else "izquierda", "giro"), ("atras", "atras")):
-                        if self._despejado(k, cfg):
+                        if self._despejado(k, cfg, alt if k == "giro" else None):
                             self.pred_rechazados["cambiados"] += 1
                             accion = alt
                             break
@@ -805,7 +822,11 @@ class ExploradorReactivo:
                 if self._hueco(d, lado) >= lado_libre:
                     self._bloq += 1
                     gap = None
-                    if cfg.get("mx_hueco", False):
+                    if cfg.get("e11_sonar", False) and self.sonar is not None and self.scan_cb is not None:
+                        gap = self._gap_sonar(cfg)
+                        if gap is not None and abs(math.degrees(gap)) >= 4.0 and self._hueco(d, "izquierda" if gap > 0 else "derecha") >= lado_libre:
+                            lado = "izquierda" if gap > 0 else "derecha"
+                    elif cfg.get("mx_hueco", False):
                         con_meta = self._rumbo_meta_rad() is not None
                         gap = self._mejor_hueco(float(cfg.get("mx_hueco_m", 1.0)), 1.0 if con_meta else 0.2) or \
                             self._mejor_hueco(0.6, 1.0 if con_meta else 0.2)
@@ -831,7 +852,8 @@ class ExploradorReactivo:
                     n_atras = max(1, int(cfg.get("man_atras_pulsos", 1)))
                     n_giro = max(1, int(cfg.get("man_giro_pulsos", 1)))
                     if gap is not None:
-                        n_giro = int(max(1, min(9, round(abs(math.degrees(gap)) / float(cfg.get("mx_grados_pulso", 6.0))))))
+                        tope = 30 if cfg.get("e11_sonar", False) else 9
+                        n_giro = int(max(1, min(tope, round(abs(math.degrees(gap)) / float(cfg.get("mx_grados_pulso", 6.0))))))
                     ret_cm = float(cfg.get("man_retroceso_cm", 0.0))
                     if ret_cm > 0 and frente < ret_cm / 100.0 and atras >= max(retro_libre, 0.30):
                         self.estado = f"esquina: retrocedo {n_atras} pulso(s) (frente {frente:.2f} m)"
@@ -921,6 +943,23 @@ class ExploradorReactivo:
                 i += 1
         return mejor
 
+    def _gap_sonar(self, cfg):
+        """Ángulo (rad, + izquierda) hacia el mejor hueco según el sonar sobre el mapa acumulado (meta, profundidad y poco pisado), o None."""
+        pose = self._get_pose()
+        scan = self.scan_cb()
+        if not pose or not scan or self.sonar is None:
+            return None
+        x, y, psi = pose["x"], pose["y"], math.radians(pose["theta_deg"])
+        r = self.sonar.perfil(x, y, psi, scan)
+        meta = self._rumbo_meta_rad()
+        for prof in (float(cfg.get("e11_sonar_prof_m", 1.0)), 0.6):
+            hs = self.sonar.huecos(r, prof)
+            if hs:
+                c, _h = self.sonar.mejor_rumbo(r, hs, meta, lambda X, Y: self._visitas.get((round(X / 0.5), round(Y / 0.5)), 0) / 20.0,
+                                               float(cfg.get("e11_sonar_w_meta", 1.0)), 0.15, float(cfg.get("e11_sonar_w_visitas", 0.5)), x, y, psi)
+                return c
+        return None
+
     def _atrapado(self, cfg) -> bool:
         """Dando vueltas en un nicho: en `mx_ventana_s` s no se alejó 0,45 m y se bloqueó >= 8 veces."""
         pose = self._get_pose()
@@ -970,6 +1009,11 @@ class ExploradorReactivo:
         scan = self.scan_cb() if self.scan_cb else None
         if self.plan is not None and pose and scan:
             self.plan.actualizar(pose["x"], pose["y"], math.radians(pose["theta_deg"]), scan)
+            k = (round(pose["x"] / 0.5), round(pose["y"] / 0.5))
+            self._visitas[k] = self._visitas.get(k, 0) + 1
+            if self.sonar is not None and self._get_config().get("e11_sonar", False):
+                self.sonar_ultimo = self.sonar.analisis(pose["x"], pose["y"], math.radians(pose["theta_deg"]), scan,
+                                                        float(self._get_config().get("e11_sonar_prof_m", 1.0)))
 
     def _debe_regresar(self, cfg) -> bool:
         """Disparadores automáticos de la ida (apagados por defecto: 0): distancia al inicio o tiempo de ida."""

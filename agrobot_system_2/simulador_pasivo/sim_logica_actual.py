@@ -262,6 +262,12 @@ class Config:
     mx_plan_giro_deg: float = 14.0
     mx_plan_tol_planta_m: float = 0.45  # al ir a una planta, el planificador se detiene a esta distancia de ella (0,78 = parar a ~80 cm)
     mx_plan_solo_regreso: bool = False  # el planificador solo guía el REGRESO (mapa ya conocido); la ida la lleva la estrategia reactiva
+    # --- SONAR (2026-10-26, sonar_mapa.py): ecos en 72 direcciones sobre el MAPA acumulado (no solo el scan actual) -> huecos, eje del pasillo, sin salida;
+    # al bloquearse elige el rumbo del mejor hueco en 360° (meta + profundidad + poco pisado). Reemplaza al «seguir el hueco» del scan de ahora.
+    mx_sonar: bool = False
+    mx_sonar_prof_m: float = 1.0
+    mx_sonar_w_meta: float = 1.0
+    mx_sonar_w_visitas: float = 0.5
     mx_migas: bool = False
     mx_sendero: bool = False            # en pasillos/senderos la "meta" de las maniobras es el punto del sendero a `mx_sendero_mirada_m` por delante (no la meta lejana a través de las paredes)
     mx_sendero_mirada_m: float = 1.0
@@ -1128,9 +1134,13 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     mx_hist, mx_commit, mx_commit_hasta, mx_rectos, mx_escapes = [], None, 0.0, 0, 0
     visitas = {}
     plan, pl_ruta, pl_t, pl_obj, pl_fallos, pl_pausa_hasta = None, None, -99.0, None, 0, 0.0
-    if cfg.mx_planner:
+    sonar = None
+    if cfg.mx_planner or cfg.mx_sonar:
         from planificador import Planificador
         plan = Planificador(inflar_m=cfg.mx_plan_inflar_m, centro=(x0, y0))
+        if cfg.mx_sonar:
+            from sonar_mapa import Sonar
+            sonar = Sonar(plan)
     relajar_hasta, mx_esc_pos = 0.0, []
     migas, mig_idx, mig_fallos, mig_pausa_hasta = [], None, 0, 0.0
     mx_meta_xy = esc.meta_xy if esc.meta_xy is not None else (esc.goal_x, esc.centro_y)
@@ -1154,7 +1164,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     PRED = {"adelante": 0, "atras": 0, "giro": 0, "cambiadas": 0}
     FRENTE_LIDAR, ATRAS_LIDAR, MEDIO_ANCHO, CENTRO_X = 0.185, 0.305, 0.19, -0.06   # huella en ejes del LIDAR (x adelante); centro del cuerpo a -6 cm
 
-    def _despejado(accion, scan_):
+    def _despejado(accion, scan_, giro=None):
         """¿Se puede ejecutar este pulso sin tocar nada de lo que ve el scan? Barre la huella (ejes del LIDAR). Vectorizado con numpy."""
         rel = t < relajar_hasta
         m = cfg.mx_pred_margen_m * (0.3 if rel else 1.0)
@@ -1169,6 +1179,10 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         else:                                                         # giro: la huella ensanchada (la esquina se desplaza ~4-6 cm por pulso)
             e_ = m + cfg.mx_pred_giro_extra_m * (0.4 if rel else 1.0)
             hit = (px_ > -ATRAS_LIDAR - e_) & (px_ < FRENTE_LIDAR + e_) & (np.abs(py_) < MEDIO_ANCHO + e_)
+            if giro is not None:                                      # solo las esquinas que barren hacia fuera: (adelante, lado del giro) y (atrás, lado contrario)
+                cxx = px_ - (FRENTE_LIDAR - ATRAS_LIDAR) / 2.0
+                lado_ = 1.0 if giro == "izquierda" else -1.0
+                hit &= (cxx * py_ * lado_ > 0.0) | (np.abs(py_) < 0.02) | (np.abs(cxx) < 0.03)
         return not bool(np.any(hit & ~chasis))
 
     def _ord(accion, tt, **kw):
@@ -1176,12 +1190,12 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         if not cfg.mx_prediccion or accion not in ("adelante", "atras", "izquierda", "derecha"):
             return cond.ordenar(accion, tt, **kw)
         clave = "adelante" if accion == "adelante" else "atras" if accion == "atras" else "giro"
-        if _despejado(clave, scan):
+        if _despejado(clave, scan, accion if clave == "giro" else None):
             return cond.ordenar(accion, tt, **kw)
         PRED[clave] += 1
         if clave == "giro":
             for alt in (("derecha" if accion == "izquierda" else "izquierda"), "atras"):
-                if _despejado("giro" if alt != "atras" else "atras", scan):
+                if _despejado("giro" if alt != "atras" else "atras", scan, alt if alt != "atras" else None):
                     PRED["cambiadas"] += 1
                     return cond.ordenar(alt, tt, **kw)
         return False
@@ -1348,7 +1362,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 mgx, mgy = robot.centro()
                 if not migas or math.hypot(mgx - migas[-1][0], mgy - migas[-1][1]) >= cfg.mx_miga_m:
                     migas.append((mgx + float(rng.normal(0, 0.02)), mgy + float(rng.normal(0, 0.02))))
-            if cfg.mx_memoria_w > 0:
+            if cfg.mx_memoria_w > 0 or cfg.mx_sonar:
                 vx_, vy_ = robot.centro()
                 kk = (round(vx_ / 0.5), round(vy_ / 0.5))
                 visitas[kk] = visitas.get(kk, 0) + 1
@@ -1360,7 +1374,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     cola_man = []
             frente = d["adelante"] if d["adelante"] is not None else math.inf
             if cfg.mx_barrido:
-                sel = (scan_xy[0] > 0) & (np.abs(scan_xy[1]) < cfg.mx_ancho_half_m)
+                sel = (scan_xy[0] > cfg.lidar_adelante_cm / 100.0) & (np.abs(scan_xy[1]) < cfg.mx_ancho_half_m)       # solo por DELANTE de la cara frontal (corregido 2026-10-26)
                 if sel.any():
                     frente = min(frente, float(scan_xy[0][sel].min()) - cfg.lidar_adelante_cm / 100.0)
             izq = d["izquierda"]
@@ -1401,7 +1415,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 cola_man = ["atras", "atras", lado, lado, lado]
                 escapes += 1
                 prog_ref, prog_t = (cx_, cy_), t
-            elif plan is not None and t >= pl_pausa_hasta and (not cfg.mx_plan_solo_regreso or fase == "regreso"):
+            elif plan is not None and cfg.mx_planner and t >= pl_pausa_hasta and (not cfg.mx_plan_solo_regreso or fase == "regreso"):
                 # --- ir al objetivo siguiendo la ruta planificada ---
                 px_r, py_r = robot.centro()
                 tgt = None
@@ -1452,8 +1466,18 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                         mig_pausa_hasta, mig_fallos = t + 15.0, 0               # se atasca siguiendo las migas: 15 s de reactivo
             elif frente < cfg.avance_libre_cm / 100.0:
                 bloqueos += 1
-                gap = _mejor_hueco(scan, cfg.mx_hueco_m, 1.0 if meta_ok else 0.2) if cfg.mx_hueco else None
-                if gap is None and cfg.mx_hueco:
+                gap = None
+                if sonar is not None:
+                    r_s = sonar.perfil(lx, ly, robot.psi_real(), scan)
+                    for prof_ in (cfg.mx_sonar_prof_m, 0.6):
+                        hs_ = sonar.huecos(r_s, prof_)
+                        if hs_:
+                            gap, _h = sonar.mejor_rumbo(r_s, hs_, _rumbo_meta() if meta_ok else None, lambda X, Y: visitas.get((round(X / 0.5), round(Y / 0.5)), 0) / 20.0,
+                                                        cfg.mx_sonar_w_meta, 0.15, cfg.mx_sonar_w_visitas, lx, ly, robot.psi_real())
+                            break
+                if sonar is None:
+                    gap = _mejor_hueco(scan, cfg.mx_hueco_m, 1.0 if meta_ok else 0.2) if cfg.mx_hueco else None
+                if gap is None and cfg.mx_hueco and sonar is None:
                     gap = _mejor_hueco(scan, 0.6, 1.0 if meta_ok else 0.2)
                 if gap is not None and abs(math.degrees(gap)) >= 4.0:
                     lado = "izquierda" if gap > 0 else "derecha"
@@ -1481,8 +1505,8 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 if cfg.man_retroceso_cm > 0 and frente < cfg.man_retroceso_cm / 100.0:
                     seq += ["atras"] * max(1, int(cfg.man_atras_pulsos))
                 n_giro = max(1, int(cfg.man_giro_pulsos))
-                if cfg.mx_hueco and gap is not None:
-                    n_giro = int(_clamp_(round(abs(math.degrees(gap)) / cfg.mx_grados_pulso), 1, 9))
+                if (cfg.mx_hueco or cfg.mx_sonar) and gap is not None:
+                    n_giro = int(_clamp_(round(abs(math.degrees(gap)) / cfg.mx_grados_pulso), 1, 30 if cfg.mx_sonar else 9))
                 seq += [lado] * n_giro
                 if len(seq) == 1 and cfg.man_pausa_s <= 0:
                     _ord(seq[0], t, maniobra=False)

@@ -3049,6 +3049,26 @@ async def _avisar_al_gateway(payload: dict):
               f"la detección igual quedó guardada en la galería")
 
 
+_ultima_plaga: dict = {}      # clase -> (instante monotónico, x, y, repeticiones suprimidas)
+
+
+def _plaga_repetida(clase: str) -> int | None:
+    """None = aviso nuevo. Si la MISMA clase se avisó hace < `detection.plaga_dedup_s` (30 s) y el robot casi no se movió (< 0,5 m), es la misma
+    planta vista otra vez: devuelve cuántas llevan suprimidas. El 2026-10-26 salieron ~250 avisos en 37 min, uno cada 3 s con el robot parado."""
+    ventana = float(state.config.get("detection", {}).get("plaga_dedup_s", 30.0))
+    if ventana <= 0:
+        return None
+    ahora = time.monotonic()
+    pose = current_pose() or {}
+    x, y = float(pose.get("x", 0.0)), float(pose.get("y", 0.0))
+    prev = _ultima_plaga.get(clase)
+    if prev and ahora - prev[0] < ventana and math.hypot(x - prev[1], y - prev[2]) < 0.5:
+        _ultima_plaga[clase] = (prev[0], prev[1], prev[2], prev[3] + 1)
+        return prev[3] + 1
+    _ultima_plaga[clase] = (ahora, x, y, 0)
+    return None
+
+
 def _on_detection(detection: dict, frame=None):
     """Llega desde el hilo de inferencia, ya en el event loop."""
     state.detections.append(detection)
@@ -3068,6 +3088,8 @@ def _on_detection(detection: dict, frame=None):
     if detection.get("class") in state.config["detection"].get("clases_planta", []):
         return
 
+    if frame is not None and _plaga_repetida(detection["class"]) is not None:
+        return                                  # la misma plaga en el mismo sitio: ya se avisó (y se guardó la captura)
     if frame is not None:
         _lanzar(state.broadcast({"type": "toast", "data": {
             "kind": "warning", "title": "Plaga detectada",

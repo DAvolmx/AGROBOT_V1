@@ -151,6 +151,8 @@ class MisionPlantas:
             return None
         rumbo = math.radians(p["theta_deg"] - m["yaw_deg"])          # yaw + = a la derecha
         d = float(m["dist_m"]) + 0.15                               # hasta el centro de la maceta
+        if d > 3.5:
+            return None                                             # la cámara no mide bien más allá: una planta «a 6 m» fue un (0,74; −7,49) imposible el 2026-10-26
         return (p["x"] + d * math.cos(rumbo), p["y"] + d * math.sin(rumbo))
 
     def _ya_vista(self, pos, c):

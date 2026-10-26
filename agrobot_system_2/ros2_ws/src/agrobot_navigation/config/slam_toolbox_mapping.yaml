@@ -38,8 +38,9 @@ slam_toolbox:
     # donde el robot recorre pocos metros. Con el EKF estabilizado
     # (process_noise_covariance explícita, aceleración deshabilitada)
     # ya no hay riesgo de crear nodos espurios con el robot quieto.
-    minimum_travel_distance: 0.12
-    minimum_travel_heading: 0.15
+    # 2026-10-26: el error por paso del SLAM era de 3 cm / 1° con keyframes cada 12 cm / 0,15 rad (el robot avanza ~7 cm por paso de 0,2 s): se corrige más seguido
+    minimum_travel_distance: 0.06
+    minimum_travel_heading: 0.08
 
     # ---- Casamiento de scans ----
     use_scan_matching: true

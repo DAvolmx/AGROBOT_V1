@@ -31,6 +31,11 @@ import math
 import time
 import traceback
 
+try:                                    # E11 (2026-10-26): planificador A* para el regreso al inicio
+    from planificador import Planificador as _Planificador
+except Exception:                       # noqa: BLE001
+    _Planificador = None
+
 try:
     import rumbo_fusion as _RF
 except ImportError:                    # sin el módulo el explorador sigue como siempre
@@ -148,6 +153,20 @@ class ExploradorReactivo:
         self._commit = None
         self._commit_hasta = 0.0
         self.mx_escapes = 0
+        # --- E11 (2026-10-26): predictor de colisión por pulso, barrido de corredor y regreso planificado al punto de inicio. TODO bajo autonomia.e11_*.
+        self.geom_cb = None                 # () -> sección slam de la config (lidar_adelante_cm, lidar_atras_cm, robot_ancho_cm)
+        self.plan = None                    # planificador.Planificador (se crea al iniciar con la pose de salida)
+        self._inicio_xy = None
+        self._t_inicio = 0.0
+        self._regresando = False
+        self._ruta = None
+        self._ruta_t = 0.0
+        self._pl_pausa_hasta = 0.0
+        self._pl_fallos = 0
+        self._rechazos = []                 # instantes (monotonic) de pulsos que el predictor no dejó pasar
+        self._relajar_hasta = 0.0
+        self.pred_rechazados = {"adelante": 0, "atras": 0, "giro": 0, "cambiados": 0}
+        self.regreso_estado = "no"          # no | en curso | completo | sin ruta
         self.guardian = None
         self.sensores_guardian = None       # () -> dict: LIDAR + cámara + IMU (ver jetson_server._sensores_guardian)
 
@@ -172,6 +191,13 @@ class ExploradorReactivo:
         # diga lo contrario: si no, cada reinicio lanzaba un barrido de 8 s y la misión entraba en un BUCLE DE ESCANEOS (2026-10-23)
         self._ultimo_escaneo = 0.0 if self.escaneo_al_iniciar else time.monotonic()
         self._ref_pose, self._ref_t = None, time.monotonic()
+        self._regresando, self._ruta, self.regreso_estado, self._rechazos = False, None, "no", []
+        self._t_inicio = time.monotonic()
+        pose0 = self._get_pose()
+        self._inicio_xy = (pose0["x"], pose0["y"]) if pose0 else None
+        if _Planificador is not None and self._get_config().get("e11_activo", False):
+            c0 = self._get_config()
+            self.plan = _Planificador(inflar_m=float(c0.get("e11_plan_inflar_m", 0.23)), centro=self._inicio_xy or (0.0, 0.0))
         if self.guardian is not None:
             self.guardian.ref, self.guardian.pend = [], None
         self._grabar_recorrido(True)      # deja el rastro del recorrido
@@ -205,7 +231,8 @@ class ExploradorReactivo:
         self.estado = "detenido"
 
     def snapshot(self) -> dict:
-        d = {"activo": self.activo, "estado": self.estado, "pulsos": self.pulsos,
+        d = {"e11": {"regreso": self.regreso_estado, "predictor_rechazados": dict(self.pred_rechazados), "plan": self.plan is not None},
+             "activo": self.activo, "estado": self.estado, "pulsos": self.pulsos,
              "giros": self.giros, "desatascos": self.desatascos,
              "escaneos": self.escaneos, "correcciones": self.correcciones,
              "paradas_inciertas": self.paradas_inciertas,
@@ -229,7 +256,77 @@ class ExploradorReactivo:
         v = d.get(lado)
         return math.inf if v is None else v
 
+    # ------------------------------------------------------------------ E11: predictor de colisión por pulso
+    def _geom(self):
+        g = (self.geom_cb() if self.geom_cb else None) or {}
+        return (float(g.get("lidar_adelante_cm", 18.5)) / 100.0, float(g.get("lidar_atras_cm", 30.5)) / 100.0, float(g.get("robot_ancho_cm", 38.0)) / 200.0)
+
+    def _despejado(self, clave: str, cfg) -> bool:
+        """¿Cabe este pulso ('adelante' | 'atras' | 'giro') sin tocar nada de lo que ve el último scan? Barre la huella del robot (ejes del LIDAR)."""
+        if self.scan_cb is None:
+            return True                                    # E11 sin LIDAR conectado al explorador (pruebas): no se puede juzgar, no se frena
+        scan = self.scan_cb()
+        if not scan:
+            return False                                   # con LIDAR conectado pero sin scan no se mueve: a ciegas no
+        f, a, h = self._geom()
+        relajado = time.monotonic() < self._relajar_hasta
+        m = float(cfg.get("e11_pred_margen_m", 0.067)) * (0.3 if relajado else 1.0)
+        fr = 0.6 if relajado else 1.0
+        for q in scan:
+            ang = math.radians(q["angle_deg"])
+            px, py = q["distance_m"] * math.cos(ang), q["distance_m"] * math.sin(ang)
+            if -a - 0.01 <= px <= f + 0.01 and abs(py) <= h + 0.01:
+                continue                                    # el propio chasis
+            if clave == "adelante":
+                if f < px < f + float(cfg.get("e11_pred_avance_m", 0.29)) * fr + m and abs(py) < h + m:
+                    return False
+            elif clave == "atras":
+                if -a - float(cfg.get("e11_pred_atras_m", 0.17)) * fr - m < px < -a and abs(py) < h + m:
+                    return False
+            else:
+                e = m + float(cfg.get("e11_pred_giro_extra_m", 0.033)) * (0.4 if relajado else 1.0)
+                if -a - e < px < f + e and abs(py) < h + e:
+                    return False
+        return True
+
+    def _frente_barrido(self, frente: float, cfg) -> float:
+        """E11: el frente se mide también en un CORREDOR del ancho del robot (lo que está a los costados de la trayectoria)."""
+        scan = self.scan_cb() if self.scan_cb else None
+        if not scan or not cfg.get("e11_barrido", False):
+            return frente
+        f, _a, _h = self._geom()
+        medio = float(cfg.get("e11_barrido_half_m", 0.256))
+        xs = [q["distance_m"] * math.cos(math.radians(q["angle_deg"])) for q in scan
+              if math.cos(math.radians(q["angle_deg"])) > 0 and abs(q["distance_m"] * math.sin(math.radians(q["angle_deg"]))) < medio]
+        return min(frente, min(xs) - f) if xs else frente
+
     def _conducir(self, accion, maniobra=True, esc_dur=1.0):
+        """Envía un pulso. Con E11 activo, antes lo pasa por el predictor de colisión; devuelve True si se envió."""
+        cfg = self._get_config() or {}
+        if cfg.get("e11_activo", False) and cfg.get("e11_predictor", True) and accion in ("adelante", "atras", "izquierda", "derecha"):
+            clave = "giro" if accion in ("izquierda", "derecha") else accion
+            if not self._despejado(clave, cfg):
+                self.pred_rechazados[clave] += 1
+                ahora = time.monotonic()
+                self._rechazos = [t for t in self._rechazos if ahora - t < 20.0] + [ahora]
+                if len(self._rechazos) >= 8 and ahora >= self._relajar_hasta:          # todo bloqueado: márgenes al 30 % un rato para despegarse
+                    self._relajar_hasta = ahora + float(cfg.get("e11_pred_relajar_s", 25.0))
+                    self._rechazos = []
+                    self._emitir(evento="predictor_relaja", segundos=round(float(cfg.get("e11_pred_relajar_s", 25.0))))
+                if clave == "giro":
+                    for alt, k in (("derecha" if accion == "izquierda" else "izquierda", "giro"), ("atras", "atras")):
+                        if self._despejado(k, cfg):
+                            self.pred_rechazados["cambiados"] += 1
+                            accion = alt
+                            break
+                    else:
+                        return False
+                else:
+                    return False
+        self._conducir_interno(accion, maniobra, esc_dur)
+        return True
+
+    def _conducir_interno(self, accion, maniobra=True, esc_dur=1.0):
         # Girar en el sitio barre un círculo de ~31 cm con las esquinas: una pata de silla o mesa en diagonal (fuera de los sectores
         # frontal y laterales) quedaba dentro y se golpeaba (simulación del laboratorio, 2026-10-22). Si algo está a menos de
         # `margen_giro_m` del cuerpo y hay sitio detrás, primero se retrocede un pulso; el giro llega en el ciclo siguiente.
@@ -238,7 +335,8 @@ class ExploradorReactivo:
             d = self._distancias() or {}
             margen = float(cfg.get("margen_giro_m", 0.18))   # al girar, la esquina del chasis barre ~12 cm más allá del costado; 0,18 = barrido sala en L 2026-10-23
             atras = self._hueco(d, "atras")
-            if d.get("cerca") is not None and d["cerca"] < margen and atras > max(0.30, float(cfg.get("retroceso_libre_cm", 30)) / 100.0):
+            ok_atras = not (cfg.get("e11_activo", False) and cfg.get("e11_predictor", True)) or self._despejado("atras", cfg)
+            if ok_atras and d.get("cerca") is not None and d["cerca"] < margen and atras > max(0.30, float(cfg.get("retroceso_libre_cm", 30)) / 100.0):
                 self.estado = f"algo a {d['cerca'] * 100:.0f} cm del costado: retrocedo antes de girar"
                 self._rumbo_ref = None
                 self._conducir_cb("atras", False)
@@ -505,6 +603,16 @@ class ExploradorReactivo:
 
                 d = self._distancias()
                 frente = self._hueco(d, "adelante")
+                if cfg.get("e11_activo", False):
+                    frente = self._frente_barrido(frente, cfg)
+                    self._e11_mapa()
+                    if not self._regresando and self._debe_regresar(cfg):
+                        self.iniciar_regreso()
+                    if self._regresando:
+                        if await self._paso_regreso(cfg, d):
+                            break
+                        if time.monotonic() >= self._pl_pausa_hasta:
+                            continue
                 atras = self._hueco(d, "atras")
                 izq, der = self._hueco(d, "izquierda"), self._hueco(d, "derecha")
                 if cfg.get("mx_anti_dither", False) and self._atrapado(cfg):
@@ -852,6 +960,84 @@ class ExploradorReactivo:
                 return
             self._conducir("adelante")
             await asyncio.sleep(1.05)
+
+    # ------------------------------------------------------------------ E11: mapa, regreso al inicio planificado
+    def _e11_mapa(self):
+        """Acumula el scan en el mapa del planificador (pose del SLAM; el LIDAR se toma en el centro de base_link)."""
+        pose = self._get_pose()
+        scan = self.scan_cb() if self.scan_cb else None
+        if self.plan is not None and pose and scan:
+            self.plan.actualizar(pose["x"], pose["y"], math.radians(pose["theta_deg"]), scan)
+
+    def _debe_regresar(self, cfg) -> bool:
+        """Disparadores automáticos de la ida (apagados por defecto: 0): distancia al inicio o tiempo de ida."""
+        pose = self._get_pose()
+        if not pose or self._inicio_xy is None:
+            return False
+        d_max, t_max = float(cfg.get("e11_ida_max_m", 0.0)), float(cfg.get("e11_ida_max_s", 0.0))
+        if d_max > 0 and math.hypot(pose["x"] - self._inicio_xy[0], pose["y"] - self._inicio_xy[1]) >= d_max:
+            return True
+        return t_max > 0 and time.monotonic() - self._t_inicio >= t_max
+
+    def iniciar_regreso(self) -> tuple[bool, str]:
+        """Da la vuelta: a partir de ahora el robot vuelve al punto de salida siguiendo una ruta A* sobre el mapa que acumuló."""
+        if not self.activo:
+            return False, "la exploración no está corriendo"
+        if self._inicio_xy is None:
+            pose0 = self._get_pose()
+            if not pose0:
+                return False, "no hay pose del SLAM: no sé dónde está el inicio"
+            self._inicio_xy = (pose0["x"], pose0["y"])
+        if self.plan is None:
+            return False, "E11 no está activo (autonomia.e11_activo) o falta planificador.py"
+        self._regresando, self._ruta, self._pl_fallos, self._pl_pausa_hasta = True, None, 0, 0.0
+        self.regreso_estado = "en curso"
+        self.estado = "regresando al punto de inicio"
+        self._emitir(evento="regreso_inicia", inicio=[round(self._inicio_xy[0], 2), round(self._inicio_xy[1], 2)])
+        return True, "regresando al punto de inicio"
+
+    async def _paso_regreso(self, cfg, d) -> bool:
+        """Un ciclo del regreso. True = terminó (llegó al inicio): el bucle sale."""
+        pose = self._get_pose()
+        if not pose or self._inicio_xy is None:
+            self._parar()
+            return False
+        x, y = pose["x"], pose["y"]
+        if math.hypot(x - self._inicio_xy[0], y - self._inicio_xy[1]) < float(cfg.get("e11_regreso_radio_m", 0.5)):
+            self._regresando = False
+            self.regreso_estado = "completo"
+            self.activo = False
+            self._grabar_recorrido(False)
+            self._parar()
+            self.estado = "regreso completo: en el punto de inicio"
+            self._emitir(evento="regreso_completo")
+            return True
+        ahora = time.monotonic()
+        if ahora < self._pl_pausa_hasta:
+            return False                                   # el planificador cedió: ciclo normal del explorador (reactivo)
+        if self._ruta is None or ahora - self._ruta_t >= float(cfg.get("e11_plan_cada_s", 2.6)):
+            self._ruta = self.plan.ruta((x, y), self._inicio_xy, tol_m=0.3)
+            self._ruta_t = ahora
+            if self._ruta is None:
+                self.regreso_estado = "sin ruta"
+                self._pl_pausa_hasta = ahora + 6.0
+                self.estado = "regreso: sin ruta conocida, modo reactivo 6 s"
+                return False
+            self.regreso_estado = "en curso"
+        wp = _Planificador.siguiente(self._ruta, (x, y), float(cfg.get("e11_plan_mirada_m", 0.75)))
+        eb = math.atan2(wp[1] - y, wp[0] - x) - math.radians(pose["theta_deg"])
+        eb = math.atan2(math.sin(eb), math.cos(eb))
+        accion = ("izquierda" if eb > 0 else "derecha") if abs(math.degrees(eb)) > float(cfg.get("e11_plan_giro_deg", 19.6)) else "adelante"
+        self.estado = f"regresando: {accion} (a {math.hypot(x - self._inicio_xy[0], y - self._inicio_xy[1]):.1f} m del inicio)"
+        if self._conducir(accion, maniobra=False):
+            self._pl_fallos = 0
+            self.pulsos += 1
+        else:
+            self._pl_fallos += 1
+            self._ruta = None
+            if self._pl_fallos >= 4:
+                self._pl_pausa_hasta, self._pl_fallos = ahora + 10.0, 0
+        return False
 
     async def _guardian_paso(self, cfg) -> bool:
         """Un ciclo del guardián. True si ejecutó una corrección (y esperó a que asentara)."""

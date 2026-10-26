@@ -980,8 +980,10 @@ input[type="text"], select { font-family: inherit; }
           </p>
           <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
             <button class="btn primary" id="btn-expl-on">▶ Explorar y mapear</button>
+            <button class="btn" id="btn-expl-volver" title="E11: da la vuelta y vuelve al punto de salida por una ruta A* sobre el mapa que acumuló">↩ Regresar al inicio</button>
             <button class="btn peligro" id="btn-expl-off">■ Detener</button>
           </div>
+          <div class="hint" id="expl-e11" style="margin:-4px 0 10px;"></div>
           <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; align-items:center;">
             <button class="btn primary" id="btn-mision-on">🌱 Misión plantas en maceta</button>
             <button class="btn peligro" id="btn-mision-off">■ Detener misión</button>
@@ -2658,6 +2660,8 @@ input[type="text"], select { font-family: inherit; }
     $("expl-escaneos").textContent = d.escaneos;
     $("btn-expl-on").disabled = !!d.activo;
     $("btn-expl-off").disabled = !d.activo;
+    $("btn-expl-volver").disabled = !d.activo || !(d.e11 && d.e11.plan);
+    if (d.e11) $("expl-e11").textContent = `E11 · regreso: ${d.e11.regreso} · predictor rechazó: adelante ${d.e11.predictor_rechazados.adelante}, atrás ${d.e11.predictor_rechazados.atras}, giro ${d.e11.predictor_rechazados.giro}`;
   }
 
   $("btn-expl-on").addEventListener("click", async () => {
@@ -2667,6 +2671,13 @@ input[type="text"], select { font-family: inherit; }
     if (!res.ok) toast("warning", "No se pudo explorar", d.error || d.message || `HTTP ${res.status}`);
   });
   $("btn-expl-off").addEventListener("click", () => fetch("/api/exploracion/stop", { method: "POST" }));
+  $("btn-expl-volver").addEventListener("click", async () => {
+    if (!confirm("El robot va a dar la vuelta y volver solo al punto donde empezó la exploración.\n\n¿Hay espacio libre alrededor?")) return;
+    const res = await fetch("/api/exploracion/regresar", { method: "POST" });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) toast("warning", "No se pudo regresar", d.error || d.mensaje || `HTTP ${res.status}`);
+    else toast("success", "Regresando", d.mensaje || "");
+  });
   $("btn-mision-on").addEventListener("click", async () => {
     if (!confirm("Misión de plantas: el robot explora solo, se acerca a las macetas y las escanea.\n\n¿Está en el suelo, con espacio, y la cámara conectada?")) return;
     const res = await fetch("/api/mision_plantas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activa: true }) });

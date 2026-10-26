@@ -4911,3 +4911,8 @@ al 80 %/100 %, watchdog del loop). Robot en el pasillo.
 - **`mapa_scan.py`**: ancla de rumbo por paredes (`manhattan`, APAGADA por defecto: en el banco no mejora, 94-97 % de precisión ya sin ella) y `MARGEN_LIBRE_CELDAS`.
 - **Percepción**: `percepcion_sintetica/entrenar_col_plagas_v2.py` (col + pulgón + negativos): mAP50 pulgón 0,705, 0 cajas en 34 fondos; dano_hoja 0,137 (no mejora). Datasets: `datos_plantas_medicinales/` (2), `datos_plagas_reales/internet/{aphid_generalization,agropest12}`.
 - **Contradicción pendiente**: §0 dice que el signo de rf2o sigue sin corregir; la memoria del proyecto lo da por corregido el 2026-10-23 y no hay entrada que lo respalde.
+
+### 2026-10-26 — E11 montada en el robot real (apagable)
+- Estrategia E11 (planificador A*, predictor de colisión por pulso, visitar plantas a ~80 cm) entrenada en simulación: `docs/estrategias/e11_entrenado/informe.json`.
+- Portado a `jetson/backend/explorador.py` bajo `autonomia.e11_*` (activo por defecto en `config_store.py` y `agrobot_config.json`): predictor (`_despejado`/`_conducir`), barrido de corredor, regreso al inicio (`iniciar_regreso`/`_paso_regreso`, `planificador.py`), `POST /api/exploracion/regresar`, botón «Regresar al inicio». Guía y límites: `docs/E11_ROBOT_REAL.md`.
+- `jetson_server.py`: inspección de plantas a 0,78 m; `geom_cb`. `agrobot_config.json`: claves e11_*, maniobras entrenadas y guardián activados (SIN medir en el robot real). Pruebas sin robot: `tests/test_e11_real.py` (+ planificador, guardián, esquina); 319 pruebas del backend pasan.

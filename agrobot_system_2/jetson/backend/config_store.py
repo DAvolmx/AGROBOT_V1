@@ -145,6 +145,15 @@ DEFAULTS = {
         "mx_anti_dither": False,
         "mx_ventana_s": 25.0,
         "mx_giro_largo": 5,
+        # ===== E11 (2026-10-26): estrategia entrenada en simulación (docs/estrategias/e11_entrenado). Interruptor general: e11_activo. =====
+        # Predictor de colisión por pulso + corredor de barrido + regreso al punto de inicio por ruta A* (botón «Regresar al inicio» / POST /api/exploracion/regresar).
+        # NO medido en el robot real. Para apagarlo todo: e11_activo=false (el explorador vuelve a ser el de antes).
+        "e11_activo": True,
+        "e11_predictor": True,
+        "e11_pred_avance_m": 0.289, "e11_pred_atras_m": 0.166, "e11_pred_margen_m": 0.067, "e11_pred_giro_extra_m": 0.033, "e11_pred_relajar_s": 25.0,
+        "e11_barrido": True, "e11_barrido_half_m": 0.256,
+        "e11_plan_inflar_m": 0.23, "e11_plan_mirada_m": 0.75, "e11_plan_cada_s": 2.6, "e11_plan_giro_deg": 19.6, "e11_regreso_radio_m": 0.5,
+        "e11_ida_max_m": 0.0, "e11_ida_max_s": 0.0,          # disparadores automáticos del regreso (0 = solo manual)
         # Guardián del sendero (2026-10-24, guardian_sendero.py). APAGADO: se prueba primero en un pasillo con el robot en el suelo.
         "guardian_sendero_activo": False,
         "guardian_tol_cm": 6.0,

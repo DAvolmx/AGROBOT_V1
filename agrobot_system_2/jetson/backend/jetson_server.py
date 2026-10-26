@@ -2267,7 +2267,7 @@ def _ajustes_vision_mision() -> dict:
     (simular_demo.py layout 3, 2026-10-23: 17/18 plantas y 1 roce en 6 simulaciones; con 0,45 m y 2 retrocesos rozaba esquinas y macetas)."""
     return {"clases_objetivo": ["maceta"], "max_objetivos": 1, "conf_min": 0.30,
             "angulos_barrido_deg": [state.servo_angle, 82, 98, state.servo_angle],
-            "distancia_inspeccion_m": 0.42, "tol_distancia_m": 0.04, "retroceso_tras_analisis": 3, "giros_tras_analisis": 3}
+            "distancia_inspeccion_m": 0.78, "tol_distancia_m": 0.04, "retroceso_tras_analisis": 3, "giros_tras_analisis": 3}
 
 
 async def mision_plantas_handler(request: web.Request):
@@ -3795,6 +3795,14 @@ async def simulador_subir_datos_handler(request: web.Request):
     return web.json_response({"ok": True, "aviso": aviso, **res})
 
 
+async def exploracion_regresar_handler(request: web.Request):
+    """POST /api/exploracion/regresar — E11: el robot da la vuelta y vuelve al punto de salida por una ruta A* sobre el mapa que acumuló."""
+    if explorador is None or not hasattr(explorador, "iniciar_regreso"):
+        return web.json_response({"ok": False, "error": "el explorador no soporta regreso (¿FSM activa?)"}, status=409)
+    ok, msg = explorador.iniciar_regreso()
+    return web.json_response({"ok": ok, "mensaje": msg, "e11": explorador.snapshot().get("e11")}, status=200 if ok else 409)
+
+
 async def nav_mode_handler(request: web.Request):
     """GET: modo actual. POST {"mode": "mapping"|"localization"}: solo lo anota
     para la UI — relanzar los nodos ROS correctos se hace a mano (ver README),
@@ -4403,6 +4411,7 @@ async def start_background(app: web.Application):
         explorador.guardian = guardian_sendero.GuardianSendero(guardian_sendero.MemoriaCorrecciones())
         explorador.sensores_guardian = _sensores_guardian
         explorador.scan_cb = lambda: lidar_reactive.last_scan
+        explorador.geom_cb = lambda: state.config["slam"]
     except Exception as exc:  # noqa: BLE001
         print(f"[guardián] no disponible: {exc}", flush=True)
 
@@ -4900,6 +4909,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/mapas/guardar", mapas_guardar_handler)
     app.router.add_post("/api/mapas/cargar", mapas_cargar_handler)
     app.router.add_post("/api/mapas/digitalizar", mapas_digitalizar_handler)
+    app.router.add_post("/api/exploracion/regresar", exploracion_regresar_handler)
     app.router.add_post("/api/simulador/subir_datos", simulador_subir_datos_handler)
     app.router.add_get("/api/mapas/digital/{nombre}/{archivo}", mapas_digital_archivo_handler)
     app.router.add_get("/api/giro_cerrado", giro_cerrado_handler)

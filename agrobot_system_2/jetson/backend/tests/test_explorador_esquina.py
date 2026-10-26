@@ -15,7 +15,7 @@ from config_store import DEFAULTS  # noqa: E402
 
 def _correr(extra, frente=0.30, atras=1.5, ticks=3.0):
     cfg = copy.deepcopy(DEFAULTS["autonomia"])
-    cfg.update(extra, escaneo_periodo_s=9999, avance_libre_cm=40, lado_libre_cm=30, retroceso_libre_cm=30,
+    cfg.update(extra, e11_activo=False, escaneo_periodo_s=9999, avance_libre_cm=40, lado_libre_cm=30, retroceso_libre_cm=30,
                arco_frontal_si_giro_pasivo_bloqueado=False, retroceso_previo_giro_eje_pasivo=False,
                correccion_sendero_preventiva=False, rumbo_fusion_activo=False)
     acciones = []
@@ -71,7 +71,7 @@ def _scan_con_hueco(grados_hueco=60):
 
 def _correr_con_scan(extra, scan, ticks=3.2, meta=None):
     cfg = copy.deepcopy(DEFAULTS["autonomia"])
-    cfg.update(extra, escaneo_periodo_s=9999, avance_libre_cm=40, lado_libre_cm=30, retroceso_libre_cm=30,
+    cfg.update(extra, e11_activo=False, escaneo_periodo_s=9999, avance_libre_cm=40, lado_libre_cm=30, retroceso_libre_cm=30,
                arco_frontal_si_giro_pasivo_bloqueado=False, retroceso_previo_giro_eje_pasivo=False,
                correccion_sendero_preventiva=False, rumbo_fusion_activo=False)
     acciones = []

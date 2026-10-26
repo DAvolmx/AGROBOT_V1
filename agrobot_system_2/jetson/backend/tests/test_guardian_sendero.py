@@ -92,7 +92,7 @@ def test_el_explorador_usa_el_guardian_y_apunta(tmp_path):
     import explorador
     from config_store import DEFAULTS
     cfg = copy.deepcopy(DEFAULTS["autonomia"])
-    cfg.update(escaneo_periodo_s=9999, avance_libre_cm=40, guardian_sendero_activo=True, rumbo_fusion_activo=False,
+    cfg.update(e11_activo=False, escaneo_periodo_s=9999, avance_libre_cm=40, guardian_sendero_activo=True, rumbo_fusion_activo=False,
                correccion_sendero_preventiva=False)
     acciones = []
     d = {"adelante": 2.0, "atras": 1.5, "izquierda": 0.5, "derecha": 0.5, "cerca": None}

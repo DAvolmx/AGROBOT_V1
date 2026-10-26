@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import math
 
+import cv2
 import numpy as np
 
 RES_M = 0.05
@@ -26,6 +27,14 @@ BUSQUEDA_DEG, PASO_DEG = 2.0, 1.0
 CORR_MAX_M, CORR_MAX_DEG = 0.30, 10.0
 MIN_IMPACTOS_ALINEAR = 150      # con menos mapa que esto no hay contra qué alinear
 MARGEN_RECORTE = 10             # celdas
+# Registro scan-a-mapa de dos etapas (2026-10-26): la pose del SLAM a veces salta o gira respecto al mapa ya dibujado (recolocaciones, cierres de bucle,
+# reinicios) y el dibujo acumulaba COPIAS giradas de la misma sala («se sobremonta»). Ahora cada scan se registra contra un campo de verosimilitud del mapa
+# (distancia al muro más cercano) con búsqueda GRUESA (±40 cm, ±12°) y luego FINA; solo se acepta si mejora claramente lo que daba la corrección actual.
+REG_GRUESO_M, REG_GRUESO_PASO_M, REG_GRUESO_DEG, REG_GRUESO_PASO_DEG = 0.40, 0.10, 12.0, 3.0
+REG_FINO_M, REG_FINO_PASO_M, REG_FINO_DEG, REG_FINO_PASO_DEG = 0.08, 0.02, 3.0, 0.75
+REG_SIGMA_M = 0.06
+REG_MEJORA_MIN = 0.06           # mejora mínima de la puntuación (0-1) para aceptar un salto grande
+REG_TOPE_M, REG_TOPE_DEG = 1.5, 40.0
 MARGEN_LIBRE_CELDAS = 1.0       # el rayo libre se detiene tantas celdas antes del impacto (con el ruido del LIDAR, 1 borraba muros vistos de refilón)
 # Ancla de rumbo por paredes (2026-10-24): en interiores los muros son ortogonales, así que el ángulo de los muros módulo 90° es una
 # referencia global que la deriva del giroscopio/ICP no tiene. Se fija con los primeros scans nítidos y cada scan nítido empuja
@@ -38,7 +47,8 @@ MANHATTAN_SCANS_INICIO = 5      # scans nítidos para fijar el eje
 
 
 class MapaScan:
-    def __init__(self, res: float = RES_M, lado_m: float = LADO_M, manhattan: bool = False):
+    def __init__(self, res: float = RES_M, lado_m: float = LADO_M, manhattan: bool = False, registro: bool = True):
+        self.registro = registro
         self.manhattan = manhattan
         self.res = res
         self.n = int(round(lado_m / res))
@@ -52,6 +62,9 @@ class MapaScan:
         self._eje_n = 0
         self.eje_deg = None                        # eje fijado (grados, módulo 90) o None
         self.anclajes = 0                          # veces que el ancla empujó el rumbo
+        self._campo = None                         # campo de verosimilitud (distancia al muro) y la versión del mapa con que se calculó
+        self._campo_v = -1
+        self.saltos_registro = 0                   # veces que el registro grueso corrigió un salto de la pose
         self._previa = None                        # (t, pose) para la velocidad angular
         self.version = 0
         self.impactos = 0
@@ -107,6 +120,66 @@ class MapaScan:
         self.anclajes += 1
         return -MANHATTAN_GANANCIA * err
 
+    # ---- registro scan-a-mapa (campo de verosimilitud)
+    def _actualizar_campo(self):
+        if self._campo is not None and self.version - self._campo_v < 6:
+            return
+        occ = (self.L > UMBRAL_OCUPADO)
+        dist = cv2.distanceTransform((~occ).astype(np.uint8), cv2.DIST_L2, 3) * self.res            # m al muro más cercano
+        self._campo = np.exp(-0.5 * (dist / REG_SIGMA_M) ** 2).astype(np.float32)
+        self._campo_v = self.version
+
+    def _puntuar(self, lx, ly, x, y, th, dx, dy, dth) -> float:
+        wx, wy = self._a_mapa(lx, ly, x + dx, y + dy, th + dth)
+        iy, ix = self._celdas(wx, wy)
+        ok = self._dentro(iy, ix)
+        if ok.sum() < 20:
+            return 0.0
+        return float(self._campo[iy[ok], ix[ok]].sum()) / max(1, len(lx))
+
+    def _registrar(self, lx, ly, x, y, th):
+        """Mejor corrección (dx, dy, dth) en dos etapas alrededor de la actual. Devuelve la corrección y si fue un salto grande."""
+        if self.impactos < MIN_IMPACTOS_ALINEAR:
+            return self.corr, False
+        self._actualizar_campo()
+        c0 = self.corr.copy()
+        base = self._puntuar(lx, ly, x, y, th, *c0)
+        mejor, mejor_s = c0.copy(), base
+        # etapa gruesa alrededor de la corrección actual (solo si la actual puntúa mal: ahorra CPU cuando todo cuadra)
+        if base < 0.55:
+            n_xy = int(round(REG_GRUESO_M / REG_GRUESO_PASO_M))
+            n_th = int(round(REG_GRUESO_DEG / REG_GRUESO_PASO_DEG))
+            for k in range(-n_th, n_th + 1):
+                dth = c0[2] + math.radians(k * REG_GRUESO_PASO_DEG)
+                for i in range(-n_xy, n_xy + 1):
+                    for j in range(-n_xy, n_xy + 1):
+                        dx, dy = c0[0] + i * REG_GRUESO_PASO_M, c0[1] + j * REG_GRUESO_PASO_M
+                        if math.hypot(dx, dy) > REG_TOPE_M or abs(dth) > math.radians(REG_TOPE_DEG):
+                            continue
+                        sc = self._puntuar(lx, ly, x, y, th, dx, dy, dth)
+                        if sc > mejor_s:
+                            mejor_s, mejor = sc, np.array([dx, dy, dth])
+        salto = False
+        if mejor_s > base + REG_MEJORA_MIN:
+            salto = bool(np.hypot(*(mejor[:2] - c0[:2])) > 0.12 or abs(mejor[2] - c0[2]) > math.radians(4))
+        else:
+            mejor, mejor_s = c0.copy(), base
+        # etapa fina alrededor de lo mejor
+        c1 = mejor.copy()
+        n_xy = int(round(REG_FINO_M / REG_FINO_PASO_M))
+        n_th = int(round(REG_FINO_DEG / REG_FINO_PASO_DEG))
+        for k in range(-n_th, n_th + 1):
+            dth = c1[2] + math.radians(k * REG_FINO_PASO_DEG)
+            for i in range(-n_xy, n_xy + 1):
+                for j in range(-n_xy, n_xy + 1):
+                    dx, dy = c1[0] + i * REG_FINO_PASO_M, c1[1] + j * REG_FINO_PASO_M
+                    if math.hypot(dx, dy) > REG_TOPE_M or abs(dth) > math.radians(REG_TOPE_DEG):
+                        continue
+                    sc = self._puntuar(lx, ly, x, y, th, dx, dy, dth) - 0.02 * (abs(i) + abs(j)) / max(n_xy, 1) * 0.05
+                    if sc > mejor_s:
+                        mejor_s, mejor = sc, np.array([dx, dy, dth])
+        return mejor, salto
+
     # ---- alineación scan-to-map
     def _alinear(self, lx, ly, x, y, th):
         """Mejor (dx, dy, dth) cerca de la corrección actual: el que más puntos del scan pone sobre celdas ya ocupadas."""
@@ -149,7 +222,11 @@ class MapaScan:
         if v.sum() < 30:
             return False
         lx, ly = self._puntos_robot(angulos_deg[v], dist_m[v])
-        self.corr = self._alinear(lx, ly, x, y, th)
+        if self.registro:
+            self.corr, salto = self._registrar(lx, ly, x, y, th)
+            self.saltos_registro += int(salto)
+        else:
+            self.corr = self._alinear(lx, ly, x, y, th)
         if self.manhattan:
             d = self._anclar(lx, ly, th + self.corr[2])
             if d:
@@ -182,16 +259,59 @@ class MapaScan:
         return True
 
     # ---- salida
-    def como_mapa(self) -> dict | None:
+    @staticmethod
+    def _adelgazar(b: np.ndarray, max_iter: int = 40) -> np.ndarray:
+        """Adelgazamiento de Zhang-Suen (vectorizado): deja los muros en líneas de UNA celda conservando la conectividad. Dos franjas pegadas por la
+        deriva (paredes dobles) se funden en una sola línea; dos muros separados por >= 1 celda libre siguen siendo dos."""
+        im = np.pad(b.astype(np.uint8), 1)
+        for _ in range(max_iter):
+            cambio = False
+            for paso in (0, 1):
+                P = [im[:-2, 1:-1], im[:-2, 2:], im[1:-1, 2:], im[2:, 2:], im[2:, 1:-1], im[2:, :-2], im[1:-1, :-2], im[:-2, :-2]]     # P2..P9 (N, NE, E, SE, S, SW, W, NW)
+                c = im[1:-1, 1:-1]
+                vecinos = sum(p.astype(np.int16) for p in P)
+                trans = sum(((P[k] == 0) & (P[(k + 1) % 8] == 1)).astype(np.int16) for k in range(8))
+                if paso == 0:
+                    cond = (P[0] * P[2] * P[4] == 0) & (P[2] * P[4] * P[6] == 0)
+                else:
+                    cond = (P[0] * P[2] * P[6] == 0) & (P[0] * P[4] * P[6] == 0)
+                borrar = (c == 1) & (vecinos >= 2) & (vecinos <= 6) & (trans == 1) & cond
+                if borrar.any():
+                    im[1:-1, 1:-1][borrar] = 0
+                    cambio = True
+            if not cambio:
+                break
+        return im[1:-1, 1:-1].astype(bool)
+
+    def _clasificar(self, sub: np.ndarray, limpio: bool) -> np.ndarray:
+        """log-odds recortados -> celdas 100 (muro) / 0 (libre) / -1 (desconocido).
+        limpio=True: se suaviza la evidencia, se umbraliza, se cierran los huecos de una celda, se ADELGAZA a líneas de una celda (las paredes dobles por deriva
+        se funden en una) y se quitan las motas sueltas (< 5 celdas)."""
+        out = np.full(sub.shape, -1, dtype=np.int8)
+        if not limpio:
+            out[sub < UMBRAL_LIBRE] = 0
+            out[sub > UMBRAL_OCUPADO] = 100
+            return out
+        ls = cv2.GaussianBlur(sub.astype(np.float32), (3, 3), 0.8)
+        muro = (ls > UMBRAL_OCUPADO).astype(np.uint8)
+        muro = cv2.morphologyEx(muro, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        n, lab, st, _ = cv2.connectedComponentsWithStats(muro, connectivity=8)
+        for i in range(1, n):
+            if st[i, cv2.CC_STAT_AREA] < 5 and max(st[i, cv2.CC_STAT_WIDTH], st[i, cv2.CC_STAT_HEIGHT]) < 5:
+                muro[lab == i] = 0
+        fino = self._adelgazar(muro.astype(bool))
+        libre = (ls < UMBRAL_LIBRE) & (cv2.dilate(muro, np.ones((3, 3), np.uint8)) == 0)
+        out[libre] = 0
+        out[fino] = 100
+        return out
+
+    def como_mapa(self, limpio: bool = False) -> dict | None:
         """Mismo formato que el /map del puente (recortado a lo explorado). None si aún no hay nada."""
         if self._ymax < self._ymin:
             return None
         y0, y1 = max(0, self._ymin - MARGEN_RECORTE), min(self.n, self._ymax + MARGEN_RECORTE + 1)
         x0, x1 = max(0, self._xmin - MARGEN_RECORTE), min(self.n, self._xmax + MARGEN_RECORTE + 1)
-        sub = self.L[y0:y1, x0:x1]
-        out = np.full(sub.shape, -1, dtype=np.int8)
-        out[sub < UMBRAL_LIBRE] = 0
-        out[sub > UMBRAL_OCUPADO] = 100
+        out = self._clasificar(self.L[y0:y1, x0:x1], limpio)
         return {"width": int(x1 - x0), "height": int(y1 - y0), "resolution": self.res,
                 "origin_x": self.origen + x0 * self.res, "origin_y": self.origen + y0 * self.res,
                 "data_b64": base64.b64encode(out.tobytes()).decode("ascii"),

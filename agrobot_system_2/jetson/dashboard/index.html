@@ -2066,6 +2066,7 @@ input[type="text"], select { font-family: inherit; }
   // celda) y cada redibujo solo lo escala: antes se hacía un fillRect por
   // celda en cada pose (8 Hz), y con el mapa grande y con zoom no alcanzaba.
   const mapaLienzo = document.createElement("canvas");
+  const mapaGrande = document.createElement("canvas");      // el mismo mapa a 3x con suavizado: paredes finas y continuas en vez de píxeles duros
   let vista = { zoom: 1, dx: 0, dy: 0 };
   let surcosMapa = [], surcoActual = null, puntosEscaneo = [], herramientaMapa = "ver", plantasMision = [];
 
@@ -2080,7 +2081,7 @@ input[type="text"], select { font-family: inherit; }
     mapaLienzo.width = m.width; mapaLienzo.height = m.height;
     const c = mapaLienzo.getContext("2d");
     const img = c.createImageData(m.width, m.height);
-    const libre = [255, 255, 255], ocupado = [47, 64, 56];
+    const libre = [250, 251, 249], ocupado = [38, 52, 45];
     for (let row = 0; row < m.height; row++) {
       for (let col = 0; col < m.width; col++) {
         const v = m.data[row * m.width + col];
@@ -2091,6 +2092,11 @@ input[type="text"], select { font-family: inherit; }
       }
     }
     c.putImageData(img, 0, 0);
+    const F = 3;
+    mapaGrande.width = m.width * F; mapaGrande.height = m.height * F;
+    const cg = mapaGrande.getContext("2d");
+    cg.imageSmoothingEnabled = true; cg.imageSmoothingQuality = "high";
+    cg.drawImage(mapaLienzo, 0, 0, m.width * F, m.height * F);
     drawMap();
   }
 
@@ -2141,8 +2147,8 @@ input[type="text"], select { font-family: inherit; }
     if (!lastMap) return;
 
     const { s, ox, oy } = escalaMapa();
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(mapaLienzo, ox, oy, lastMap.width * s, lastMap.height * s);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(mapaGrande.width ? mapaGrande : mapaLienzo, ox, oy, lastMap.width * s, lastMap.height * s);
     const aPixel = mundoAPixel;
 
     // Surcos trazados (naranja) y el que se está trazando (verde).

@@ -55,3 +55,41 @@ def test_reiniciar_borra():
     m.agregar(0.0, {"x": 0, "y": 0, "theta_deg": 0}, a, d)
     m.reiniciar()
     assert m.como_mapa() is None
+
+
+def _sala_scan(x, y, th, paredes):
+    """LIDAR ideal contra segmentos (marco del robot)."""
+    import math as _m
+    out_a, out_d = [], []
+    for a in range(0, 360, 2):
+        ang = _m.radians(a) + th
+        dx, dy = _m.cos(ang), _m.sin(ang)
+        mejor = None
+        for (x0, y0, x1, y1) in paredes:
+            ex, ey = x1 - x0, y1 - y0
+            den = dx * ey - dy * ex
+            if abs(den) < 1e-9:
+                continue
+            t = ((x0 - x) * ey - (y0 - y) * ex) / den
+            u = ((x0 - x) * dy - (y0 - y) * dx) / den
+            if t > 0.05 and 0 <= u <= 1 and (mejor is None or t < mejor):
+                mejor = t
+        if mejor is not None and mejor < 7:
+            out_a.append(float(a)); out_d.append(mejor)
+    return out_a, out_d
+
+
+def test_el_registro_recupera_un_salto_de_pose_sin_duplicar_paredes():
+    """La pose del SLAM gira 12° de golpe (recolocación): sin registro quedan DOS copias de la sala; con registro, una."""
+    import math as _m
+    sala = [(-3, -2, 3, -2), (3, -2, 3, 2), (3, 2, -3, 2), (-3, 2, -3, -2), (0.5, -2, 0.5, -0.5)]
+    res = {}
+    for registro in (False, True):
+        m = MapaScan(registro=registro)
+        for k in range(120):
+            x, y, th = -2.0 + 0.04 * k, 0.5 * _m.sin(k / 15.0), 0.0
+            sesgo = _m.radians(12.0) if k >= 60 else 0.0                       # a partir del scan 60 la pose viene girada 12°
+            a, d = _sala_scan(x, y, th, sala)
+            m.agregar(k * 0.2, {"x": x, "y": y, "theta_deg": _m.degrees(th + sesgo)}, a, d)
+        res[registro] = int((m.L > 1.0).sum())
+    assert res[True] < res[False] * 0.85

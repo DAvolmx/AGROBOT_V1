@@ -873,19 +873,42 @@ def _mapa_desde_scan() -> bool:
     return (state.config.get("slam") or {}).get("mapa_fuente", "scan") == "scan"
 
 
+_mapa_scan_ocupado = False
+
+
+def _mapa_limpio() -> bool:
+    """slam.mapa_limpio (por defecto True): el dashboard recibe el mapa con paredes de una celda, sin franjas dobles ni motas (mapa_scan._clasificar)."""
+    return bool(state.config.get("slam", {}).get("mapa_limpio", True))
+
+
+async def _agregar_y_difundir(ahora: float, pose: dict, points: list[dict], difundir: bool):
+    """Registro scan-a-mapa (~60 ms) y limpieza del mapa FUERA del bucle de eventos: si no, el dashboard y el robot se atascaban cada 0,2 s."""
+    global _mapa_scan_ocupado
+    try:
+        await asyncio.to_thread(mapa_scan.agregar, ahora, pose, [p["angle_deg"] for p in points], [p["distance_m"] for p in points])
+        if difundir:
+            m = await asyncio.to_thread(mapa_scan.como_mapa, _mapa_limpio())
+            if m is not None:
+                m["received_at"] = time.time()
+                await state.broadcast({"type": "map", "data": m})
+    except Exception as exc:  # noqa: BLE001
+        print(f"[mapa_scan] {type(exc).__name__}: {exc}", flush=True)
+    finally:
+        _mapa_scan_ocupado = False
+
+
 def _acumular_scan(points: list[dict], pose: dict):
-    """El mapa del dashboard se dibuja con los puntos del scan acumulados (mapa_scan.py), alineados contra lo ya dibujado."""
-    global _ultimo_mapa_scan_t, _ultimo_envio_mapa_scan
+    """El mapa del dashboard se dibuja con los puntos del scan acumulados (mapa_scan.py), registrados contra lo ya dibujado."""
+    global _ultimo_mapa_scan_t, _ultimo_envio_mapa_scan, _mapa_scan_ocupado
     ahora = time.monotonic()
-    if ahora - _ultimo_mapa_scan_t >= MAPA_SCAN_PERIODO_S:
-        _ultimo_mapa_scan_t = ahora
-        mapa_scan.agregar(ahora, pose, [p["angle_deg"] for p in points], [p["distance_m"] for p in points])
-    if ahora - _ultimo_envio_mapa_scan >= MAPA_SCAN_ENVIO_S:
+    if _mapa_scan_ocupado or ahora - _ultimo_mapa_scan_t < MAPA_SCAN_PERIODO_S:
+        return
+    _ultimo_mapa_scan_t = ahora
+    difundir = ahora - _ultimo_envio_mapa_scan >= MAPA_SCAN_ENVIO_S
+    if difundir:
         _ultimo_envio_mapa_scan = ahora
-        m = mapa_scan.como_mapa()
-        if m is not None:
-            m["received_at"] = time.time()
-            _schedule(state.broadcast({"type": "map", "data": m}))
+    _mapa_scan_ocupado = True
+    _schedule(_agregar_y_difundir(ahora, dict(pose), points, difundir))
 
 
 def _difundir_scan_en_mapa(points: list[dict]):
@@ -1042,7 +1065,7 @@ async def ws_handler(request: web.Request):
             "pose_edad_s": (round(e, 2) if (e := pose_edad_s()) is not None else None),
             "pose_confiable": pose_confiable(),
             "lidar_scan": _decimar(lidar_reactive.last_scan or [], RADAR_MAX_PUNTOS),
-            "map": (mapa_scan.como_mapa() if _mapa_desde_scan() and mapa_scan.version else None) or ros_last_map,
+            "map": (mapa_scan.como_mapa(_mapa_limpio()) if _mapa_desde_scan() and mapa_scan.version else None) or ros_last_map,
             "ros_available": ros_bridge.available,
             "ros_reason": ROS_UNAVAILABLE_REASON,
             "navigation": state.config["navigation"],

@@ -17,8 +17,9 @@ UMBRAL_OCUPADO = 0.8
 
 
 class Sonar:
-    def __init__(self, plan, n: int = 72, r_max: float = 4.0, paso_m: float = 0.05, ancho_robot_m: float = 0.40):
+    def __init__(self, plan, n: int = 72, r_max: float = 4.0, paso_m: float = 0.05, ancho_robot_m: float = 0.40, solo_scan: bool = False):
         self.plan, self.n, self.r_max, self.paso, self.ancho = plan, n, r_max, paso_m, ancho_robot_m
+        self.solo_scan = solo_scan                                     # True: ignora el mapa acumulado y usa solo el scan de ahora (para comparar)
         self.rel = np.arange(n) * (2 * math.pi / n) - math.pi          # ángulos relativos -π..π (0 = adelante)
         self._k = np.arange(1, int(r_max / paso_m) + 1) * paso_m
 
@@ -33,7 +34,7 @@ class Sonar:
         iy = ((cy - self.plan.o[1]) / self.plan.res).astype(np.int64)
         ok = (ix >= 0) & (ix < self.plan.n) & (iy >= 0) & (iy < self.plan.n)
         occ = np.zeros(ix.shape, bool)
-        occ[ok] = L[iy[ok], ix[ok]] > UMBRAL_OCUPADO
+        occ[ok] = (L[iy[ok], ix[ok]] > UMBRAL_OCUPADO) & (not self.solo_scan)
         primero = np.where(occ.any(1), occ.argmax(1), len(self._k) - 1)
         r = np.where(occ.any(1), self._k[primero], self.r_max)
         if scan:
@@ -82,11 +83,19 @@ class Sonar:
         return {"eje_rel_rad": eje, "largo_libre_m": float(r[k] + r[(k + mitad) % n]), "ancho_m": float(perp1 + perp2),
                 "es_pasillo": bool(perp1 + perp2 < 2.4 and r[k] + r[(k + mitad) % n] > 2.0)}
 
+    def lados(self, r: np.ndarray, desde_deg: float = 60.0, hasta_deg: float = 120.0) -> tuple[float, float]:
+        """(libre a la izquierda, libre a la derecha) = mínimo del eco en ventanas de 60°-120° a cada lado. Es la «medición por lados»: no depende del cono frontal."""
+        rel = np.degrees(self.rel)
+        izq = (rel >= desde_deg) & (rel <= hasta_deg)
+        der = (rel <= -desde_deg) & (rel >= -hasta_deg)
+        return float(r[izq].min()), float(r[der].min())
+
     def sin_salida(self, huecos: list[dict]) -> bool:
         return not huecos
 
     def mejor_rumbo(self, r: np.ndarray, huecos: list[dict], meta_rel: float | None = None, visitas_fn=None, w_meta: float = 1.0,
-                    w_prof: float = 0.15, w_visitas: float = 0.5, x: float = 0.0, y: float = 0.0, psi: float = 0.0):
+                    w_prof: float = 0.15, w_visitas: float = 0.5, x: float = 0.0, y: float = 0.0, psi: float = 0.0,
+                    lado_w: float = 0.0, r_izq: float = 9.0, r_der: float = 9.0, margen_lado: float = 0.45, max_giro_rad: float = math.pi):
         """Hueco con mejor puntuación: cercanía a la meta, profundidad y poco pisado. Devuelve (ángulo_rel_rad, hueco) o (None, None)."""
         mejor, mejor_p, mejor_c = None, -1e9, 0.0
         for h in huecos:
@@ -94,7 +103,7 @@ class Sonar:
             if meta_rel is not None:                                   # si la meta cae dentro del arco libre (con margen para el robot), se apunta a ella, no al centro
                 margen = math.atan2(self.ancho / 2 + 0.05, max(min(h["prof"], 2.0), 0.3))
                 dm = math.atan2(math.sin(meta_rel - c), math.cos(meta_rel - c))
-                if h["ancho"] >= 2 * math.pi - 1e-6 or abs(dm) <= h["ancho"] / 2 - margin:
+                if h["ancho"] >= 2 * math.pi - 1e-6 or abs(dm) <= h["ancho"] / 2 - margen:
                     c = meta_rel
             p = w_prof * min(h["prof"], 3.0) + 0.01 * math.degrees(min(h["ancho"], math.pi)) / 5.0
             if meta_rel is not None:
@@ -103,6 +112,13 @@ class Sonar:
                 p -= w_visitas * visitas_fn(x + 1.2 * math.cos(psi + c), y + 1.2 * math.sin(psi + c))
             if abs(c) > math.radians(120):                              # dar la vuelta cuesta muchos pulsos
                 p -= 0.3
+            if lado_w > 0:                                              # no girar hacia la pared que ya está pegada: castiga el lado con poco libre
+                if c > 0.1:
+                    p -= lado_w * max(0.0, margen_lado - r_izq)
+                elif c < -0.1:
+                    p -= lado_w * max(0.0, margen_lado - r_der)
+            if abs(c) > max_giro_rad:
+                c = math.copysign(max_giro_rad, c)
             if p > mejor_p:
                 mejor, mejor_p, mejor_c = h, p, c
         return (mejor_c, mejor) if mejor else (None, None)

@@ -268,6 +268,19 @@ class Config:
     mx_sonar_prof_m: float = 1.0
     mx_sonar_w_meta: float = 1.0
     mx_sonar_w_visitas: float = 0.5
+    # lógica por LADOS del sonar (2026-10-26): medir lo libre a izquierda/derecha en vez de depender del cono frontal
+    mx_sonar_frente: str = "cono"       # "cono" = el de siempre; "barrido" = solo un corredor del ancho del robot (una pared paralela a 25 cm ya no cuenta como frente)
+    mx_sonar_modo: str = "mapa"         # "mapa" = ecos sobre el mapa acumulado + scan; "scan" = solo el scan de ahora
+    mx_sonar_n: int = 72
+    mx_sonar_rmax: float = 4.0
+    mx_sonar_max_giro_deg: float = 180.0
+    mx_sonar_pulsos_max: int = 30       # máximo de pulsos de giro por decisión; este robot AVANZA ~5 cm en cada pulso de giro (arco): 15 pulsos seguidos = 75 cm hacia la pared
+    mx_sonar_atras_antes_deg: float = 999.0   # giros mayores que esto con poco frente: retrocede antes (2 pulsos si hay sitio atrás)
+    mx_sonar_lado_w: float = 0.0        # castigo a girar hacia la pared pegada
+    mx_sonar_centrar: bool = False      # con el frente libre, un pulso hacia el lado más despejado si el desbalance izq/der > tol (pasillos)
+    mx_sonar_tol_cm: float = 6.0
+    mx_sonar_eje: bool = False          # con el frente libre, alinear con el eje del pasillo si el rumbo difiere > mx_sonar_eje_deg
+    mx_sonar_eje_deg: float = 10.0
     mx_migas: bool = False
     mx_sendero: bool = False            # en pasillos/senderos la "meta" de las maniobras es el punto del sendero a `mx_sendero_mirada_m` por delante (no la meta lejana a través de las paredes)
     mx_sendero_mirada_m: float = 1.0
@@ -1130,6 +1143,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     ultima_ok, t_choque = None, -9.0
     contactos_por_accion = {}
     contacto_info = []
+    sonar_log = []
     guardian, g_libre_desde, g_reg = None, None, []
     mx_hist, mx_commit, mx_commit_hasta, mx_rectos, mx_escapes = [], None, 0.0, 0, 0
     visitas = {}
@@ -1140,7 +1154,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         plan = Planificador(inflar_m=cfg.mx_plan_inflar_m, centro=(x0, y0))
         if cfg.mx_sonar:
             from sonar_mapa import Sonar
-            sonar = Sonar(plan)
+            sonar = Sonar(plan, n=cfg.mx_sonar_n, r_max=cfg.mx_sonar_rmax, solo_scan=cfg.mx_sonar_modo == "scan")
     relajar_hasta, mx_esc_pos = 0.0, []
     migas, mig_idx, mig_fallos, mig_pausa_hasta = [], None, 0, 0.0
     mx_meta_xy = esc.meta_xy if esc.meta_xy is not None else (esc.goal_x, esc.centro_y)
@@ -1373,7 +1387,10 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     pausa_hasta = max(pausa_hasta, t + pedir)       # el robot se queda quieto escaneando
                     cola_man = []
             frente = d["adelante"] if d["adelante"] is not None else math.inf
-            if cfg.mx_barrido:
+            if cfg.mx_sonar_frente == "barrido":
+                sel_ = (scan_xy[0] > cfg.lidar_adelante_cm / 100.0) & (np.abs(scan_xy[1]) < cfg.mx_ancho_half_m)
+                frente = float(scan_xy[0][sel_].min()) - cfg.lidar_adelante_cm / 100.0 if sel_.any() else math.inf
+            elif cfg.mx_barrido:
                 sel = (scan_xy[0] > cfg.lidar_adelante_cm / 100.0) & (np.abs(scan_xy[1]) < cfg.mx_ancho_half_m)       # solo por DELANTE de la cara frontal (corregido 2026-10-26)
                 if sel.any():
                     frente = min(frente, float(scan_xy[0][sel].min()) - cfg.lidar_adelante_cm / 100.0)
@@ -1472,9 +1489,14 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     for prof_ in (cfg.mx_sonar_prof_m, 0.6):
                         hs_ = sonar.huecos(r_s, prof_)
                         if hs_:
+                            rl_, rr_ = sonar.lados(r_s)
                             gap, _h = sonar.mejor_rumbo(r_s, hs_, _rumbo_meta() if meta_ok else None, lambda X, Y: visitas.get((round(X / 0.5), round(Y / 0.5)), 0) / 20.0,
-                                                        cfg.mx_sonar_w_meta, 0.15, cfg.mx_sonar_w_visitas, lx, ly, robot.psi_real())
+                                                        cfg.mx_sonar_w_meta, 0.15, cfg.mx_sonar_w_visitas, lx, ly, robot.psi_real(),
+                                                        cfg.mx_sonar_lado_w, rl_, rr_, 0.45, math.radians(cfg.mx_sonar_max_giro_deg))
                             break
+                if sonar is not None and len(sonar_log) < 40:
+                    sonar_log.append((round(t), None if gap is None else round(math.degrees(gap)), round(float(frente), 2), round(float(li), 2), round(float(ld), 2),
+                                      round(math.degrees(robot.psi_real()))))
                 if sonar is None:
                     gap = _mejor_hueco(scan, cfg.mx_hueco_m, 1.0 if meta_ok else 0.2) if cfg.mx_hueco else None
                 if gap is None and cfg.mx_hueco and sonar is None:
@@ -1506,7 +1528,9 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     seq += ["atras"] * max(1, int(cfg.man_atras_pulsos))
                 n_giro = max(1, int(cfg.man_giro_pulsos))
                 if (cfg.mx_hueco or cfg.mx_sonar) and gap is not None:
-                    n_giro = int(_clamp_(round(abs(math.degrees(gap)) / cfg.mx_grados_pulso), 1, 30 if cfg.mx_sonar else 9))
+                    n_giro = int(_clamp_(round(abs(math.degrees(gap)) / cfg.mx_grados_pulso), 1, cfg.mx_sonar_pulsos_max if cfg.mx_sonar else 9))
+                    if cfg.mx_sonar and abs(math.degrees(gap)) > cfg.mx_sonar_atras_antes_deg and frente < 0.9 and (d.get("atras") is None or d["atras"] >= 0.45):
+                        seq += ["atras"] * 2
                 seq += [lado] * n_giro
                 if len(seq) == 1 and cfg.man_pausa_s <= 0:
                     _ord(seq[0], t, maniobra=False)
@@ -1528,6 +1552,25 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     mx_rectos = 0
                     corr = "hecho"
                     correcciones += 1
+                if (sonar is not None and (cfg.mx_sonar_centrar or cfg.mx_sonar_eje) and corr is None and not cond.activo and mx_rectos >= 2
+                        and (guardian is None or guardian.pend is None) and frente > cfg.avance_libre_cm / 100.0):
+                    r_c = sonar.perfil(lx, ly, robot.psi_real(), scan)
+                    acc_s = None
+                    if cfg.mx_sonar_eje:
+                        pas = sonar.eje_pasillo(r_c)
+                        if pas["es_pasillo"]:
+                            ang_e = (pas["eje_rel_rad"] + math.pi / 2) % math.pi - math.pi / 2        # eje módulo 180°, el más cercano a «adelante»
+                            if abs(math.degrees(ang_e)) > cfg.mx_sonar_eje_deg:
+                                acc_s = "izquierda" if ang_e > 0 else "derecha"
+                    if acc_s is None and cfg.mx_sonar_centrar:
+                        rl_, rr_ = sonar.lados(r_c)
+                        if rl_ < 1.4 and rr_ < 1.4 and abs(rl_ - rr_) / 2 * 100 > cfg.mx_sonar_tol_cm:
+                            acc_s = "izquierda" if rl_ > rr_ else "derecha"
+                    if acc_s:
+                        _ord(acc_s, t, maniobra=False)
+                        mx_rectos = 0
+                        corr = "hecho"
+                        correcciones += 1
                 if corr is None and guardian is not None:
                     if guardian.pend is not None:                    # esperando a que asiente la corrección anterior (sin pulsos rectos mezclados)
                         corr = "hecho"
@@ -1719,6 +1762,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     res["ida_ok"] = bool(ida_ok)
     res["contactos_por_accion"] = contactos_por_accion
     res["contacto_info"] = contacto_info
+    res["sonar_log"] = sonar_log
     if guardian is not None:
         res["guardian"] = guardian.resumen()
     if mision is not None:

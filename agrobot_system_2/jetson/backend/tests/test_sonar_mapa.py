@@ -53,3 +53,13 @@ def test_mejor_rumbo_prefiere_la_meta_y_penaliza_lo_pisado():
     g = s.huecos(r, 1.0)
     c, _ = s.mejor_rumbo(r, g, meta_rel=math.radians(80))
     assert c is not None and abs(math.degrees(c) - 80) < 25
+
+
+def test_mejor_rumbo_con_meta_en_un_arco_parcial_no_falla():
+    """Regresión: `margin` sin definir hacía fallar TODO episodio con meta (los barridos del 2026-10-26 salieron mal por esto)."""
+    p = _mapa(PASILLO, [(0.0, 0, 0), (1.0, 0, 0), (2.0, 0, 0)])
+    s = Sonar(p)
+    r = s.perfil(2.0, 0.0, 0.0, _scan(PASILLO, 2.0, 0.0, 0.0))
+    g = s.huecos(r, 1.0)
+    c, h = s.mejor_rumbo(r, g, meta_rel=math.radians(10), lado_w=1.0, r_izq=0.5, r_der=0.5)
+    assert c is not None and abs(math.degrees(c)) < 30

@@ -279,6 +279,9 @@ class Config:
     mx_sonar_lado_w: float = 0.0        # castigo a girar hacia la pared pegada
     mx_sonar_centrar: bool = False      # con el frente libre, un pulso hacia el lado más despejado si el desbalance izq/der > tol (pasillos)
     mx_sonar_tol_cm: float = 6.0
+    mx_sonar_escape: bool = False       # el sonar SOLO decide cuando el robot se atasca en el mismo sitio (escape de nicho): hacia dónde salir, con memoria y meta
+    mx_sonar_escape_pulsos: int = 12    # máximo de pulsos de giro del escape
+    mx_atasco_bloqueos: int = 8         # bloqueos (o giros/avances rechazados por el predictor) en la ventana para dar el atasco
     mx_sonar_eje: bool = False          # con el frente libre, alinear con el eje del pasillo si el rumbo difiere > mx_sonar_eje_deg
     mx_sonar_eje_deg: float = 10.0
     mx_migas: bool = False
@@ -1149,10 +1152,10 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     visitas = {}
     plan, pl_ruta, pl_t, pl_obj, pl_fallos, pl_pausa_hasta = None, None, -99.0, None, 0, 0.0
     sonar = None
-    if cfg.mx_planner or cfg.mx_sonar:
+    if cfg.mx_planner or cfg.mx_sonar or cfg.mx_sonar_escape:
         from planificador import Planificador
         plan = Planificador(inflar_m=cfg.mx_plan_inflar_m, centro=(x0, y0))
-        if cfg.mx_sonar:
+        if cfg.mx_sonar or cfg.mx_sonar_escape:
             from sonar_mapa import Sonar
             sonar = Sonar(plan, n=cfg.mx_sonar_n, r_max=cfg.mx_sonar_rmax, solo_scan=cfg.mx_sonar_modo == "scan")
     relajar_hasta, mx_esc_pos = 0.0, []
@@ -1303,7 +1306,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
             mx_hist.pop(0)
         if len(mx_hist) < 2 or tt - mx_hist[0][0] < 0.9 * cfg.mx_ventana_s:
             return False
-        return max(math.hypot(gx - h[1], gy - h[2]) for h in mx_hist) < 0.45 and nb - mx_hist[0][3] >= 8
+        return max(math.hypot(gx - h[1], gy - h[2]) for h in mx_hist) < 0.45 and nb - mx_hist[0][3] >= cfg.mx_atasco_bloqueos
 
     def _pose_g():
         """Pose estimada tipo SLAM: la verdadera con ruido (2 cm, 1°)."""
@@ -1376,7 +1379,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 mgx, mgy = robot.centro()
                 if not migas or math.hypot(mgx - migas[-1][0], mgy - migas[-1][1]) >= cfg.mx_miga_m:
                     migas.append((mgx + float(rng.normal(0, 0.02)), mgy + float(rng.normal(0, 0.02))))
-            if cfg.mx_memoria_w > 0 or cfg.mx_sonar:
+            if cfg.mx_memoria_w > 0 or cfg.mx_sonar or cfg.mx_sonar_escape:
                 vx_, vy_ = robot.centro()
                 kk = (round(vx_ / 0.5), round(vy_ / 0.5))
                 visitas[kk] = visitas.get(kk, 0) + 1
@@ -1407,11 +1410,24 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
             elif cola_man:                                      # maniobra en curso: se ejecuta el siguiente pulso cuando el conductor queda libre
                 if not cond.activo:
                     _ord(cola_man.pop(0), t, maniobra=False)
-            elif cfg.mx_anti_dither and _atrapado(t, cx_, cy_, bloqueos):
+            elif cfg.mx_anti_dither and _atrapado(t, cx_, cy_, bloqueos + PRED["giro"] + PRED["adelante"] + PRED["atras"]):
                 lado_op = ("derecha" if ultimo_giro == "izquierda" else "izquierda") if ultimo_giro else ("izquierda" if li >= ld else "derecha")
                 atras_ok = d.get("atras") is None or d["atras"] >= 0.30
                 n_largo = max(1, int(cfg.mx_giro_largo))
-                if cfg.mx_memoria_w > 0:                           # escape inteligente: el hueco menos pisado en TODAS las direcciones (incluida dar la vuelta)
+                gap_e = None
+                if cfg.mx_sonar_escape and sonar is not None:      # el sonar elige la salida mirando el mapa en 360° (meta, profundidad y lo menos pisado)
+                    r_e = sonar.perfil(lx, ly, robot.psi_real(), scan)
+                    for prof_ in (0.9, 0.6):
+                        hs_e = sonar.huecos(r_e, prof_)
+                        if hs_e:
+                            rl_, rr_ = sonar.lados(r_e)
+                            gap_e, _he = sonar.mejor_rumbo(r_e, hs_e, _rumbo_meta() if meta_ok else None, lambda X, Y: visitas.get((round(X / 0.5), round(Y / 0.5)), 0) / 20.0,
+                                                           0.5, 0.15, 1.0, lx, ly, robot.psi_real(), 1.0, rl_, rr_, 0.45, math.pi)
+                            break
+                if gap_e is not None:
+                    lado_op = "izquierda" if gap_e > 0 else "derecha"
+                    n_largo = int(_clamp_(round(abs(math.degrees(gap_e)) / cfg.mx_grados_pulso), 2, cfg.mx_sonar_escape_pulsos))
+                elif cfg.mx_memoria_w > 0:                           # escape inteligente: el hueco menos pisado en TODAS las direcciones (incluida dar la vuelta)
                     g360 = _mejor_hueco(scan, 0.8, 0.0, full=True)
                     if g360 is not None:
                         lado_op = "izquierda" if g360 > 0 else "derecha"

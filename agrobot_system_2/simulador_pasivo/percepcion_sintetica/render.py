@@ -26,6 +26,7 @@ ha evaluado aquí sobre fotos reales del huerto (están en el PC del operador, n
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -117,6 +118,16 @@ def rayos(ancho, alto, cam, x, y, psi, cabeceo_extra=0.0, balanceo=0.0):
 
 
 # ----------------------------------------------------------------------------- render
+_PARCHES = None
+
+
+def _parches_reales():
+    global _PARCHES
+    if _PARCHES is None:
+        _PARCHES = np.load(Path(__file__).resolve().parent / "datos" / "real" / "suelos.npz")["parches"]
+    return _PARCHES
+
+
 def render(esc: Escena, x, y, psi, rng, ancho=320, alto=240, cam=None, cabeceo_extra=0.0,
            balanceo=0.0, efectos=True, pegar_plagas=True):
     """Devuelve dict: rgb (uint8 alto,ancho,3), clase (uint8), instancia (int16, -1 = ninguna),
@@ -256,6 +267,15 @@ def render(esc: Escena, x, y, psi, rng, ancho=320, alto=240, cam=None, cabeceo_e
         veta = 0.94 + 0.12 * _ruido(sx * 9, sy * 0.7, g)
         suelo_col = base * (tono * veta)[..., None]
         suelo_col = np.where((np.abs(((sy / g) % 1.0) - 0.5) > 0.49)[..., None], suelo_col * 0.6, suelo_col)
+    elif s["tipo"] == "foto":                      # parche de suelo de una FOTO REAL de campo (preparar_real.py → datos/real/suelos.npz), repetido en mosaico espejado
+        P = _parches_reales()
+        pa = P[int(s.get("parche", 0)) % len(P)]
+        n = pa.shape[0]
+        fu = (sx / s["escala"]) % 2.0
+        fv = (sy / s["escala"]) % 2.0
+        fu, fv = np.where(fu > 1, 2 - fu, fu), np.where(fv > 1, 2 - fv, fv)
+        iu, iv = np.clip((fu * n).astype(int), 0, n - 1), np.clip((fv * n).astype(int), 0, n - 1)
+        suelo_col = pa[iv, iu].astype(np.float32) * (0.95 + 0.1 * _ruido(sx, sy, 0.3)[..., None])
     elif s["tipo"] == "alfombra":
         suelo_col = base * (0.85 + 0.3 * _ruido(sx, sy, 0.03)[..., None])
     else:                                          # hormigón

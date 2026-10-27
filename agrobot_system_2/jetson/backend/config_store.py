@@ -133,6 +133,8 @@ DEFAULTS = {
         "man_pausa_s": 0.0,
         # Maniobra de esquina (2026-10-24): 1 / 0 / 1 = comportamiento de siempre. Valores del simulador: ver docs/REPORTE_MEJORAS_20261024.
         "man_giro_pulsos": 1,
+        "mx_giro_comp": 0,                # giro compensado: cada N pulsos de giro seguidos un pulso atrás si hay pared cerca (0 = apagado; N=3 fue el mejor en simulación)
+        "giro_lazo_cerrado": False,       # el pulso de giro del explorador gira `mx_grados_pulso` medidos con el giroscopio (giro_cerrado.py) en vez de un tiempo fijo
         "man_retroceso_cm": 0.0,
         "man_atras_pulsos": 1,
         # Maniobras específicas (2026-10-24; simuladas por misiones). TODAS APAGADAS: ir al hueco del scan, rumbo a la meta y escape de nicho.
@@ -241,6 +243,9 @@ DEFAULTS = {
         "politica_activa": False,
         # Botón AUTO = misión de plantas en maceta (explorar, mapear, escanear macetas). False = patrulla/exploración de antes.
         "auto_mision_plantas": True,
+        "suelo_modelo": "",               # ruta de un .pt de transitabilidad (percepcion_sintetica/entrenar_trav.py): la cámara distingue libre/obstáculo con una UNet; "" = método por apariencia
+        "camara_como_lidar": False,       # el explorador (E11/sonar/predictor) ve también el frente de la cámara filtrado como un scan (camara_lidar.py)
+        "camara_lidar_solo": False,       # True: el frente (±35°) viene SOLO de la cámara (prueba; el LIDAR se ignora ahí)
         "camara_obstaculos": True,        # el explorador usa también el suelo libre de la cámara (obstáculos bajos que el LIDAR no ve)
     },
     "odometria_webcam": {

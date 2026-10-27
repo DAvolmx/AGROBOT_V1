@@ -1,0 +1,14 @@
+{
+ "modelo": "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_pasivo/percepcion_sintetica/modelos/yolo/col_10h/weights/best.pt",
+ "mAP50": 0.591,
+ "mAP50_95": 0.25,
+ "precision": 0.6534,
+ "recall": 0.5905,
+ "por_clase_mAP50": {
+  "col_planta": 0.805,
+  "col_cogollo": 0.797,
+  "dano_hoja": 0.171
+ },
+ "NO_DEMOSTRADO": "Validado con fotos del mismo dataset (otro campo/camara). Probar con fotos propias.",
+ "segundos": 2897
+}

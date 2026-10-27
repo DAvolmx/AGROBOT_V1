@@ -67,6 +67,10 @@ from navigation_logger import NavigationLogger, analizar_sesion
 from aprendizaje import Aprendizaje
 from paso_robotico import PasoRobotico
 from suelo_libre import SueloLibre
+from camara_lidar import CamaraComoLidar
+from maniobra_giro import ManiobraGiro
+import misiones as misiones_mod
+from reloj import DetectorSalto
 import suelo_libre as suelo_mod
 from barrido_tilt import (BarridoTilt, FrenoProactivo, EstimadorAltura,
                           inclinacion_por_servo, SERVO_LEJOS_DEG, SERVO_CERCA_DEG)
@@ -176,6 +180,21 @@ cabeceo_imu = CabeceoIMU()
 lidar_reactive = LidarReactive()
 # Suelo libre por cámara: lo bajo que el LIDAR no ve (cobija, pesa: 2026-10-02).
 suelo_libre = SueloLibre(cfg={"metodo": "apariencia"})   # 2026-10-22: sin los «0 m» falsos del histograma en baldosa
+camara_lidar = CamaraComoLidar()
+
+
+def _cargar_modelo_transitabilidad():
+    """autonomia.suelo_modelo = ruta de un .pt de entrenar_trav.py: suelo_libre usa la UNet (libre/obstáculo) en vez de la apariencia. Si falla, sigue con la apariencia."""
+    ruta = state.config.get("autonomia", {}).get("suelo_modelo", "")
+    if not ruta:
+        return
+    try:
+        from transitabilidad import Transitabilidad
+        suelo_libre.segmentador = Transitabilidad(ruta)
+        suelo_libre.metodo = "modelo"
+        print(f"[suelo] modelo de transitabilidad cargado: {ruta}", flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[suelo] no se pudo cargar el modelo ({type(exc).__name__}: {exc}); sigo con la apariencia", flush=True)
 lidar_reactive.hueco_camara = lambda: suelo_libre.hueco_delante(
     state.config["slam"]["robot_ancho_cm"] / 100.0)
 # Barrido de tilt + freno proactivo por envolvente de vuelco (ver barrido_tilt.py).
@@ -1231,6 +1250,20 @@ def _distancias_explorador() -> dict:
     return d
 
 
+def _scan_explorador() -> list[dict]:
+    """Scan que ve el explorador: el del LIDAR y, con autonomia.camara_como_lidar, también el frente de la CÁMARA filtrado (camara_lidar.py: obstáculos bajos que el
+    plano del LIDAR no ve). autonomia.camara_lidar_solo = true reemplaza el frente del LIDAR por el de la cámara (prueba)."""
+    scan = lidar_reactive.last_scan
+    cfg = state.config["autonomia"]
+    if not cfg.get("camara_como_lidar", False):
+        return scan
+    try:
+        return camara_lidar.fusionar(scan, suelo_libre.ultimo, state.config["slam"]["robot_largo_cm"] / 100.0, bool(cfg.get("camara_lidar_solo", False)))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[camara-lidar] filtro falló: {type(exc).__name__}: {exc}", flush=True)
+        return scan
+
+
 def _servo_al_frente() -> tuple[bool, str]:
     """¿La cámara mira al frente y quieta? Si no, la odometría visual leería
     el giro del servo como giro del robot. Se mira lo que REPORTA el C3, no lo
@@ -1481,6 +1514,57 @@ def _matar_sllidar() -> bool:
     time.sleep(1.5)
     subprocess.run(["pkill", "-KILL", "-f", _SLLIDAR_PATRON], capture_output=True)
     return True
+
+
+_detector_reloj = DetectorSalto()
+
+
+def _ocupado() -> dict:
+    """¿Está el robot haciendo algo que no debe interrumpirse (autonomía, misión, pulso, movimiento reciente)? Lo consulta agrobot-reloj-vigia antes de reiniciar ROS tras un salto de reloj:
+    reiniciar la pila en plena misión borra el mapa y salta la pose (27-oct: saltos de 30 y 24 m)."""
+    motivos = []
+    try:
+        modo = _modo_auto_activo()
+        if modo:
+            motivos.append(f"autonomía: {modo}")
+        if conductor is not None and conductor.activo:
+            motivos.append("pulso en curso")
+        if _maniobra_giro_tarea is not None and not _maniobra_giro_tarea.done():
+            motivos.append("maniobra de giro")
+        if gestor_misiones is not None and gestor_misiones.estado in ("en curso", "terminando"):
+            motivos.append(f"misión: {gestor_misiones.mision}")
+        if actuator_proto is not None and actuator_proto.segundos_quieto() < 10.0:
+            motivos.append("movimiento reciente")
+    except Exception as exc:
+        motivos.append(f"no se pudo comprobar ({type(exc).__name__})")
+    return {"ocupado": bool(motivos), "motivos": motivos}
+
+
+async def ocupado_handler(request: web.Request):
+    """GET /api/ocupado — {"ocupado": bool, "motivos": [...]}."""
+    return web.json_response(_ocupado())
+
+
+async def _vigia_reloj():
+    """Detecta saltos del reloj de pared (NTP sin RTC). Los anota (~/.agrobot/reloj_saltos.jsonl) y avisa al operador; el reinicio de ROS lo decide agrobot-reloj-vigia, que espera a que
+    el robot esté en reposo (/api/ocupado). Los análisis posteriores deben usar el tiempo monótono, no t_unix."""
+    while True:
+        await asyncio.sleep(1.0)
+        try:
+            delta = _detector_reloj.paso(time.time(), time.monotonic())
+            if delta is None:
+                continue
+            msg = f"El reloj de la Jetson saltó {delta:+.1f} s (sincronización NTP). La pose del SLAM puede haber saltado."
+            print(f"[reloj] {msg}", flush=True)
+            try:
+                with open(Path.home() / ".agrobot" / "reloj_saltos.jsonl", "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({**_detector_reloj.saltos[-1], "iso": time.strftime("%Y-%m-%d %H:%M:%S")}, ensure_ascii=False) + "\n")
+            except OSError:
+                pass
+            _evento("reloj", {"delta_s": round(delta, 1)})
+            await state.broadcast({"type": "toast", "data": {"kind": "warning", "title": "Salto de reloj", "message": msg}})
+        except Exception as exc:
+            print(f"[reloj] vigía: {type(exc).__name__}: {exc}", flush=True)
 
 
 async def _vigia_lidar():
@@ -1768,6 +1852,7 @@ def _parada_total(origen: str, remote: bool = True, emergencia: bool = True, avi
     sirve también desde el callback UDP del LoRa."""
     hecho = []
     pasos = [
+        ("misiones", lambda: gestor_misiones is not None and gestor_misiones.detener("parada")),
         ("mision_plantas", lambda: mision_plantas is not None and mision_plantas.detener("parada")),
         ("vision_activa", lambda: vision_activa is not None and vision_activa.cancelar("parada")),
         ("evasion", _detener_evasion),
@@ -1776,6 +1861,7 @@ def _parada_total(origen: str, remote: bool = True, emergencia: bool = True, avi
         ("patrulla", lambda: patrol is not None and patrol.detener()),
         ("nav2", ros_bridge.cancel_nav_goal),
         ("saludo", lambda: saludo_tarea is not None and not saludo_tarea.done() and saludo_tarea.cancel()),
+        ("maniobra_giro", lambda: _maniobra_giro_tarea is not None and not _maniobra_giro_tarea.done() and _maniobra_giro_tarea.cancel()),
         ("pulsos", lambda: conductor is not None and conductor.parar()),
         ("motores", lambda: actuator_proto is not None and actuator_proto.emergency_stop()),
     ]
@@ -2225,6 +2311,13 @@ def _crear_mision_plantas():
         print(f"[mision_plantas] {e}", flush=True)
         if e.get("tipo") == "mision_fin":
             _schedule(guardar_mapa_mision())
+            if gestor_misiones is not None:
+                gestor_misiones.al_fin_mision_plantas(e.get("motivo"))
+        elif e.get("tipo") == "planta_inspeccionada" and gestor_misiones is not None:
+            try:
+                gestor_misiones.al_planta(mision_plantas.plantas[-1] if mision_plantas.plantas else e, getattr(vision_activa, "ultimo_resultado", None))
+            except Exception as exc:
+                print(f"[misiones] no se pudo registrar la planta: {exc}", flush=True)
         _schedule(state.broadcast({"type": "mision_plantas", "data": e}))
         titulos = {"planta_detectada": "Planta detectada", "planta_inspeccionada": "Planta escaneada", "mision_fin": "Misión terminada"}
         if e.get("tipo") in titulos:
@@ -2233,7 +2326,61 @@ def _crear_mision_plantas():
 
     mision_plantas = mp.MisionPlantas(explorador=explorador, vision=vision_activa, get_macetas=_macetas_ahora,
                                       get_pose=ros_bridge.pose_en_mapa, led=_poner_led, grabar=_grabar_video,
-                                      get_config=lambda: state.config.get("mision_plantas", {}), on_event=evento)
+                                      get_config=lambda: {**state.config.get("mision_plantas", {}), **_mision_plantas_extra}, on_event=evento)
+    _crear_gestor_misiones()
+
+
+_mision_plantas_extra: dict = {}
+gestor_misiones = None
+
+
+def _crear_gestor_misiones():
+    """Misiones específicas (misiones.py): explorar y mapear / recoger dataset de plantas / inspección de plagas. Usa el explorador y MisionPlantas."""
+    global gestor_misiones
+
+    def aplicar(mp_cfg, vis_cfg):
+        _mision_plantas_extra.clear()
+        _mision_plantas_extra.update(mp_cfg)
+        _mision_vision_override.update({**_ajustes_vision_mision(), **vis_cfg})
+
+    def quitar():
+        _mision_plantas_extra.clear()
+        _mision_vision_override.clear()
+
+    async def guardar(nombre):
+        info = await mapas.guardar(nombre, patrol.waypoints if patrol else [], True)
+        await state.broadcast({"type": "toast", "data": {"kind": "success", "title": "Mapa guardado", "message": f"«{info['nombre']}»"}})
+        return info
+
+    def evento(e):
+        print(f"[misiones] {e}", flush=True)
+        _schedule(state.broadcast({"type": "misiones", "data": e}))
+        if e.get("tipo") in ("mision_especifica_fin", "inspeccion_planta"):
+            _schedule(state.broadcast({"type": "toast", "data": {"kind": "success", "title": "Misión: " + e.get("tipo", ""),
+                                                                  "message": ", ".join(f"{k}: {v}" for k, v in e.items() if k != "tipo")}}))
+
+    gestor_misiones = misiones_mod.GestorMisiones(
+        carpeta=Path.home() / ".agrobot", mision_plantas=mision_plantas, explorador=explorador, vision=vision_activa,
+        aplicar_ajustes=aplicar, quitar_ajustes=quitar, guardar_mapa=guardar, get_pose=ros_bridge.pose_en_mapa, on_event=evento)
+
+
+async def misiones_handler(request: web.Request):
+    """GET /api/misiones — catálogo y estado. POST {"mision": "mapear"|"dataset"|"inspeccion", "accion": "iniciar"|"detener", "opciones": {...}}."""
+    if gestor_misiones is None:
+        return web.json_response({"error": "misiones no disponibles"}, status=503)
+    if request.method == "GET":
+        return web.json_response(gestor_misiones.estado_dict())
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    if body.get("accion", "iniciar") == "detener":
+        gestor_misiones.detener("operador")
+        return web.json_response({"ok": True, **gestor_misiones.estado_dict()})
+    if _modo_auto_activo() is not None and gestor_misiones.estado not in ("en curso", "terminando"):
+        return web.json_response({"ok": False, "msg": f"hay otra autonomía activa ({_modo_auto_activo()}): páralas antes"}, status=409)
+    ok, msg = gestor_misiones.iniciar(str(body.get("mision", "")), body.get("opciones") or {})
+    return web.json_response({"ok": ok, "msg": msg, **gestor_misiones.estado_dict()}, status=200 if ok else 409)
 
 
 async def simulador_handler(request: web.Request):
@@ -2421,6 +2568,73 @@ async def giro_cerrado_handler(request: web.Request):
     if not conductor.girar_grados(grados, _gyro_dps, w_rps=w):
         return web.json_response({"error": "ya hay un movimiento en curso"}, status=409)
     return web.json_response({"ok": True, "grados": grados})
+
+
+_maniobra_giro_tarea = None
+_maniobra_giro_estado: dict = {"activa": False}
+
+
+async def _maniobra_giro_bucle(grados: float, tramo_deg: float):
+    """Media vuelta / vuelta entera en tramos de lazo cerrado con compensación de la deriva (maniobra_giro.py). Cancelable con la parada total."""
+    global _maniobra_giro_estado
+    m = ManiobraGiro(grados, tramo_deg=tramo_deg)
+    _maniobra_giro_estado = {"activa": True, "pedido_deg": grados, "estado": "arrancando"}
+    ctrl = state.config["control"]
+    try:
+        while True:
+            pose = ros_bridge.pose_en_mapa()
+            if not pose:
+                m._fin("sin pose del SLAM")
+                break
+            d = _distancias_explorador()
+            orden = m.siguiente(pose["theta_deg"], (pose["x"], pose["y"]), d.get("adelante"), d.get("atras"))
+            _maniobra_giro_estado = {"activa": True, **m.resumen(), "estado": orden["tipo"]}
+            if orden["tipo"] == "fin":
+                break
+            if orden["tipo"] == "girar":
+                ok = conductor.girar_grados(orden["grados"], _gyro_dps)
+            else:
+                ok = conductor.ordenar(orden["tipo"], v_max=ctrl["max_v_mps"], omega_max=ctrl["max_omega_rps"], maniobra=False)
+            if not ok:
+                m._fin("movimiento en curso rechazado")
+                break
+            await asyncio.sleep(0.2)
+            while conductor.activo:
+                await asyncio.sleep(0.1)
+            await asyncio.sleep(0.6)                      # el chasis y el SLAM se asientan antes de medir
+    except asyncio.CancelledError:
+        m._fin("cancelada")
+        raise
+    finally:
+        if conductor.activo:
+            conductor.parar()
+        _maniobra_giro_estado = {"activa": False, **m.resumen(), "estado": "fin"}
+        print(f"[maniobra_giro] {_maniobra_giro_estado}", flush=True)
+
+
+async def maniobra_giro_handler(request: web.Request):
+    """GET /api/maniobra_giro — estado. POST {"grados": 180|-180|360|-360, "tramo": 30} — gira ese ángulo en el sitio (+ izquierda) en tramos de lazo
+    cerrado, corrigiendo la deriva con marcha atrás y parando si no hay espacio o el robot no gira. Rechaza si hay autonomía activa."""
+    global _maniobra_giro_tarea
+    if request.method == "GET":
+        return web.json_response(_maniobra_giro_estado)
+    try:
+        body = await request.json()
+        grados = float(body["grados"])
+        tramo = float(body.get("tramo", 30.0))
+        ManiobraGiro(grados, tramo_deg=tramo)
+    except Exception as exc:
+        return web.json_response({"error": f"se espera {{'grados': 180|360|-180|-360, 'tramo': 10..45}}: {exc}"}, status=400)
+    if not 10.0 <= tramo <= 45.0:
+        return web.json_response({"error": "tramo en [10, 45] grados"}, status=400)
+    if _modo_auto_activo() is not None or conductor.activo or (_maniobra_giro_tarea is not None and not _maniobra_giro_tarea.done()):
+        return web.json_response({"error": "ya hay un movimiento o una autonomía en curso"}, status=409)
+    if enlace_c3 is None or not enlace_c3.connected:
+        return web.json_response({"error": "C3 sin enlace"}, status=409)
+    if _gyro_dps() is None or not ros_bridge.pose_en_mapa():
+        return web.json_response({"error": "IMU o pose del SLAM sin datos frescos"}, status=409)
+    _maniobra_giro_tarea = asyncio.create_task(_maniobra_giro_bucle(grados, tramo))
+    return web.json_response({"ok": True, "grados": grados, "tramo": tramo})
 
 
 async def vision_activa_get_handler(request: web.Request):
@@ -2777,6 +2991,13 @@ def _conducir_pulso(accion: str, maniobra: bool = True, esc_dur: float = 1.0):
         # usa el peor caso conservador.
         altura = estimador_altura.altura()
         v_max = min(v_max, freno_proactivo.tope_velocidad(hueco, v_max, altura_m=altura))
+    # Giro de lazo cerrado (2026-10-27): un pulso de giro a tiempo fijo no gira (29 % de los pulsos <2°; el 27-oct 18 pulsos seguidos no movieron el rumbo).
+    # Con autonomia.giro_lazo_cerrado el pulso de giro del explorador es «gira mx_grados_pulso» medido con el giroscopio, subiendo la fuerza si el pulso sale muerto.
+    # Sin IMU fresco cae al pulso de siempre.
+    if accion in ("izquierda", "derecha") and state.config["autonomia"].get("giro_lazo_cerrado", False) and _gyro_dps() is not None:
+        grados = float(state.config["autonomia"].get("mx_grados_pulso", 6.0))
+        if conductor.girar_grados(grados if accion == "izquierda" else -grados, _gyro_dps, w_rps=0.6, t_max_s=1.2):
+            return
     conductor.ordenar(accion, v_max=v_max,
                       omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra, esc_dur=esc_dur)
 
@@ -4368,6 +4589,7 @@ async def start_background(app: web.Application):
         print(f"[grabador] no arrancó: {type(exc).__name__}: {exc}", flush=True)
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
+    app["vigia_reloj_task"] = asyncio.create_task(_vigia_reloj())
     app["vigia_asistido_task"] = asyncio.create_task(_vigia_asistido())
     app["servo_macetas_task"] = asyncio.create_task(_bucle_servo_macetas())
     app["zoom_auto_task"] = asyncio.create_task(_bucle_zoom_auto())
@@ -4377,6 +4599,7 @@ async def start_background(app: web.Application):
     entorno = entorno_auto.EntornoAuto(modelo=entorno_auto.cargar_modelo())
     entorno.activo = bool(state.config.get("control", {}).get("entorno_auto", False))
     app["entorno_task"] = asyncio.create_task(_bucle_entorno())
+    _cargar_modelo_transitabilidad()
     app["suelo_libre_task"] = asyncio.create_task(_bucle_suelo_libre())
     app["barrido_tilt_task"] = asyncio.create_task(_bucle_barrido_tilt())
 
@@ -4455,7 +4678,7 @@ async def start_background(app: web.Application):
         import guardian_sendero
         explorador.guardian = guardian_sendero.GuardianSendero(guardian_sendero.MemoriaCorrecciones())
         explorador.sensores_guardian = _sensores_guardian
-        explorador.scan_cb = lambda: lidar_reactive.last_scan
+        explorador.scan_cb = _scan_explorador
         explorador.geom_cb = lambda: state.config["slam"]
     except Exception as exc:  # noqa: BLE001
         print(f"[guardián] no disponible: {exc}", flush=True)
@@ -4959,10 +5182,14 @@ def create_app() -> web.Application:
     app.router.add_get("/api/mapas/digital/{nombre}/{archivo}", mapas_digital_archivo_handler)
     app.router.add_get("/api/giro_cerrado", giro_cerrado_handler)
     app.router.add_post("/api/giro_cerrado", giro_cerrado_handler)
+    app.router.add_get("/api/maniobra_giro", maniobra_giro_handler)
+    app.router.add_post("/api/maniobra_giro", maniobra_giro_handler)
     app.router.add_get("/api/simulador", simulador_handler)
     app.router.add_post("/api/simulador", simulador_handler)
     app.router.add_get("/api/camara/cajas", camara_cajas_handler)
     app.router.add_get("/api/camara/cruda.jpg", camara_cruda_handler)
+    app.router.add_get("/api/misiones", misiones_handler)
+    app.router.add_post("/api/misiones", misiones_handler)
     app.router.add_get("/api/mision_plantas", mision_plantas_handler)
     app.router.add_post("/api/mision_plantas", mision_plantas_handler)
     app.router.add_get("/api/vision_activa", vision_activa_get_handler)
@@ -5002,6 +5229,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/costmap/load", local_map_load_handler)
     app.router.add_get("/api/costmap/maps", local_map_list_handler)
     app.router.add_post("/api/costmap/delete", local_map_delete_handler)
+    app.router.add_get("/api/ocupado", ocupado_handler)
     app.router.add_get("/api/health", health_handler)
     app.router.add_get("/api/seguridad", seguridad_get_handler)
     app.router.add_post("/api/seguridad/rearmar", seguridad_rearmar_handler)

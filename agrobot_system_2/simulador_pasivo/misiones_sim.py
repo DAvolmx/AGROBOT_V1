@@ -17,12 +17,71 @@ E = S.Escenario
 R = 0.12
 
 
-def misiones(semilla: int = 0) -> dict:
+def _duras(semilla: int = 0, intento: int = 0) -> dict:
+    """MISIONES DURAS (2026-10-27): pasillos de 80-85 cm con muchas esquinas, obstáculos densos, slalom estrecho, bodega con pasillos en U y sala con puerta de 75 cm
+    llena de patas. Todas con plantas (para que escanear cuente) y con ida y vuelta."""
+    rng = np.random.default_rng(77_000 + semilla + 7919 * intento)
+    out = {}
+    # D1 pasillo fino en zigzag: 85 cm, 7 esquinas, 4 plantas pegadas a una pared
+    centro = [(-0.7, 0), (3.0, 0), (3.0, 1.3), (0.2, 1.3), (0.2, 2.6), (3.4, 2.6), (3.4, 3.9), (0.6, 3.9)]
+    pared = MI.pasillo(centro, 0.95)
+    longitud = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(centro, centro[1:]))
+    pl = [_sobre_camino(centro, float(s_m + rng.normal(0, 0.1)), (0.24 if k % 2 == 0 else -0.24)) for k, s_m in enumerate(np.linspace(1.4, longitud - 1.2, 4))]
+    out["pasillo_fino_zigzag"] = ("interior", _con_plantas("pasillo_fino_zigzag", pared, pl, [], centro[-1][0], 700.0,
+                                                           "Pasillo de 95 cm con 7 esquinas y 4 plantas pegadas a una pared.", meta=centro[-1], centro=centro))
+    # D2 obstáculos densos: sala 8 x 5 con ~22 obstáculos y 6 plantas
+    sala = MI._sala(-0.6, 8.0, -2.6, 2.6)
+    obst, pl = [], []
+    while len(obst) < 22:
+        c = (float(rng.uniform(0.9, 7.2)), float(rng.uniform(-2.2, 2.2)), float(rng.uniform(0.07, 0.17)))
+        if math.hypot(c[0], c[1]) > 0.9 and all(math.hypot(c[0] - a, c[1] - b_) > c[2] + r_ + 0.62 for a, b_, r_ in obst):
+            obst.append(c)
+    while len(pl) < 6:
+        c = (float(rng.uniform(1.0, 7.0)), float(rng.uniform(-2.0, 2.0)))
+        if math.hypot(c[0], c[1]) > 0.9 and all(math.hypot(c[0] - a, c[1] - b_) > r_ + 0.55 for a, b_, r_ in obst) and all(math.hypot(c[0] - a, c[1] - b_) > 0.9 for a, b_ in pl):
+            pl.append(c)
+    out["obstaculos_densos"] = ("interior", _con_plantas("obstaculos_densos", sala, pl, obst, 7.2, 700.0, "Sala de 8,6 x 5,2 m con 22 obstáculos y 6 plantas.", meta=(7.2, 0.0)))
+    # D3 slalom estrecho: pasillo de 1,1 m y 9 m con obstáculos alternos que dejan ~65 cm
+    pared = MI.pasillo([(-0.7, 0), (8.4, 0)], 1.1)
+    obst = [(1.2 + 1.05 * k, (0.27 if k % 2 == 0 else -0.27), 0.12) for k in range(7)]
+    pl = [(2.6 + 2.2 * k + float(rng.normal(0, 0.08)), (-0.27 if k % 2 == 0 else 0.27)) for k in range(3)]
+    obst = [o for o in obst if all(math.hypot(o[0] - a, o[1] - b_) > 0.55 for a, b_ in pl)]
+    out["slalom_estrecho"] = ("interior", _con_plantas("slalom_estrecho", pared, pl, obst, 8.4, 700.0, "Pasillo de 1,1 m y 9 m: 7 obstáculos alternos (paso de ~65 cm) y 3 plantas.",
+                                                       meta=(8.4, 0.0), centro=[(-0.7, 0.0), (8.4, 0.0)]))
+    # D4 bodega: pasillos de 90 cm entre estanterías, recorrido en U (media vuelta al fondo) con 5 plantas
+    centro = [(-0.7, 0), (4.5, 0), (4.5, 1.7), (-0.3, 1.7)]
+    pared = MI.pasillo(centro, 1.05)
+    estant = MI.rect(0.4, 0.55, 3.6, 1.15) + MI.rect(-0.1, 2.25, 4.0, 2.75)             # bloques de estantería entre los tramos (decoran, no cierran el paso)
+    pl = [_sobre_camino(centro, float(s_m), (0.24 if k % 2 == 0 else -0.24)) for k, s_m in enumerate((1.6, 3.6, 5.4, 7.3, 8.6))]
+    out["bodega_en_U"] = ("interior", _con_plantas("bodega_en_U", pared + estant, pl, [], centro[-1][0], 700.0, "Bodega: pasillo de 1,05 m en U con 5 plantas.", meta=centro[-1], centro=centro))
+    # D5 sala con puerta de 75 cm y patas de mesa/sillas
+    muro = [(3.6, -2.4, 3.6, -0.375), (3.6, 0.375, 3.6, 2.4)]
+    patas, segs = [], []
+    for cx_, cy_ in ((1.6, 1.4), (5.6, -1.4)):
+        patas += MI.patas_mesa(cx_, cy_, 1.2, 0.7)
+    for cx_, cy_, rum in ((2.2, -1.2, 40.0), (5.0, 1.2, 200.0), (6.4, 0.2, 90.0)):
+        p_, sg_ = MI.silla(cx_, cy_, rum)
+        patas += p_
+        segs += sg_
+    pl = []
+    while len(pl) < 5:
+        c = (float(rng.uniform(0.8, 7.4)), float(rng.uniform(-1.8, 1.8)))
+        if abs(c[0] - 3.6) > 1.0 and math.hypot(c[0], c[1]) > 0.9 and all(math.hypot(c[0] - a, c[1] - b_) > 0.6 for a, b_, _r in patas) \
+                and all(math.hypot(c[0] - a, c[1] - b_) > 1.0 for a, b_ in pl):
+            pl.append(c)
+    out["sala_puerta_estrecha"] = ("interior", _con_plantas("sala_puerta_estrecha", MI._sala(-0.6, 8.2, -2.4, 2.4) + muro + segs, pl, patas, 7.4, 700.0,
+                                                           "Dos salas con puerta de 75 cm, patas de mesa, sillas y 5 plantas.", meta=(7.4, 0.0)))
+    return out
+
+
+def misiones(semilla: int = 0, duras: bool = False) -> dict:
     """Las 10 misiones de la semilla, SOLO con distribuciones factibles (hay un camino libre para un robot de 25 cm de radio): las que salen
     infactibles se vuelven a sortear con otro intento determinista."""
     out, ref = {}, None
     for intento in range(60):
         d = _misiones(semilla, intento)
+        if duras:
+            d.update(_duras(semilla, intento))
         ref = ref or d
         for n, (ent, esc) in d.items():
             if n not in out and factible(esc):

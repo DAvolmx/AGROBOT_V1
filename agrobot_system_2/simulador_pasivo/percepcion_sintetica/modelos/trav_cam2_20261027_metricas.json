@@ -1,0 +1,404 @@
+{
+ "antes": {
+  "test_nuevo": {
+   "None": {
+    "libre_falso": 0.0051,
+    "obstaculo_falso": 0.0039,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0031,
+     "borde_bajo": 0.0623,
+     "obstaculo": 0.0053
+    }
+   },
+   "oscuro": {
+    "libre_falso": 0.0091,
+    "obstaculo_falso": 0.0045,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.004,
+     "borde_bajo": 0.0625,
+     "obstaculo": 0.0184
+    }
+   },
+   "brillante": {
+    "libre_falso": 0.0173,
+    "obstaculo_falso": 0.0049,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0076,
+     "borde_bajo": 0.1044,
+     "obstaculo": 0.0363
+    }
+   },
+   "ruido": {
+    "libre_falso": 0.0063,
+    "obstaculo_falso": 0.0072,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0044,
+     "borde_bajo": 0.0778,
+     "obstaculo": 0.0049
+    }
+   },
+   "desenfoque": {
+    "libre_falso": 0.0139,
+    "obstaculo_falso": 0.016,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0071,
+     "borde_bajo": 0.0928,
+     "obstaculo": 0.0256
+    }
+   },
+   "oclusion": {
+    "libre_falso": 0.0048,
+    "obstaculo_falso": 0.0947,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0033,
+     "borde_bajo": 0.0609,
+     "obstaculo": 0.0035
+    }
+   }
+  },
+  "val": {
+   "None": {
+    "libre_falso": 0.0049,
+    "obstaculo_falso": 0.1095,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0045,
+     "borde_bajo": 0.0584,
+     "obstaculo": 0.0012
+    }
+   },
+   "oscuro": {
+    "libre_falso": 0.0054,
+    "obstaculo_falso": 0.1602,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0045,
+     "borde_bajo": 0.0494,
+     "obstaculo": 0.0036
+    }
+   },
+   "brillante": {
+    "libre_falso": 0.009,
+    "obstaculo_falso": 0.0674,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0088,
+     "borde_bajo": 0.0964,
+     "obstaculo": 0.0018
+    }
+   },
+   "ruido": {
+    "libre_falso": 0.0109,
+    "obstaculo_falso": 0.07,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0111,
+     "borde_bajo": 0.0863,
+     "obstaculo": 0.0035
+    }
+   },
+   "desenfoque": {
+    "libre_falso": 0.0122,
+    "obstaculo_falso": 0.1579,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0094,
+     "borde_bajo": 0.1289,
+     "obstaculo": 0.0088
+    }
+   },
+   "oclusion": {
+    "libre_falso": 0.006,
+    "obstaculo_falso": 0.2037,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0056,
+     "borde_bajo": 0.065,
+     "obstaculo": 0.0019
+    }
+   }
+  },
+  "test": {
+   "None": {
+    "libre_falso": 0.0068,
+    "obstaculo_falso": 0.0884,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0057,
+     "borde_bajo": 0.0883,
+     "obstaculo": 0.0028
+    }
+   },
+   "oscuro": {
+    "libre_falso": 0.0117,
+    "obstaculo_falso": 0.1176,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0081,
+     "borde_bajo": 0.1753,
+     "obstaculo": 0.0088
+    }
+   },
+   "brillante": {
+    "libre_falso": 0.0155,
+    "obstaculo_falso": 0.0494,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0151,
+     "borde_bajo": 0.1406,
+     "obstaculo": 0.0041
+    }
+   },
+   "ruido": {
+    "libre_falso": 0.0128,
+    "obstaculo_falso": 0.0475,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0105,
+     "borde_bajo": 0.1601,
+     "obstaculo": 0.0066
+    }
+   },
+   "desenfoque": {
+    "libre_falso": 0.0135,
+    "obstaculo_falso": 0.1201,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0119,
+     "borde_bajo": 0.1318,
+     "obstaculo": 0.0075
+    }
+   },
+   "oclusion": {
+    "libre_falso": 0.0079,
+    "obstaculo_falso": 0.1713,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0063,
+     "borde_bajo": 0.0925,
+     "obstaculo": 0.0053
+    }
+   }
+  },
+  "real_val": {
+   "libre_falso": 0.1775,
+   "obstaculo_falso": 0.8028,
+   "pix_obst": 348583,
+   "pix_libre": 3724207
+  }
+ },
+ "despues": {
+  "test_nuevo": {
+   "None": {
+    "libre_falso": 0.0137,
+    "obstaculo_falso": 0.0098,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0041,
+     "borde_bajo": 0.0712,
+     "obstaculo": 0.0355
+    }
+   },
+   "oscuro": {
+    "libre_falso": 0.0158,
+    "obstaculo_falso": 0.0098,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0046,
+     "borde_bajo": 0.061,
+     "obstaculo": 0.043
+    }
+   },
+   "brillante": {
+    "libre_falso": 0.0264,
+    "obstaculo_falso": 0.0125,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0152,
+     "borde_bajo": 0.1326,
+     "obstaculo": 0.0478
+    }
+   },
+   "ruido": {
+    "libre_falso": 0.0193,
+    "obstaculo_falso": 0.0069,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0078,
+     "borde_bajo": 0.1132,
+     "obstaculo": 0.0428
+    }
+   },
+   "desenfoque": {
+    "libre_falso": 0.0196,
+    "obstaculo_falso": 0.0092,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0082,
+     "borde_bajo": 0.1385,
+     "obstaculo": 0.0406
+    }
+   },
+   "oclusion": {
+    "libre_falso": 0.0102,
+    "obstaculo_falso": 0.0895,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0039,
+     "borde_bajo": 0.0631,
+     "obstaculo": 0.0232
+    }
+   }
+  },
+  "val": {
+   "None": {
+    "libre_falso": 0.0046,
+    "obstaculo_falso": 0.0135,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0019,
+     "borde_bajo": 0.0631,
+     "obstaculo": 0.0062
+    }
+   },
+   "oscuro": {
+    "libre_falso": 0.0064,
+    "obstaculo_falso": 0.0165,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0015,
+     "borde_bajo": 0.0631,
+     "obstaculo": 0.0141
+    }
+   },
+   "brillante": {
+    "libre_falso": 0.0079,
+    "obstaculo_falso": 0.01,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0041,
+     "borde_bajo": 0.1046,
+     "obstaculo": 0.0088
+    }
+   },
+   "ruido": {
+    "libre_falso": 0.019,
+    "obstaculo_falso": 0.0096,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0172,
+     "borde_bajo": 0.1154,
+     "obstaculo": 0.0151
+    }
+   },
+   "desenfoque": {
+    "libre_falso": 0.0095,
+    "obstaculo_falso": 0.0124,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0043,
+     "borde_bajo": 0.1589,
+     "obstaculo": 0.0095
+    }
+   },
+   "oclusion": {
+    "libre_falso": 0.0089,
+    "obstaculo_falso": 0.1026,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0067,
+     "borde_bajo": 0.0694,
+     "obstaculo": 0.0092
+    }
+   }
+  },
+  "test": {
+   "None": {
+    "libre_falso": 0.0053,
+    "obstaculo_falso": 0.0097,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0028,
+     "borde_bajo": 0.126,
+     "obstaculo": 0.0029
+    }
+   },
+   "oscuro": {
+    "libre_falso": 0.0058,
+    "obstaculo_falso": 0.0116,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0025,
+     "borde_bajo": 0.1336,
+     "obstaculo": 0.0057
+    }
+   },
+   "brillante": {
+    "libre_falso": 0.0177,
+    "obstaculo_falso": 0.0074,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0118,
+     "borde_bajo": 0.1617,
+     "obstaculo": 0.0257
+    }
+   },
+   "ruido": {
+    "libre_falso": 0.0134,
+    "obstaculo_falso": 0.0086,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0077,
+     "borde_bajo": 0.2519,
+     "obstaculo": 0.0111
+    }
+   },
+   "desenfoque": {
+    "libre_falso": 0.0096,
+    "obstaculo_falso": 0.0095,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.006,
+     "borde_bajo": 0.1946,
+     "obstaculo": 0.0046
+    }
+   },
+   "oclusion": {
+    "libre_falso": 0.0064,
+    "obstaculo_falso": 0.0997,
+    "recall_obstaculo_por_clase": {
+     "planta_maceta": 0.0035,
+     "borde_bajo": 0.115,
+     "obstaculo": 0.0067
+    }
+   }
+  },
+  "real_val": {
+   "libre_falso": 0.6907,
+   "obstaculo_falso": 0.2155,
+   "pix_obst": 348583,
+   "pix_libre": 3724207
+  }
+ },
+ "historial": [
+  {
+   "epoca": 1,
+   "perdida": 0.8115,
+   "puntaje": 0.9002
+  },
+  {
+   "epoca": 2,
+   "perdida": 0.4232,
+   "puntaje": 0.8711
+  },
+  {
+   "epoca": 3,
+   "perdida": 0.3429,
+   "puntaje": 0.7605
+  },
+  {
+   "epoca": 4,
+   "perdida": 0.2885,
+   "puntaje": 0.8585
+  },
+  {
+   "epoca": 5,
+   "perdida": 0.2719,
+   "puntaje": 0.8446
+  },
+  {
+   "epoca": 6,
+   "perdida": 0.2469,
+   "puntaje": 0.8248
+  },
+  {
+   "epoca": 7,
+   "perdida": 0.2211,
+   "puntaje": 0.7886
+  },
+  {
+   "epoca": 8,
+   "perdida": 0.2145,
+   "puntaje": 0.8505
+  }
+ ],
+ "meta": {
+  "nombre": "trav_cam2_20261027",
+  "afinado_de": "seg_10h_20261021_0213.mejor.pt",
+  "tipo": "transitabilidad (libre/obstaculo)",
+  "peso_peligro": 4.0,
+  "fecha": "2026-10-27 18:14",
+  "NO_DEMOSTRADO": "Solo imágenes sintéticas; sin evaluación en fotos reales."
+ }
+}

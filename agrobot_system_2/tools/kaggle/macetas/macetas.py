@@ -1,4 +1,4 @@
-# AGROBOT · DETECTOR DE MACETAS (2026-10-22) — para que el robot las vea, NO las pise y las escanee con la cámara.
+# AGROBOT · DETECTOR DE MACETAS (2026-10-22; v2 2026-10-23 con fotos de la cámara del robot en la sala real, test_robot aparte) — para que el robot las vea, NO las pise y las escanee con la cámara.
 # Combina (1) COCO 2017 «potted plant» (cajas a mano, miles de fotos), (2) los datos propios del operador (fotos, videos de webcam y la
 # cámara del robot) con cajas de YOLO-World revisadas, (3) negativos de interior (suelo, muebles, zapatos). Entrena YOLO11n (rápido en la
 # Jetson) y mide aparte en las imágenes PROPIAS, que es lo que importa. Salida: /kaggle/working/maceta_det_best.pt + metricas.json.
@@ -10,7 +10,7 @@ subprocess.run([sys.executable, "-m", "pip", "install", "-q", "ultralytics"], ch
 import cv2
 ENTRADA, RES = Path("/kaggle/input"), Path("/kaggle/working")
 DS = RES / "macetas"
-for sp in ("train", "val", "test_propio"):
+for sp in ("train", "val", "test_propio", "test_robot"):
     (DS / "images" / sp).mkdir(parents=True, exist_ok=True); (DS / "labels" / sp).mkdir(parents=True, exist_ok=True)
 
 def buscar(pred):
@@ -53,14 +53,16 @@ propio = buscar(lambda p: p.is_dir() and "macetas-propias" in p.name.lower() and
 print("datos propios:", propio)
 if propio is not None:
     for f in sorted((propio / "images").glob("*.jpg")):
-        grupo = f.stem.rsplit("_", 1)[0]                              # mismo video = mismo grupo: nada de fotogramas vecinos en train y test
+        robot = f.stem.startswith("r_")                               # cámara del robot (2026-10-23): la sala real del ensayo
+        # mismo video / misma sesión del robot = mismo grupo: nada de fotogramas vecinos en train y test
+        grupo = "_".join(f.stem.split("_")[:2]) if robot else f.stem.rsplit("_", 1)[0]
         h = int(hashlib.md5(grupo.encode()).hexdigest(), 16) % 10
-        sp = "test_propio" if h < 2 else "train"
+        sp = ("test_robot" if h < 3 else "train") if robot else ("test_propio" if h < 2 else "train")
         lab = propio / "labels" / (f.stem + ".txt")
         cajas = [tuple(map(float, l.split()[1:5])) for l in lab.read_text().splitlines() if len(l.split()) == 5] if lab.exists() else []
         img = cv2.imread(str(f))
         if img is not None:
-            for rep in range(3 if sp == "train" else 1):              # los propios pesan más: son la cámara y las macetas reales
+            for rep in range((5 if robot else 3) if sp == "train" else 1):   # los propios pesan más; los del robot, más aún
                 guardar(img, sp, f"prop_{f.stem}_{rep}", cajas)
             cuenta[f"propio_{sp}"] += 1
 # ---------------- 3) NEGATIVOS DE INTERIOR ----------------
@@ -72,20 +74,25 @@ if neg is not None:
             guardar(img, "test_propio" if j % 5 == 0 else "train", f"negint_{f.stem}", []); cuenta["negativos_interior"] += 1
 print("composición:", dict(cuenta), flush=True)
 (DS / "datos.yaml").write_text(f"path: {DS}\ntrain: images/train\nval: images/val\ntest: images/test_propio\nnames:\n  0: maceta\n")
+(DS / "robot.yaml").write_text(f"path: {DS}\ntrain: images/train\nval: images/val\ntest: images/test_robot\nnames:\n  0: maceta\n")
 # ---------------- ENTRENAMIENTO ----------------
 from ultralytics import YOLO
 m = YOLO("yolo11n.pt")
-m.train(data=str(DS / "datos.yaml"), epochs=60, imgsz=640, batch=32, patience=15, device=0, project=str(RES / "runs"), name="maceta",
+m.train(data=str(DS / "datos.yaml"), epochs=100, imgsz=640, batch=32, patience=25, device=0, project=str(RES / "runs"), name="maceta",
         exist_ok=True, verbose=False, mosaic=1.0, mixup=0.05, hsv_v=0.5, degrees=5)
 best = RES / "runs" / "maceta" / "weights" / "best.pt"
 shutil.copy(best, RES / "maceta_det_best.pt")
 mb = YOLO(str(best))
 r_coco = mb.val(data=str(DS / "datos.yaml"), split="val", project=str(RES / "runs"), name="val_coco", exist_ok=True, verbose=False)
 r_prop = mb.val(data=str(DS / "datos.yaml"), split="test", project=str(RES / "runs"), name="test_propio", exist_ok=True, verbose=False)
+r_rob = mb.val(data=str(DS / "robot.yaml"), split="test", project=str(RES / "runs"), name="test_robot", exist_ok=True, verbose=False) \
+    if any((DS / "images" / "test_robot").glob("*.jpg")) else None
 fp = sum(1 for f in (DS / "images" / "test_propio").glob("negint_*.jpg") if len(mb.predict(str(f), conf=0.4, verbose=False)[0].boxes))
 n_neg = len(list((DS / "images" / "test_propio").glob("negint_*.jpg")))
 met = {"composicion": dict(cuenta), "coco_val_map50": float(r_coco.box.map50), "propio_map50": float(r_prop.box.map50),
-       "propio_precision": float(r_prop.box.mp), "propio_recall": float(r_prop.box.mr), "falsos_positivos_fondos_interior": f"{fp}/{n_neg}"}
+       "propio_precision": float(r_prop.box.mp), "propio_recall": float(r_prop.box.mr),
+       "robot_map50": float(r_rob.box.map50) if r_rob else None, "robot_precision": float(r_rob.box.mp) if r_rob else None,
+       "robot_recall": float(r_rob.box.mr) if r_rob else None, "falsos_positivos_fondos_interior": f"{fp}/{n_neg}"}
 (RES / "metricas.json").write_text(json.dumps(met, indent=1, ensure_ascii=False))
 print("\nMÉTRICAS:", json.dumps(met, indent=1, ensure_ascii=False))
 print("HECHO: /kaggle/working/maceta_det_best.pt (clase 0 = maceta)")

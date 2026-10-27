@@ -1,0 +1,13 @@
+{
+ "datos": {
+  "clases": 110,
+  "train": 5709,
+  "val": 1000
+ },
+ "top1": 0.929,
+ "top5": 0.975,
+ "segundos": 1447,
+ "modelo": "yolo11n-cls.pt",
+ "NO_DEMOSTRADO": "validación con fotos reservadas de los mismos datasets; no con tus plantas ni la cámara del robot.",
+ "licencias": "Oriental Medicinal Herb: CC-BY-NC-SA-4.0 (solo uso no comercial)."
+}

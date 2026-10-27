@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AgroBot — Command Dashboard</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2300bd4f'/%3E%3Cpath d='M9 21c0-6 4-10 13-11-1 8-5 12-11 12m-2-1 5-5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+/* Tema: «hud» (estilo Stark, por defecto) o «sol» (el claro de siempre, para leer la tablet a pleno sol). Se decide antes de pintar. */
+(function () { var t = "hud"; try { t = localStorage.getItem("agrobot-tema") || "hud"; } catch (e) {} document.documentElement.setAttribute("data-theme", t === "sol" ? "sol" : "hud"); })();
+</script>
 <style>
 /* ============================================================
    AgroBot · Command — tema "Agricultura 5.0".
@@ -177,7 +181,12 @@ body.nav-colapsada .nav-colapsar { justify-content: center; font-size: 0; gap: 0
 .brand .status { font-size: 13.5px; color: var(--ink-soft); margin-top: 9px; display: flex; align-items: center; gap: 6px; }
 .brand .status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); animation: blink 2s infinite; }
 
-.nav-tabs { display: flex; flex-direction: column; gap: 3px; padding: 0 10px; flex: 1; }
+.nav-tabs { display: flex; flex-direction: column; gap: 3px; padding: 0 6px 0 10px; flex: 1; min-height: 0; overflow-y: scroll; overflow-x: hidden;
+            scrollbar-width: thin; scrollbar-color: var(--accent) rgba(45, 255, 122, .14); scroll-behavior: smooth; }     /* siempre visible: se ve el carril aunque quepan todas */
+.nav-tabs::-webkit-scrollbar { width: 8px; }
+.nav-tabs::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 4px; box-shadow: 0 0 8px var(--accent-glow); min-height: 36px; }
+.nav-tabs::-webkit-scrollbar-track { background: rgba(127, 127, 127, .16); border-radius: 4px; border: 1px solid var(--line); }
+.nav-tabs .nav-btn { flex: none; }
 .nav-btn {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 12px; border-radius: 10px; border: none;
@@ -620,6 +629,175 @@ input[type="text"], select { font-family: inherit; }
 @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.1); } }
 @media (prefers-reduced-motion: reduce) { .estop { animation: none; } }
 </style>
+<style id="hud-theme">
+/* ============================================================
+   TEMA HUD (2026-10-27) — estilo Stark. Se activa con <html data-theme="hud"> (por defecto); «sol» deja el tema claro intacto.
+   Sin fuentes externas (la red del AP no tiene internet): pila de sistema con aire técnico.
+   ============================================================ */
+html[data-theme="hud"] {
+  --bg: #030a06; --panel: #07170f; --panel-2: #0a2216; --panel-3: #0f2e1d;
+  --line: #165a34; --line-fuerte: #23874f;
+  --ink: #dcffe9; --ink-soft: #86c4a0;
+  --accent: #2bff7a; --accent-ink: #8dffb8; --accent-2: #ffb02e;
+  --accent-glow: rgba(45, 255, 122, .45); --accent-soft: rgba(45, 255, 122, .12);
+  --warn: #ffb02e; --warn-soft: rgba(255, 176, 46, .14); --warn-ink: #ffc766;
+  --crit: #ff3b4e; --crit-ink: #ff7a86; --crit-soft: rgba(255, 59, 78, .16);
+  --info: #3fd0ff; --info-soft: rgba(39, 168, 255, .14);
+  --lora: #b07bff; --lora-soft: rgba(176, 123, 255, .16);
+  --radius: 3px;
+  --sombra: 0 0 0 1px rgba(45, 255, 122, .05), 0 10px 28px -18px #000;
+  --sombra-alta: 0 0 20px -6px rgba(45, 255, 122, .4);
+  --hud-font: "Rajdhani", "Bahnschrift", "DIN Alternate", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html[data-theme="hud"] body {
+  font-family: var(--hud-font); letter-spacing: .015em;
+  background:
+    radial-gradient(900px 520px at 8% -12%, rgba(45, 255, 122, .11), transparent 60%),
+    radial-gradient(800px 480px at 104% 0%, rgba(255, 176, 46, .06), transparent 56%),
+    linear-gradient(rgba(45, 255, 122, .04) 1px, transparent 1px) 0 0 / 44px 44px,
+    linear-gradient(90deg, rgba(45, 255, 122, .04) 1px, transparent 1px) 0 0 / 44px 44px,
+    var(--bg);
+}
+html[data-theme="hud"] ::-webkit-scrollbar-thumb { background: var(--line-fuerte); }
+html[data-theme="hud"] nav.sidebar, html[data-theme="hud"] header.topbar { background: rgba(3, 16, 9, .86); border-color: var(--line); }
+html[data-theme="hud"] header.topbar { box-shadow: 0 1px 0 rgba(45, 255, 122, .25), 0 8px 24px -16px rgba(45, 255, 122, .5); position: relative; }
+html[data-theme="hud"] header.topbar::after {
+  content: ""; position: absolute; left: 0; bottom: -1px; height: 1px; width: 30%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: hud-barrido 6s linear infinite;
+}
+@keyframes hud-barrido { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+html[data-theme="hud"] header.topbar h2 { white-space: nowrap; }
+@media (max-width: 1100px) {
+  html[data-theme="hud"] header.topbar h2 .largo { display: none; }
+  header.topbar { height: auto; min-height: 64px; flex-wrap: wrap; row-gap: 6px; padding: 8px 16px; }
+  .pills { flex-wrap: wrap; justify-content: flex-end; }
+}
+html[data-theme="hud"] header.topbar h2 { text-transform: uppercase; letter-spacing: .22em; text-shadow: 0 0 12px var(--accent-glow); }
+html[data-theme="hud"] .brand h1 { text-transform: uppercase; letter-spacing: .2em; text-shadow: 0 0 10px var(--accent-glow); }
+/* reactor: el logo de la barra lateral */
+html[data-theme="hud"] .brand .badge {
+  border-radius: 50%; background: radial-gradient(circle, #eafff2 0 14%, var(--accent) 15% 34%, #073d1d 35% 58%, transparent 59%), conic-gradient(from 0deg, #0b4a24, var(--accent), #0b4a24, var(--accent), #0b4a24);
+  box-shadow: 0 0 22px var(--accent-glow), inset 0 0 12px rgba(45, 255, 122, .5); animation: hud-reactor 5s ease-in-out infinite;
+}
+html[data-theme="hud"] .brand .badge svg { opacity: 0; }
+@keyframes hud-reactor { 0%, 100% { box-shadow: 0 0 14px var(--accent-glow), inset 0 0 8px rgba(45, 255, 122, .4); } 50% { box-shadow: 0 0 30px var(--accent), inset 0 0 16px rgba(45, 255, 122, .7); } }
+html[data-theme="hud"] .nav-btn { text-transform: uppercase; letter-spacing: .08em; font-size: 14.5px; border-radius: 2px; }
+html[data-theme="hud"] .nav-btn:hover { background: rgba(45, 255, 122, .08); color: var(--accent-ink); }
+html[data-theme="hud"] .nav-btn.active { background: linear-gradient(90deg, rgba(45, 255, 122, .22), transparent); color: var(--accent-ink); box-shadow: inset 3px 0 0 var(--accent); text-shadow: 0 0 8px var(--accent-glow); }
+/* tarjetas: marco fino y esquinas de mira */
+html[data-theme="hud"] .card { position: relative; background: linear-gradient(180deg, rgba(10, 34, 20, .92), rgba(5, 22, 13, .92)); border-color: var(--line); }
+html[data-theme="hud"] .card:hover { border-color: var(--line-fuerte); box-shadow: var(--sombra-alta); }
+html[data-theme="hud"] .card::before, html[data-theme="hud"] .card::after {
+  content: ""; position: absolute; width: 14px; height: 14px; pointer-events: none; border: 2px solid var(--accent); z-index: 6; opacity: .85;
+}
+html[data-theme="hud"] .card::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+html[data-theme="hud"] .card::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+html[data-theme="hud"] .card h3 { color: var(--accent-ink); letter-spacing: .16em; text-shadow: 0 0 8px rgba(45, 255, 122, .35); }
+html[data-theme="hud"] .card h3::before { content: "◢"; font-size: 10px; color: var(--accent); }
+html[data-theme="hud"] .btn, html[data-theme="hud"] .map-tool, html[data-theme="hud"] .modo-btn {
+  background: rgba(9, 32, 19, .85); border: 1px solid var(--line-fuerte); color: var(--ink); border-radius: 2px;
+  text-transform: uppercase; letter-spacing: .08em; font-size: 13.5px;
+}
+html[data-theme="hud"] .btn:hover, html[data-theme="hud"] .map-tool:hover, html[data-theme="hud"] .modo-btn:hover { border-color: var(--accent); color: var(--accent-ink); background: rgba(45, 255, 122, .12); box-shadow: 0 0 14px -4px var(--accent-glow); }
+html[data-theme="hud"] .btn.primary, html[data-theme="hud"] .modo-btn.active, html[data-theme="hud"] .map-tool.activo {
+  background: linear-gradient(180deg, rgba(45, 255, 122, .30), rgba(45, 255, 122, .12)); border-color: var(--accent); color: #eafff2; text-shadow: 0 0 8px var(--accent-glow); box-shadow: 0 0 14px -5px var(--accent-glow);
+}
+html[data-theme="hud"] .btn.primary:hover { background: rgba(45, 255, 122, .38); color: #fff; }
+html[data-theme="hud"] .btn.peligro { border-color: rgba(255, 59, 78, .6); color: var(--crit-ink); }
+html[data-theme="hud"] .btn.peligro:hover { background: rgba(255, 59, 78, .85); color: #fff; border-color: var(--crit); box-shadow: 0 0 16px -4px var(--crit); }
+html[data-theme="hud"] .pill { border-radius: 2px; text-transform: uppercase; letter-spacing: .08em; font-size: 12.5px; background: rgba(6, 24, 15, .9); }
+html[data-theme="hud"] .pill.ok { border-color: rgba(45, 255, 122, .55); }
+html[data-theme="hud"] .pill.warn { border-color: rgba(255, 176, 46, .6); }
+html[data-theme="hud"] .pill.crit { border-color: rgba(255, 59, 78, .65); }
+html[data-theme="hud"] .pill .dot { border-color: #3d7a56; }
+html[data-theme="hud"] .dist-celda.ok { border-color: rgba(45, 255, 122, .5); }
+html[data-theme="hud"] .dist-celda.aviso { border-color: rgba(255, 176, 46, .6); }
+html[data-theme="hud"] .dist-celda.peligro { border-color: rgba(255, 59, 78, .65); }
+html[data-theme="hud"] input[type="text"], html[data-theme="hud"] input[type="number"], html[data-theme="hud"] input[type="password"], html[data-theme="hud"] select, html[data-theme="hud"] textarea {
+  background: var(--panel-2); color: var(--ink); border: 1px solid var(--line-fuerte); border-radius: 2px;
+}
+html[data-theme="hud"] .mono { letter-spacing: .02em; }
+html[data-theme="hud"] .toast { background: rgba(5, 22, 13, .96); color: var(--ink); border: 1px solid var(--line-fuerte); border-radius: 2px; }
+html[data-theme="hud"] .lidar-caption { background: rgba(2, 14, 8, .78); color: var(--accent-ink); border-color: var(--line-fuerte); border-radius: 2px; }
+html[data-theme="hud"] .lidar-wrap { background: radial-gradient(circle at 50% 50%, #0a2a1a, #030d08 75%); border-color: var(--line-fuerte); border-radius: 2px; }
+html[data-theme="hud"] .video-wrap { border-color: var(--line-fuerte); border-radius: 2px; }
+html[data-theme="hud"] .gallery-card .g-conf { background: rgba(2, 14, 8, .85); }
+html[data-theme="hud"] code { background: var(--panel-3); color: var(--accent-ink); }
+
+/* botón de tema */
+#btn-tema { cursor: pointer; font-family: inherit; }
+#btn-tema:hover { border-color: var(--accent); color: var(--accent-ink); }
+
+/* ---------- CÁMARA GRANDE con minimapa (esquina inferior izquierda) y LIDAR pequeño (esquina inferior derecha) ---------- */
+.cam-radar { display: block; margin-bottom: 16px; }
+.cam-radar .cam-card { display: block; position: relative; }
+.cam-radar .cam-card .video-wrap {
+  container-type: inline-size; aspect-ratio: auto; flex: none; width: 100%; min-height: 0;
+  height: clamp(380px, 74vh, 880px); max-height: calc(100vh - 150px);
+  background: #010803; border-radius: 0; border-width: 0;
+}
+.cam-radar .cam-card .video-wrap img { object-fit: contain; }
+.hud-stage-fx { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+html[data-theme="hud"] .hud-stage-fx {
+  background:
+    repeating-linear-gradient(0deg, rgba(45, 255, 122, .035) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(0, 12, 6, .55) 100%);
+}
+.hud-reticula { position: absolute; left: 50%; top: 50%; width: 74px; height: 74px; margin: -37px 0 0 -37px; pointer-events: none; z-index: 3; opacity: 0; }
+html[data-theme="hud"] .hud-reticula { opacity: .55; }
+.hud-reticula::before, .hud-reticula::after { content: ""; position: absolute; background: var(--accent); }
+.hud-reticula::before { left: 50%; top: 0; bottom: 0; width: 1px; margin-left: -.5px; -webkit-mask: linear-gradient(transparent 0 38%, #000 38% 62%, transparent 62%) ; mask: linear-gradient(transparent 0 38%, #000 38% 62%, transparent 62%); }
+.hud-reticula::after { top: 50%; left: 0; right: 0; height: 1px; margin-top: -.5px; -webkit-mask: linear-gradient(90deg, transparent 0 38%, #000 38% 62%, transparent 62%); mask: linear-gradient(90deg, transparent 0 38%, #000 38% 62%, transparent 62%); }
+.hud-reticula i { position: absolute; width: 12px; height: 12px; border: 2px solid var(--accent); }
+.hud-reticula i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+.hud-reticula i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+.hud-reticula i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+.hud-reticula i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+
+.hud-mini, .hud-lidar {
+  --hud-d: clamp(128px, 20vw, 232px); --hud-d: clamp(128px, 21cqw, 232px);
+  position: absolute; z-index: 6; width: var(--hud-d);
+}
+.hud-mini { left: 14px; bottom: 14px; } .hud-lidar { right: 14px; top: 14px; }       /* el STOP flotante vive abajo a la derecha: el LIDAR va arriba */
+html[data-theme] .hud-lidar .hud-lidar-wrap { border-radius: 50%; }
+.hud-mini canvas { display: block; width: var(--hud-d); height: var(--hud-d); border-radius: 50%; cursor: pointer; }
+.hud-mini, .hud-lidar .hud-lidar-wrap { filter: drop-shadow(0 0 10px rgba(0, 0, 0, .6)); }
+.hud-lidar .hud-lidar-wrap { width: var(--hud-d); height: var(--hud-d); aspect-ratio: 1; min-height: 0 !important; border-radius: 50%; border: 2px solid var(--line-fuerte); position: relative; overflow: hidden; }
+html[data-theme="hud"] .hud-lidar .hud-lidar-wrap { border-color: rgba(45, 255, 122, .6); box-shadow: 0 0 18px -4px var(--accent-glow), inset 0 0 22px rgba(45, 255, 122, .12); }
+html[data-theme="hud"] .hud-lidar .hud-lidar-wrap::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(45, 255, 122, .28), transparent 22%, transparent 100%); animation: hud-giro 3.2s linear infinite;
+}
+@keyframes hud-giro { to { transform: rotate(360deg); } }
+.hud-lidar .lidar-caption { position: static; margin-top: 6px; line-height: 1.25; text-align: center; font-size: 11.5px; padding: 3px 6px; background: rgba(2, 14, 8, .72); color: var(--ink-soft); border: 1px solid var(--line); }
+.hud-mini-ctl, .hud-lidar-ctl { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px; font-size: 12px; }
+.hud-mini-ctl button { width: 24px; height: 22px; padding: 0; line-height: 1; font-size: 15px; cursor: pointer; border: 1px solid var(--line-fuerte); background: rgba(2, 14, 8, .75); color: var(--accent-ink); border-radius: 2px; }
+.hud-mini-ctl button:hover { border-color: var(--accent); background: rgba(45, 255, 122, .15); }
+.hud-mini-ctl span, .hud-lidar-ctl span { color: var(--accent-ink); min-width: 38px; text-align: center; }
+.hud-lidar-ctl input[type="range"] { width: calc(var(--hud-d) - 62px); }
+.hud-rotulo { position: absolute; z-index: 6; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent-ink); opacity: .8; pointer-events: none; text-shadow: 0 0 6px var(--accent-glow); }
+.cam-radar .cam-card .video-badge { top: 12px; left: 14px; border-radius: 2px; border: 1px solid var(--line-fuerte); }
+@media (max-width: 900px) {
+  .cam-radar .cam-card .video-wrap { height: auto; aspect-ratio: 4 / 3; max-height: none; }
+  .hud-mini, .hud-lidar { --hud-d: clamp(84px, 26vw, 140px); }
+  .hud-mini { left: 8px; bottom: 8px; } .hud-lidar { right: 8px; top: 8px; }
+  .hud-lidar .lidar-caption { display: none; }                      /* el deslizador del alcance se queda: sin él no se puede acercar el radar en pantallas chicas */
+  .hud-lidar-ctl { margin-top: 4px; gap: 4px; }
+  .hud-lidar-ctl span { min-width: 30px; font-size: 11px; }
+  .hud-lidar-ctl input[type="range"] { width: max(62px, calc(var(--hud-d) - 40px)); }
+}
+html[data-theme="hud"] #openFieldCapture { background: rgba(45, 255, 122, .14) !important; border: 1px solid var(--accent) !important; border-radius: 2px !important; color: var(--accent-ink) !important; text-transform: uppercase; letter-spacing: .08em; font-size: 12.5px; box-shadow: 0 0 14px -4px var(--accent-glow); }
+html[data-theme="hud"] .map-hint { background: rgba(2, 14, 8, .82); color: var(--accent-ink); border: 1px solid var(--line-fuerte); border-radius: 2px; }
+html[data-theme="hud"] nav.sidebar, html[data-theme="hud"] .toast-container .toast { color: var(--ink); }
+/* los rótulos sobre la cámara son siempre oscuros: se leen igual con el tema claro */
+.hud-lidar .lidar-caption { background: rgba(2, 14, 8, .78); color: #a6e6bf; border-color: rgba(35, 135, 79, .8); }
+.hud-mini-ctl span, .hud-lidar-ctl span { color: #8dffb8; }
+.hud-lidar-ctl input[type="range"]::-webkit-slider-runnable-track { background: rgba(2, 14, 8, .8); border-color: rgba(35, 135, 79, .8); }
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="hud"] header.topbar::after, html[data-theme="hud"] .brand .badge, html[data-theme="hud"] .hud-lidar .hud-lidar-wrap::after { animation: none; }
+}
+</style>
 </head>
 <body>
 
@@ -669,6 +847,7 @@ input[type="text"], select { font-family: inherit; }
       <div class="pill" id="pill-lidar" role="status"><span class="dot"></span><span class="pill-txt">LIDAR</span></div>
       <div class="pill" id="pill-lora" role="status"><span class="dot"></span><span class="pill-txt">ESP32 LoRa</span></div>
       <div class="pill" id="pill-seguridad" role="button" tabindex="0" title="Modo seguro"><span class="dot"></span><span class="pill-txt">Seguridad</span></div>
+      <button type="button" class="pill" id="btn-tema" title="Cambiar entre el tema HUD y el tema claro para leer a pleno sol"><span class="pill-txt">TEMA HUD</span></button>
       <span class="mono" id="clock" style="font-size:14px; color:var(--ink-soft);">--:--:--</span>
     </div>
   </header>
@@ -737,23 +916,26 @@ input[type="text"], select { font-family: inherit; }
         </div>
       </div>
 
-      <!-- Cámara + Radar -->
+      <!-- Cámara grande + minimapa (abajo izquierda) + LIDAR pequeño (abajo derecha) -->
       <div class="cam-radar">
-        <div class="card cam-card" style="padding:0; overflow:hidden;">
+        <div class="card cam-card hud-stage" style="padding:0; overflow:hidden;">
           <div class="video-wrap" id="video-wrap">
             <div class="pest-banner" id="pest-banner">
               <span id="pest-banner-text">¡Plaga detectada!</span>
             </div>
             <div class="video-badge"><span class="dot"></span><span id="video-badge-text">EN VIVO</span></div>
             <img id="video" alt="video en vivo de la cámara del robot">
-          </div>
-        </div>
-        <div class="card" style="padding:0; overflow:hidden;">
-          <div style="padding:16px 16px 0;"><h3 style="margin-bottom:8px; margin-top:0;">LIDAR</h3></div>
-          <div class="lidar-wrap" style="min-height:380px;"><canvas id="radar-canvas-dashboard"></canvas><div class="lidar-caption" id="radar-caption-dashboard">sin datos</div></div>
-          <div class="slider-row" style="margin:10px 16px 16px;">
-            <div class="label-row"><span>ALCANCE</span><span class="v mono" id="radar-range-dash-val">4.0 m</span></div>
-            <input type="range" min="0.5" max="16" step="0.5" value="4" id="radar-range-dash">
+            <div class="hud-stage-fx" aria-hidden="true"></div>
+            <div class="hud-reticula" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <div class="hud-mini" id="hud-minimap" title="Minimapa · clic: alternar «rumbo arriba» / «norte arriba»">
+              <canvas id="minimap-canvas" width="232" height="232" aria-label="Minimapa del robot"></canvas>
+              <div class="hud-mini-ctl"><button type="button" id="mini-zoom-out" aria-label="Alejar el minimapa">−</button><span class="mono" id="mini-escala">6 m</span><button type="button" id="mini-zoom-in" aria-label="Acercar el minimapa">+</button></div>
+            </div>
+            <div class="hud-lidar" id="hud-lidar">
+              <div class="lidar-wrap hud-lidar-wrap"><canvas id="radar-canvas-dashboard"></canvas></div>
+              <div class="lidar-caption" id="radar-caption-dashboard">sin datos</div>
+              <div class="hud-lidar-ctl"><input type="range" min="0.5" max="16" step="0.5" value="4" id="radar-range-dash" aria-label="Alcance del LIDAR"><span class="mono" id="radar-range-dash-val">4.0 m</span></div>
+            </div>
           </div>
         </div>
       </div>
@@ -989,6 +1171,13 @@ input[type="text"], select { font-family: inherit; }
             <button class="btn primary" id="btn-mision-on">🌱 Misión plantas en maceta</button>
             <button class="btn peligro" id="btn-mision-off">■ Detener misión</button>
             <span class="hint" id="mision-estado">Explora y mapea; al ver una maceta enciende el LED, se acerca, la escanea desde varias vistas grabando video, y sigue.</span>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; align-items:center;">
+            <button class="btn primary" data-mision="mapear" title="Recorre, construye el mapa, vuelve al punto de salida y lo guarda">🗺️ Explorar y mapear</button>
+            <button class="btn primary" data-mision="dataset" title="Va despacio y guarda fotos de cada planta con sus metadatos">📸 Dataset de plantas</button>
+            <button class="btn primary" data-mision="inspeccion" title="Revisa cada planta con el clasificador de plagas y deja un informe">🔍 Inspección</button>
+            <button class="btn peligro" id="btn-misiones-off">■ Detener</button>
+            <span class="hint" id="misiones-estado">Misiones específicas: elige una.</span>
           </div>
           <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:14px;">
             <span>Avances: <b class="mono" id="expl-pulsos">0</b></span>
@@ -1643,7 +1832,7 @@ input[type="text"], select { font-family: inherit; }
       $(btn.dataset.tab).classList.add("active");
       abrirNav(false);   // en móvil, elegir pestaña cierra el cajón
       if (btn.dataset.tab === "tab-sistema") { resizeRadar(); dibujarRadarSiVisible(); }
-      if (btn.dataset.tab === "tab-dashboard") { resizeRadarDash(); dibujarRadarSiVisible(); }
+      if (btn.dataset.tab === "tab-dashboard") { resizeRadarDash(); resizeMini(); dibujarRadarSiVisible(); drawMiniMapa(); }
       if (btn.dataset.tab === "tab-nav") resizeMap();
       if (btn.dataset.tab === "tab-sim") simRefrescar();
       if (btn.dataset.tab === "tab-asistido") {
@@ -2081,7 +2270,8 @@ input[type="text"], select { font-family: inherit; }
     mapaLienzo.width = m.width; mapaLienzo.height = m.height;
     const c = mapaLienzo.getContext("2d");
     const img = c.createImageData(m.width, m.height);
-    const libre = [250, 251, 249], ocupado = [38, 52, 45];
+    const hud = document.documentElement.dataset.theme === "hud";     // en HUD: suelo azul oscuro y paredes cian, como un plano holográfico
+    const libre = hud ? [8, 50, 28] : [250, 251, 249], ocupado = hud ? [96, 255, 150] : [38, 52, 45];
     for (let row = 0; row < m.height; row++) {
       for (let col = 0; col < m.width; col++) {
         const v = m.data[row * m.width + col];
@@ -2098,6 +2288,7 @@ input[type="text"], select { font-family: inherit; }
     cg.imageSmoothingEnabled = true; cg.imageSmoothingQuality = "high";
     cg.drawImage(mapaLienzo, 0, 0, m.width * F, m.height * F);
     drawMap();
+    drawMiniMapa();
   }
 
   // Scan del LIDAR en coordenadas del mapa (10 Hz). Se guardan los últimos
@@ -2114,7 +2305,7 @@ input[type="text"], select { font-family: inherit; }
   function pedirDibujoMapa() {
     if (dibujoPendiente) return;
     dibujoPendiente = true;
-    requestAnimationFrame(() => { dibujoPendiente = false; drawMap(); });
+    requestAnimationFrame(() => { dibujoPendiente = false; drawMap(); drawMiniMapa(); });
   }
   // La pose de slam_toolbox (marco map) manda si es fresca: la del EKF está
   // en `odom`, que deriva respecto al mapa y descuadraba robot y scan.
@@ -2230,6 +2421,149 @@ input[type="text"], select { font-family: inherit; }
     ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(-6, 7); ctx.lineTo(6, 7); ctx.closePath();
     ctx.fill(); ctx.stroke();
     ctx.restore();
+  }
+
+
+  // ---------------------------------------------------------------
+  // MINIMAPA estilo juego (2026-10-27): círculo sobre la cámara, centrado en el robot, «rumbo arriba» por defecto (el mapa gira, el robot mira
+  // siempre hacia arriba) o «norte arriba» con un clic. Dibuja lo que ya hay: mapa del SLAM (mapaLienzo), scan vivo, patrulla y plantas.
+  // ---------------------------------------------------------------
+  const miniCanvas = $("minimap-canvas");
+  const MINI_RADIOS_M = [3, 6, 12, 24];
+  let miniIdx = 1, miniRumboArriba = true;
+  try {
+    const g = parseInt(localStorage.getItem("agrobot-mini-radio"), 10);
+    if (g >= 0 && g < MINI_RADIOS_M.length) miniIdx = g;
+    miniRumboArriba = localStorage.getItem("agrobot-mini-norte") !== "1";
+  } catch (_) {}
+  const cssv = (n, r) => CSSVAR(n, r);
+
+  function resizeMini() {
+    if (!miniCanvas) return;
+    const d = Math.round(miniCanvas.clientWidth * (window.devicePixelRatio || 1));
+    if (!d || (miniCanvas.width === d && miniCanvas.height === d)) return;
+    miniCanvas.width = d; miniCanvas.height = d;
+    drawMiniMapa();
+  }
+  function drawMiniMapa() {
+    if (!miniCanvas || !dashboardVisible()) return;
+    const w = miniCanvas.width, h = miniCanvas.height;
+    if (!w || !h) return;
+    const ctx = miniCanvas.getContext("2d");
+    const ac = cssv("--accent", "#2bff7a"), am = cssv("--warn", "#ffb02e"), rojo = cssv("--crit", "#ff3b4e");
+    const cx = w / 2, cy = h / 2, R = w / 2 - 5 * (w / 232), u = w / 232;       // u: escala de los trazos según el tamaño real del lienzo
+    const pr = poseParaMapa() || { x: 0, y: 0, theta_deg: 0 };
+    const radio = MINI_RADIOS_M[miniIdx], ppm = R / radio;
+    const phi = miniRumboArriba ? (pr.theta_deg - 90) * Math.PI / 180 : 0;
+    const cs = Math.cos(phi), sn = Math.sin(phi);
+    const m2s = (wx, wy) => { const dx = (wx - pr.x) * ppm, dy = -(wy - pr.y) * ppm; return [cx + dx * cs - dy * sn, cy + dx * sn + dy * cs]; };
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+    const fondo = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    fondo.addColorStop(0, "#0a2a1a"); fondo.addColorStop(1, "#030d08");
+    ctx.fillStyle = fondo; ctx.fillRect(0, 0, w, h);
+
+    if (lastMap && mapaLienzo.width) {
+      ctx.save();
+      ctx.translate(cx, cy); ctx.rotate(phi);
+      ctx.translate((lastMap.origin_x - pr.x) * ppm, (pr.y - lastMap.origin_y - lastMap.height * lastMap.resolution) * ppm);
+      const k = lastMap.resolution * ppm;
+      ctx.scale(k, k);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      ctx.globalAlpha = 0.92;
+      ctx.drawImage(mapaLienzo, 0, 0);
+      ctx.restore();
+    }
+
+    // anillos de distancia y cruz
+    ctx.strokeStyle = "rgba(45, 255, 122, 0.22)"; ctx.lineWidth = u;
+    for (let i = 1; i <= 3; i++) { ctx.beginPath(); ctx.arc(cx, cy, R * i / 3, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+
+    // recorrido de la patrulla
+    if (waypointsMapa.length) {
+      ctx.strokeStyle = "rgba(255, 176, 46, 0.7)"; ctx.lineWidth = 1.5 * u; ctx.setLineDash([5 * u, 4 * u]);
+      ctx.beginPath();
+      waypointsMapa.forEach((wp, i) => { const [x, y] = m2s(wp.x, wp.y); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.stroke(); ctx.setLineDash([]);
+      waypointsMapa.forEach((wp, i) => {
+        const [x, y] = m2s(wp.x, wp.y);
+        ctx.fillStyle = i === waypointIndice ? "#fff" : am;
+        ctx.beginPath(); ctx.arc(x, y, (i === waypointIndice ? 3.6 : 2.4) * u, 0, Math.PI * 2); ctx.fill();
+      });
+    }
+    // plantas encontradas por la misión
+    plantasMision.filter((p) => p.x != null).forEach((p) => {
+      const [x, y] = m2s(p.x, p.y);
+      ctx.fillStyle = "#5cff9a"; ctx.strokeStyle = "#04200f"; ctx.lineWidth = u;
+      ctx.beginPath(); ctx.moveTo(x, y - 5 * u); ctx.lineTo(x + 4 * u, y); ctx.lineTo(x, y + 5 * u); ctx.lineTo(x - 4 * u, y); ctx.closePath(); ctx.fill(); ctx.stroke();
+    });
+
+    // rumbo del robot en pantalla y cono de la cámara (hfov ≈ 55°)
+    const [tx, ty] = m2s(pr.x + Math.cos(pr.theta_deg * Math.PI / 180), pr.y + Math.sin(pr.theta_deg * Math.PI / 180));
+    const a0 = Math.atan2(ty - cy, tx - cx), semi = 27.5 * Math.PI / 180;
+    ctx.fillStyle = "rgba(45, 255, 122, 0.16)";
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, Math.min(R, 2.0 * ppm), a0 - semi, a0 + semi); ctx.closePath(); ctx.fill();
+
+    // scan vivo del LIDAR (el último, brillante)
+    if (performance.now() - poseMapaT < 1500 && scansVivos.length) {
+      const pts = scansVivos[scansVivos.length - 1];
+      ctx.fillStyle = am;
+      for (let i = 0; i + 1 < pts.length; i += 2) {
+        const [x, y] = m2s(pts[i] / 100, pts[i + 1] / 100);
+        if ((x - cx) ** 2 + (y - cy) ** 2 > R * R) continue;
+        ctx.fillRect(x - 1 * u, y - 1 * u, 2.2 * u, 2.2 * u);
+      }
+    }
+
+    // el robot: flecha con halo
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(a0 + Math.PI / 2);
+    ctx.shadowColor = ac; ctx.shadowBlur = 10 * u;
+    ctx.fillStyle = ac; ctx.strokeStyle = "#eafff2"; ctx.lineWidth = 1.2 * u;
+    ctx.beginPath(); ctx.moveTo(0, -9 * u); ctx.lineTo(-6 * u, 7 * u); ctx.lineTo(0, 3.5 * u); ctx.lineTo(6 * u, 7 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    if (!lastMap) {
+      ctx.fillStyle = "rgba(125, 176, 203, 0.8)"; ctx.font = `${10 * u}px ui-monospace, monospace`; ctx.textAlign = "center";
+      ctx.fillText("SIN MAPA", cx, cy + R * 0.55);
+    }
+    ctx.restore();
+
+    // bisel: aro, marcas cada 30° (giran con el mapa) y la N
+    ctx.strokeStyle = ac; ctx.lineWidth = 2 * u; ctx.shadowColor = ac; ctx.shadowBlur = 8 * u;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    const [nx, ny] = m2s(pr.x, pr.y + 1);
+    const aN = Math.atan2(ny - cy, nx - cx);
+    ctx.lineWidth = 1.2 * u;
+    for (let i = 0; i < 12; i++) {
+      const a = aN + i * Math.PI / 6;
+      ctx.strokeStyle = i === 0 ? rojo : "rgba(110, 234, 255, 0.7)";
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * (R - (i % 3 === 0 ? 7 : 4) * u), cy + Math.sin(a) * (R - (i % 3 === 0 ? 7 : 4) * u));
+      ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.stroke();
+    }
+    ctx.fillStyle = rojo; ctx.font = `bold ${11 * u}px ui-monospace, monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("N", cx + Math.cos(aN) * (R - 15 * u), cy + Math.sin(aN) * (R - 15 * u));
+    ctx.textBaseline = "alphabetic";
+    $("mini-escala").textContent = `${radio} m`;
+  }
+  if (miniCanvas) {
+    miniCanvas.addEventListener("click", () => {
+      miniRumboArriba = !miniRumboArriba;
+      try { localStorage.setItem("agrobot-mini-norte", miniRumboArriba ? "0" : "1"); } catch (_) {}
+      drawMiniMapa();
+    });
+    const zoomMini = (d) => {
+      miniIdx = Math.max(0, Math.min(MINI_RADIOS_M.length - 1, miniIdx + d));
+      try { localStorage.setItem("agrobot-mini-radio", String(miniIdx)); } catch (_) {}
+      drawMiniMapa();
+    };
+    $("mini-zoom-in").addEventListener("click", () => zoomMini(-1));
+    $("mini-zoom-out").addEventListener("click", () => zoomMini(1));
+    if (window.ResizeObserver) new ResizeObserver(() => { resizeMini(); resizeRadarDash(); }).observe($("video-wrap"));
+    window.addEventListener("resize", resizeMini);
   }
 
   // ---------------------------------------------------------------
@@ -2715,6 +3049,28 @@ input[type="text"], select { font-family: inherit; }
     const d = await res.json().catch(() => ({}));
     if (!res.ok) toast("warning", "No arrancó la misión", d.msg || `HTTP ${res.status}`);
   });
+  document.querySelectorAll("[data-mision]").forEach(b => b.addEventListener("click", async () => {
+    const m = b.dataset.mision;
+    const aviso = { mapear: "Explorar y mapear: el robot recorre solo, construye el mapa y vuelve al punto de salida.",
+                    dataset: "Dataset de plantas: el robot va despacio, se acerca a cada planta y guarda sus fotos.",
+                    inspeccion: "Inspección: el robot revisa cada planta con el clasificador de plagas y deja un informe (aciertos ~30-36 %: confirma a mano)." }[m];
+    if (!confirm(aviso + "\n\n¿Está en el suelo, con espacio, la cámara conectada y el cable de energía firme?")) return;
+    const res = await fetch("/api/misiones", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mision: m, accion: "iniciar" }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) toast("warning", "No arrancó la misión", d.msg || d.error || `HTTP ${res.status}`);
+  }));
+  $("btn-misiones-off").addEventListener("click", () => fetch("/api/misiones", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accion: "detener" }) }));
+  setInterval(async () => {
+    try {
+      const d = await (await fetch("/api/misiones")).json();
+      if (d && d.mision && d.estado !== "inactiva") {
+        const t = (d.catalogo && d.catalogo[d.mision] && d.catalogo[d.mision].titulo) || d.mision;
+        const alertas = (d.hallazgos || []).filter(h => ["alerta", "malformacion", "sospecha"].includes(h.estado)).length;
+        $("misiones-estado").textContent = `${t}: ${d.estado}` + (d.plantas != null ? ` · plantas: ${d.plantas}` : "") + (d.fotos_guardadas ? ` · fotos: ${d.fotos_guardadas}` : "")
+          + (d.mision === "inspeccion" ? ` · hallazgos: ${alertas}` : "") + (d.motivo_fin ? ` · ${d.motivo_fin}` : "");
+      }
+    } catch (_) {}
+  }, 2500);
   $("btn-mision-off").addEventListener("click", () => fetch("/api/mision_plantas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activa: false }) }));
   setInterval(async () => {
     try {
@@ -3003,6 +3359,20 @@ input[type="text"], select { font-family: inherit; }
   resizeRadar();
   resizeRadarDash();
 
+  // Tema HUD / sol: se guarda por navegador. Los canvas leen sus colores de las variables CSS, así que se refrescan al cambiar.
+  function aplicarTema(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    try { localStorage.setItem("agrobot-tema", t); } catch (_) {}
+    Object.assign(COLOR, { acento: CSSVAR("--accent", "#16a34a"), acentoTexto: CSSVAR("--accent-ink", "#15803d"), critico: CSSVAR("--crit", "#dc2626"),
+                           tinta: CSSVAR("--ink", "#16241c"), tintaSuave: CSSVAR("--ink-soft", "#64796b"), linea: CSSVAR("--line", "#dde7db") });
+    $("btn-tema").querySelector(".pill-txt").textContent = t === "hud" ? "TEMA HUD" : "TEMA SOL";
+    if (lastMap) setMap(lastMap); else drawMap();
+    resizeRadar(); resizeRadarDash(); dibujarRadarSiVisible(); drawMiniMapa();
+  }
+  $("btn-tema").addEventListener("click", () => aplicarTema(document.documentElement.dataset.theme === "hud" ? "sol" : "hud"));
+  $("btn-tema").querySelector(".pill-txt").textContent = document.documentElement.dataset.theme === "hud" ? "TEMA HUD" : "TEMA SOL";
+  resizeMini();
+
   // ---------------------------------------------------------------
   // Telemetría ambiental
   // ---------------------------------------------------------------
@@ -3081,7 +3451,10 @@ input[type="text"], select { font-family: inherit; }
   // ---------------------------------------------------------------
   let pestBannerTimer = null;
   let plagasDeHoy = 0;
+  // Clases que son PLANTAS (detection.clases_planta), no plagas: una maceta no debe disparar el banner rojo de «¡Plaga detectada!» (se vio en la prueba del 2026-10-27).
+  const CLASES_NO_PLAGA = new Set(["maceta", "col_planta", "col_cogollo", "maceta_planta"]);
   function addDetection(d) {
+    if (CLASES_NO_PLAGA.has(d.class)) return;
     // `detect-log` desapareció del HTML en el rediseño del dashboard, pero
     // esta función seguía escribiendo en él: cada detección lanzaba un
     // TypeError que abortaba el resto de la función, incluido el banner de

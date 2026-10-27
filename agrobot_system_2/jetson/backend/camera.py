@@ -322,12 +322,11 @@ class CameraWorker:
                 if cajas:
                     frame = frame.copy()
 
-                for c in cajas:
-                    x1, y1, x2, y2 = c["xyxy"]
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (60, 200, 90), 2)
-                    cv2.putText(frame, f"{c['class']} {c['confidence']:.2f}",
-                                (x1, max(0, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX,
-                                0.55, (60, 200, 90), 2)
+                try:
+                    cfg_det = self._get_config()["detection"]
+                    dibujar_cajas(cv2, frame, cajas, float(cfg_det.get("plaga_caja_max_frac", 0.55)), cfg_det.get("clases_planta", []))
+                except Exception:
+                    dibujar_cajas(cv2, frame, cajas)
 
                 ok, jpeg = cv2.imencode(".jpg", frame,
                                         [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -507,6 +506,27 @@ class CameraWorker:
 
 
 ZOOM_MAX = 4.0
+
+
+def dibujar_cajas(cv2, frame, cajas, frac_max: float = 0.55, clases_planta=()):
+    """Dibuja las cajas detectadas sobre `frame` (ya copiado). Una caja de PLAGA que cubre >= `frac_max` del cuadro no localiza nada (el detector de plagas
+    da a veces la imagen entera, 2026-10-27: 4 de 4 cajas a >60 % en la misión de plantas): rodeaba toda la pantalla. Esas se anotan como rótulo abajo a la
+    izquierda en vez de un marco. Las plantas/macetas se dibujan siempre."""
+    alto, ancho = frame.shape[:2]
+    rotulos = []
+    for c in cajas:
+        x1, y1, x2, y2 = c["xyxy"]
+        texto = f"{c['class']} {c['confidence']:.2f}"
+        if c["class"] not in clases_planta and (x2 - x1) * (y2 - y1) >= frac_max * ancho * alto:
+            rotulos.append(texto)
+            continue
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (60, 200, 90), 2)
+        cv2.putText(frame, texto, (x1, max(0, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (60, 200, 90), 2)
+    for k, texto in enumerate(rotulos[:3]):
+        y = alto - 10 - 22 * k
+        (tw, th), _ = cv2.getTextSize(texto, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+        cv2.rectangle(frame, (6, y - th - 5), (14 + tw, y + 5), (0, 0, 0), -1)
+        cv2.putText(frame, texto, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (60, 200, 255), 1)
 
 
 def _recorte_zoom(cv2, frame, z):

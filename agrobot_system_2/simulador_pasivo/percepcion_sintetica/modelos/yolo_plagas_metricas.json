@@ -1,58 +1,58 @@
 {
  "tarea": "plagas",
  "imgsz": 640,
- "epocas": 40,
+ "epocas": 45,
  "base": "yolo11n.pt (COCO)",
- "segundos_entrenamiento": 2768,
+ "segundos_entrenamiento": 3069,
  "val": {
-  "mAP50": 0.9433,
-  "mAP50_95": 0.6845,
-  "precision": 0.9424,
-  "recall": 0.9112,
+  "mAP50": 0.9372,
+  "mAP50_95": 0.6913,
+  "precision": 0.9308,
+  "recall": 0.9155,
   "por_clase_mAP50": {
-   "pulgon": 0.8636,
-   "oruga": 0.9925,
-   "escarabajo": 0.9739
-  },
-  "ms_por_imagen": {
-   "preprocess": 1.1,
-   "inference": 14.8,
-   "loss": 0.0,
-   "postprocess": 1.8
-  }
- },
- "test": {
-  "mAP50": 0.9277,
-  "mAP50_95": 0.6764,
-  "precision": 0.9281,
-  "recall": 0.9017,
-  "por_clase_mAP50": {
-   "pulgon": 0.8409,
-   "oruga": 0.994,
-   "escarabajo": 0.9481
+   "pulgon": 0.8462,
+   "oruga": 0.9918,
+   "escarabajo": 0.9736
   },
   "ms_por_imagen": {
    "preprocess": 1.0,
    "inference": 14.7,
    "loss": 0.0,
-   "postprocess": 1.8
+   "postprocess": 1.7
+  }
+ },
+ "test": {
+  "mAP50": 0.9263,
+  "mAP50_95": 0.6725,
+  "precision": 0.9306,
+  "recall": 0.8934,
+  "por_clase_mAP50": {
+   "pulgon": 0.8411,
+   "oruga": 0.9935,
+   "escarabajo": 0.9444
+  },
+  "ms_por_imagen": {
+   "preprocess": 1.0,
+   "inference": 14.7,
+   "loss": 0.0,
+   "postprocess": 1.7
   }
  },
  "test_nuevo": {
-  "mAP50": 0.9331,
-  "mAP50_95": 0.6696,
-  "precision": 0.9099,
-  "recall": 0.9063,
+  "mAP50": 0.9314,
+  "mAP50_95": 0.6725,
+  "precision": 0.9067,
+  "recall": 0.9008,
   "por_clase_mAP50": {
-   "pulgon": 0.8262,
-   "oruga": 0.9934,
-   "escarabajo": 0.9796
+   "pulgon": 0.8222,
+   "oruga": 0.9937,
+   "escarabajo": 0.9785
   },
   "ms_por_imagen": {
    "preprocess": 1.1,
    "inference": 14.8,
    "loss": 0.0,
-   "postprocess": 1.8
+   "postprocess": 1.7
   }
  },
  "NO_DEMOSTRADO": "Entrenado y evaluado solo con imágenes sintéticas. Los 'insectos' son sprites sencillos: no demuestra detección de plagas reales."

@@ -24,8 +24,9 @@ SERVO_MIN_DEG = 25.0
 SERVO_MAX_DEG = 110.0
 SERVO_HOME_DEG = 98.0
 
-INCLINACION_HOME_DEG = 15.5      # estimación (no medido)
-GRADOS_POR_GRADO = 0.8          # estimación: 1° de servo ≈ 0,8° de cámara
+INCLINACION_HOME_DEG = 15.5      # estimación (no medido). MEDIDO el 2026-10-27 con cajas de altura/distancia conocidas: en HOME (98°) la cámara mira ~1,9° bajo el
+                                # horizonte (agrobot_config.json: odometria_webcam.camara_inclinacion_deg), no 15,5°. Esta constante la siguen usando los simuladores viejos.
+GRADOS_POR_GRADO = 0.8          # medido 2026-10-27 (barrido 98→62°, caja a 1,30 m y maceta a 0,95 m): 0,78°/° y SIGNO correcto (servo menor = más abajo); desvío ≤ ±1,1°
 VERIFICADO = False              # <-- pendiente de comprobación física
 
 

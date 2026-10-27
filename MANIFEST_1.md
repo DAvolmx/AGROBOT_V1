@@ -15,7 +15,7 @@
 > Cualquier LLM o persona que retome este proyecto debe poder reconstruir
 > el estado completo del sistema leyendo solo este archivo.
 
-Última actualización: 2026-10-24
+Última actualización: 2026-10-27
 
 ---
 
@@ -4916,3 +4916,16 @@ al 80 %/100 %, watchdog del loop). Robot en el pasillo.
 - Estrategia E11 (planificador A*, predictor de colisión por pulso, visitar plantas a ~80 cm) entrenada en simulación: `docs/estrategias/e11_entrenado/informe.json`.
 - Portado a `jetson/backend/explorador.py` bajo `autonomia.e11_*` (activo por defecto en `config_store.py` y `agrobot_config.json`): predictor (`_despejado`/`_conducir`), barrido de corredor, regreso al inicio (`iniciar_regreso`/`_paso_regreso`, `planificador.py`), `POST /api/exploracion/regresar`, botón «Regresar al inicio». Guía y límites: `docs/E11_ROBOT_REAL.md`.
 - `jetson_server.py`: inspección de plantas a 0,78 m; `geom_cb`. `agrobot_config.json`: claves e11_*, maniobras entrenadas y guardián activados (SIN medir en el robot real). Pruebas sin robot: `tests/test_e11_real.py` (+ planificador, guardián, esquina); 319 pruebas del backend pasan.
+
+### 2026-10-27 — Cámara como LIDAR, giros, misiones específicas, dashboard HUD y protección del reloj
+- **Cámara como LIDAR frontal** (`jetson/backend/camara_lidar.py`, tests `test_camara_lidar.py`): `suelo_libre` → puntos {ángulo, distancia} → filtro (sectores de 3°, ≥1 vecino, persistencia 0,5 s, FOV 55°, 0,5–2 m) → fusión mínima con el scan SOLO para el explorador (no para el SLAM). `autonomia.camara_como_lidar` (activa en la config viva), `camara_lidar_solo` (prueba). `_scan_explorador()` en `jetson_server.py`.
+- **Calibración de la cámara** medida con cajas de medida conocida: altura 0,24 m, campo horizontal 55° (71° era el diagonal), inclinación +1,9° (config decía −2,3°), servo 0,78°/°. `odometria_webcam` en la config viva; `calibracion_camara.py` solo comentarios. **Aviso:** `publicar_ros: true` hace que cambie la escala de la odometría visual: vigilar el EKF.
+- **Modelo de transitabilidad** (`transitabilidad.py`, `autonomia.suelo_modelo`, entrenado con `simulador_pasivo/percepcion_sintetica/entrenar_trav.py`): NO desplegado; el mejor (cam3) da 32 % «seguro» por columna frente al 80 % del modelo base. Apagado (`suelo_modelo: ""`).
+- **Giros:** `autonomia.mx_giro_comp` (un pulso atrás cada N giros seguidos en la rama de giro por hueco de `explorador.py`; 3 en la config viva) y `autonomia.giro_lazo_cerrado` (cada pulso de giro del explorador = `mx_grados_pulso` medidos con el giroscopio, en `_conducir_pulso`). En el robot real siguen girando ~1,5–2,4° por pulso (pedidos 6°): falta par, no hay inversión.
+- **Maniobra de giro 180°/360°** (`maniobra_giro.py`, tests): tramos de lazo cerrado con compensación de deriva y paradas por «sin espacio» o «atascado»; `POST/GET /api/maniobra_giro`; la parada total la cancela. Sin probar en el robot.
+- **Misiones específicas** (`misiones.py`, tests): `mapear` (explora, vuelve al inicio con el A* de E11 y guarda `mapeo_*`), `dataset` (fotos + `manifest.jsonl` en `~/.agrobot/dataset_plantas/`), `inspeccion` (veredicto por planta con PLAGASX + informe en `~/.agrobot/inspecciones/`; el clasificador acierta ~30–36 %: son sospechas). `GET/POST /api/misiones`; botones en el dashboard. Sin probar en el robot.
+- **Dashboard** (`jetson/dashboard/index.html`, copia previa `index.html.bak_hud_20261027`): tema HUD verde por defecto con botón «TEMA HUD/SOL»; cámara grande con minimapa circular (abajo izq.) y LIDAR pequeño con su slider de alcance (arriba der.); lista de pestañas con scroll visible; el banner de plaga ignora las clases de planta (`maceta`...).
+- **Cajas de plaga de imagen completa** (`camera.dibujar_cajas`, `detection.plaga_caja_max_frac` = 0,55): una caja de plaga que cubre ≥55 % del cuadro se anota como rótulo en vez de marco. Test `test_cajas.py`.
+- **Reloj de pared** (`reloj.py`, `jetson_server._vigia_reloj`, `GET /api/ocupado`, `jetson/systemd/sbin/agrobot-reloj-vigia.sh`): el 27-oct NTP llegó a los 20 min del arranque (+711,5 s) y el vigía reinició ROS en plena misión (saltos de pose del SLAM de 30 y 24 m). Ahora el backend detecta el salto (aviso + `~/.agrobot/reloj_saltos.jsonl`) y el vigía espera a que `/api/ocupado` diga «reposo» 30 s seguidos antes de reiniciar ROS (tope 1 h). **La copia en `/usr/local/sbin` hay que reinstalarla a mano:** `sudo install -m 755 jetson/systemd/sbin/agrobot-reloj-vigia.sh /usr/local/sbin/`. Análisis posteriores: usar el tiempo MONÓTONO `t`, no `t_unix`.
+- **Prueba de exterior del 27-oct** (etiquetada «exterior»): reporte en `agrobot_system_2/docs/PRUEBA_EXTERIOR_20261027/` (docx, pdf, figs, ui, `metricas.json`); scripts `tools/analizar_prueba_exterior_20261027.py`, `etiquetar_prueba_exterior_20261027.py`, `capturas_dashboard.py`, `generar_reporte_prueba_exterior_20261027.py`.
+

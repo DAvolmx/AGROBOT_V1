@@ -864,12 +864,22 @@ class ExploradorReactivo:
                                 break
                     self._conducir(lado, maniobra=maniobra)
                     self.giros += 1
-                    for _ in range(n_giro - 1):
+                    # Giro compensado (2026-10-27, simulado: mx_giro_comp): el chasis gira en arco y avanza ~5 cm por pulso; tras cada N giros
+                    # seguidos, un pulso atrás si hay pared cerca y espacio detrás. 0 = apagado.
+                    comp = int(cfg.get("mx_giro_comp", 0))
+                    for k_g in range(n_giro - 1):
                         await asyncio.sleep(1.05)
                         if not self.activo or self.pausado or time.monotonic() < self._mando_cedido_hasta:
                             break
-                        if self._hueco(self._distancias(), "adelante") >= avance_libre + 0.30:
+                        d_g = self._distancias()
+                        if self._hueco(d_g, "adelante") >= avance_libre + 0.30:
                             break                   # el frente ya está despejado: no hace falta seguir girando
+                        if comp and n_giro > comp and (k_g + 1) % comp == 0 and self._hueco(d_g, "adelante") < 1.0 \
+                                and self._hueco(d_g, "atras") >= 0.30:
+                            self._conducir("atras", maniobra=False)
+                            await asyncio.sleep(1.05)
+                            if not self.activo or self.pausado or time.monotonic() < self._mando_cedido_hasta:
+                                break
                         self._conducir(lado, maniobra=maniobra)
                         self.giros += 1
                     if cfg.get("rumbo_fusion_activo", False) and float(cfg.get("man_pausa_s", 0.0)) > 0:

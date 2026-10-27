@@ -1,58 +1,58 @@
 {
  "tarea": "obj",
  "imgsz": 320,
- "epocas": 40,
+ "epocas": 60,
  "base": "yolo11n.pt (COCO)",
- "segundos_entrenamiento": 1953,
+ "segundos_entrenamiento": 2766,
  "val": {
-  "mAP50": 0.9054,
-  "mAP50_95": 0.7732,
-  "precision": 0.9219,
-  "recall": 0.8346,
+  "mAP50": 0.9093,
+  "mAP50_95": 0.7842,
+  "precision": 0.9322,
+  "recall": 0.8257,
   "por_clase_mAP50": {
-   "maceta_planta": 0.9417,
-   "obstaculo": 0.9247,
-   "borde_bajo": 0.8496
+   "maceta_planta": 0.9435,
+   "obstaculo": 0.93,
+   "borde_bajo": 0.8545
   },
   "ms_por_imagen": {
    "preprocess": 0.3,
-   "inference": 4.0,
+   "inference": 4.1,
    "loss": 0.0,
-   "postprocess": 1.6
+   "postprocess": 1.5
   }
  },
  "test": {
-  "mAP50": 0.9188,
-  "mAP50_95": 0.7807,
-  "precision": 0.9166,
-  "recall": 0.8526,
+  "mAP50": 0.9203,
+  "mAP50_95": 0.7899,
+  "precision": 0.921,
+  "recall": 0.8511,
   "por_clase_mAP50": {
-   "maceta_planta": 0.937,
-   "obstaculo": 0.9065,
-   "borde_bajo": 0.9129
+   "maceta_planta": 0.9356,
+   "obstaculo": 0.9042,
+   "borde_bajo": 0.9209
+  },
+  "ms_por_imagen": {
+   "preprocess": 0.3,
+   "inference": 3.9,
+   "loss": 0.0,
+   "postprocess": 1.5
+  }
+ },
+ "test_nuevo": {
+  "mAP50": 0.8935,
+  "mAP50_95": 0.7585,
+  "precision": 0.8981,
+  "recall": 0.819,
+  "por_clase_mAP50": {
+   "maceta_planta": 0.9028,
+   "obstaculo": 0.9301,
+   "borde_bajo": 0.8476
   },
   "ms_por_imagen": {
    "preprocess": 0.3,
    "inference": 3.9,
    "loss": 0.0,
    "postprocess": 1.7
-  }
- },
- "test_nuevo": {
-  "mAP50": 0.8961,
-  "mAP50_95": 0.7588,
-  "precision": 0.881,
-  "recall": 0.8189,
-  "por_clase_mAP50": {
-   "maceta_planta": 0.8891,
-   "obstaculo": 0.9236,
-   "borde_bajo": 0.8757
-  },
-  "ms_por_imagen": {
-   "preprocess": 0.3,
-   "inference": 3.9,
-   "loss": 0.0,
-   "postprocess": 1.9
   }
  },
  "NO_DEMOSTRADO": "Entrenado y evaluado solo con imágenes sintéticas."

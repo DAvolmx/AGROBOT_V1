@@ -282,6 +282,26 @@ class Config:
     mx_sonar_escape: bool = False       # el sonar SOLO decide cuando el robot se atasca en el mismo sitio (escape de nicho): hacia dónde salir, con memoria y meta
     mx_sonar_escape_pulsos: int = 12    # máximo de pulsos de giro del escape
     mx_atasco_bloqueos: int = 8         # bloqueos (o giros/avances rechazados por el predictor) en la ventana para dar el atasco
+    # --- MEDIA VUELTA (K-turn, 2026-10-27): al llegar al final del camino hay que dar la vuelta en un pasillo estrecho. Ciclos de giro hacia el inicio + marcha atrás recta (el robot
+    # avanza ~5 cm por pulso de giro: sin retroceder se come la pared del fondo); se repite hasta quedar mirando al inicio (|error| < tol) o agotar los ciclos.
+    mx_mediavuelta: bool = False
+    mx_mv_giros: int = 3
+    mx_mv_atras: int = 2
+    mx_mv_tol_deg: float = 35.0
+    mx_mv_ciclos: int = 10
+    # --- RECORRIDO IDEAL DE ENSEÑANZA (2026-10-27): un «experto» con el MAPA PERFECTO planifica con A*, serpentea (zigzag) por el sendero y lo ejecuta con los mismos pulsos y el predictor;
+    # cada decisión (sensores -> acción) se guarda para que el robot aprenda por imitación sin ver el mapa.
+    mx_oraculo: bool = False
+    mx_zigzag_m: float = 0.0            # amplitud del serpenteo lateral de la ruta (m); 0 = ruta directa
+    mx_zigzag_lambda_m: float = 2.4
+    mx_demos: bool = False              # guardar (características, acción) de cada decisión en el resultado
+    mx_zigzag_holgura_m: float = 0.30   # el zigzag solo serpentea si 30 cm a cada lado del punto desplazado están libres
+    mx_giro_comp: int = 0               # giro compensado: cada N pulsos de giro seguidos un pulso atrás (el chasis gira en arco y avanza ~5 cm) cuando hay pared cerca
+    cam_lidar: bool = False             # fusiona la cámara (camara_lidar.py) como LIDAR frontal
+    cam_solo: bool = False              # el frente (±35°) sale SOLO de la cámara
+    cam_bajos_frac: float = 0.0         # fracción de macetas BAJAS: el LIDAR no las ve (la cámara sí)
+    mx_politica_meta: bool = True       # la política conoce la meta también en la IDA (False: solo en el regreso, como en el robot real)
+    mx_politica: str = ""               # ruta a politica_il.npz: decide con la política aprendida en vez de la regla de hueco/planificador
     mx_sonar_eje: bool = False          # con el frente libre, alinear con el eje del pasillo si el rumbo difiere > mx_sonar_eje_deg
     mx_sonar_eje_deg: float = 10.0
     mx_migas: bool = False
@@ -938,13 +958,13 @@ class MundoSim:
         return m
 
 
-def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=None, rango=8.0):
+def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=None, rango=8.0, macetas=None, chasis=True):
     """360 rayos desde (cx, cy) = posición del LIDAR. 0° = adelante, + = izquierda (como ROS).
     Las paredes se ven siempre; las macetas solo si sobresalen del plano del LIDAR (ALTURA_LIDAR_M)."""
     ang = np.deg2rad(np.arange(360)) + psi_real
     dx, dy = np.cos(ang), np.sin(ang)
     dist = np.full(360, np.inf)
-    macetas_visibles = esc.macetas if ALTURA_MACETA_M >= ALTURA_LIDAR_M - GROSOR_HAZ_M else []
+    macetas_visibles = (esc.macetas if macetas is None else macetas) if ALTURA_MACETA_M >= ALTURA_LIDAR_M - GROSOR_HAZ_M else []
     if macetas_visibles:                          # círculos, todos a la vez: (360 rayos x M círculos)
         M_ = np.asarray(macetas_visibles, dtype=float)
         fx, fy = cx - M_[:, 0][None, :], cy - M_[:, 1][None, :]
@@ -969,7 +989,7 @@ def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=None, rango=8.0):
         ruido = sigma
         if CAL["lidar_dropout"] > 0:
             dist = np.where(rng.random(360) < CAL["lidar_dropout"], np.inf, dist)
-    for sec in CAL.get("lidar_chasis", []):       # el LIDAR ve su propio chasis (medido en el robot real): puntos fijos que viajan con él
+    for sec in (CAL.get("lidar_chasis", []) if chasis else []):       # el LIDAR ve su propio chasis (medido en el robot real): puntos fijos que viajan con él
         for a in range(int(sec["desde"]), int(sec["hasta"])):
             i = a % 360
             if rng.random() < sec["prob"]:
@@ -977,6 +997,24 @@ def lidar_scan(esc: Escenario, cx, cy, psi_real, rng, ruido=None, rango=8.0):
     dist = np.where(dist <= rango, dist + rng.normal(0, 1.0, 360) * ruido, np.inf)
     return [{"angle_deg": float(a), "distance_m": float(d)}
             for a, d in zip(range(360), dist) if np.isfinite(d) and d > 0.05]
+
+
+def camara_scan(esc: Escenario, cx, cy, psi_real, rng, fov_deg=55.0, rmin=0.55, rmax=2.0, falsos=0.004, sesgo=1.05):
+    """Cámara de suelo como LIDAR frontal (modelo de suelo_libre): ve TODO lo que toca el suelo (macetas bajas incluidas) dentro de ±fov/2 entre rmin y rmax,
+    con σ = 2 cm + 6 % de la distancia y SESGO +5 % (sobreestima: medido el 2026-10-27 con cajas de altura/distancia conocidas, ±10 % según el tilt del servo), 10 % de columnas
+    perdidas y una pizca de falsos positivos (sombras). Campo horizontal 55° (los 71° eran la diagonal) y zona ciega hasta 0,55 m (cámara a 24 cm, 1,9° abajo). Salida como puntos de `suelo_libre`."""
+    pts = lidar_scan(esc, cx, cy, psi_real, rng, ruido=np.zeros(360), rango=rmax, chasis=False)
+    out = []
+    for q in pts:
+        a = ((q["angle_deg"] + 180.0) % 360.0) - 180.0
+        if abs(a) > fov_deg / 2 or q["distance_m"] < rmin or rng.random() < 0.10:
+            continue
+        d = q["distance_m"] * sesgo + float(rng.normal(0, 0.02 + 0.06 * q["distance_m"]))
+        out.append({"angle_deg": a, "distance_m": d})
+    for a in np.arange(-fov_deg / 2, fov_deg / 2 + 0.1, 1.0):
+        if rng.random() < falsos:
+            out.append({"angle_deg": float(a), "distance_m": float(rng.uniform(0.5, 1.5))})
+    return out
 
 
 class RobotModelo:
@@ -1151,14 +1189,24 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     mx_hist, mx_commit, mx_commit_hasta, mx_rectos, mx_escapes = [], None, 0.0, 0, 0
     visitas = {}
     plan, pl_ruta, pl_t, pl_obj, pl_fallos, pl_pausa_hasta = None, None, -99.0, None, 0, 0.0
+    pl_giros = 0
     sonar = None
+    demos = []
+    macetas_lidar = [m_ for i_, m_ in enumerate(esc.macetas) if not (cfg.cam_bajos_frac > 0 and (i_ * 37 % 100) < cfg.cam_bajos_frac * 100)]     # las bajas no las ve el LIDAR
+    cam_f = None
+    if cfg.cam_lidar:
+        from camara_lidar import CamaraComoLidar
+        cam_f = CamaraComoLidar(reloj=lambda: t)
     if cfg.mx_planner or cfg.mx_sonar or cfg.mx_sonar_escape:
         from planificador import Planificador
         plan = Planificador(inflar_m=cfg.mx_plan_inflar_m, centro=(x0, y0))
+        if cfg.mx_oraculo:
+            plan.cargar_verdad(esc.paredes, esc.macetas)
         if cfg.mx_sonar or cfg.mx_sonar_escape:
             from sonar_mapa import Sonar
             sonar = Sonar(plan, n=cfg.mx_sonar_n, r_max=cfg.mx_sonar_rmax, solo_scan=cfg.mx_sonar_modo == "scan")
     relajar_hasta, mx_esc_pos = 0.0, []
+    mv_pend, mv_ciclos = False, 0
     migas, mig_idx, mig_fallos, mig_pausa_hasta = [], None, 0, 0.0
     mx_meta_xy = esc.meta_xy if esc.meta_xy is not None else (esc.goal_x, esc.centro_y)
     mision = None
@@ -1216,6 +1264,49 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     PRED["cambiadas"] += 1
                     return cond.ordenar(alt, tt, **kw)
         return False
+
+    ACCIONES = ("adelante", "izquierda", "derecha", "atras")
+
+    def _feat(scan_, eb_, dist_, regreso_, con_meta):
+        """Características de la POLÍTICA APRENDIDA (las mismas en el robot real): 36 sectores de 10° (distancia mínima, tope 3 m, /3), seno y coseno del error de rumbo a la meta,
+        distancia a la meta (tope 10 m, /10), 1 si es el regreso y 1 si hay meta conocida. Sin meta (ida a ciegas) esos campos van en cero."""
+        f = np.full(36, 1.0)
+        for q_ in scan_:
+            k_ = int(((q_["angle_deg"] % 360.0) // 10.0)) % 36
+            f[k_] = min(f[k_], min(q_["distance_m"], 3.0) / 3.0)
+        extra = [math.sin(eb_), math.cos(eb_), min(dist_, 10.0) / 10.0, 1.0 if regreso_ else 0.0, 1.0] if con_meta else [0.0, 1.0, 0.0, 1.0 if regreso_ else 0.0, 0.0]
+        return np.concatenate([f, np.array(extra)])
+
+    def _zigzag(ruta_):
+        """Serpentea la ruta: desplazamiento lateral senoidal (amplitud mx_zigzag_m) con los puntos que sigan siendo transitables."""
+        if not ruta_ or len(ruta_) < 3 or cfg.mx_zigzag_m <= 0:
+            return ruta_
+        out_, arco = [ruta_[0]], 0.0
+        for i_ in range(1, len(ruta_) - 1):
+            arco += math.hypot(ruta_[i_][0] - ruta_[i_ - 1][0], ruta_[i_][1] - ruta_[i_ - 1][1])
+            tx_, ty_ = ruta_[i_ + 1][0] - ruta_[i_ - 1][0], ruta_[i_ + 1][1] - ruta_[i_ - 1][1]
+            n_ = math.hypot(tx_, ty_) or 1.0
+            off = cfg.mx_zigzag_m * math.sin(2 * math.pi * arco / cfg.mx_zigzag_lambda_m)
+            cx2, cy2 = ruta_[i_][0] - ty_ / n_ * off, ruta_[i_][1] + tx_ / n_ * off
+            nx_, ny_ = -ty_ / n_, tx_ / n_
+            holgura = all(plan.es_libre(cx2 + k_ * nx_, cy2 + k_ * ny_) for k_ in (-cfg.mx_zigzag_holgura_m, 0.0, cfg.mx_zigzag_holgura_m))      # zigzag solo donde sobra pasillo
+            out_.append((cx2, cy2) if holgura else ruta_[i_])
+        out_.append(ruta_[-1])
+        return out_
+
+    politica = None
+    if cfg.mx_politica:
+        w_ = np.load(cfg.mx_politica)
+        politica = [(w_["W1"], w_["b1"]), (w_["W2"], w_["b2"]), (w_["W3"], w_["b3"])]
+    pol_fallos, pol_pausa_hasta = 0, 0.0
+
+    def _pol_acciones(f_):
+        h_ = f_
+        for k_, (W_, b_) in enumerate(politica):
+            h_ = W_ @ h_ + b_ if W_.shape[1] == len(h_) else h_ @ W_ + b_
+            if k_ < 2:
+                h_ = np.maximum(h_, 0.0)
+        return [ACCIONES[i_] for i_ in np.argsort(-h_)]
 
     def _clamp_(v, lo, hi):
         return max(lo, min(hi, v))
@@ -1355,7 +1446,9 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         if ctrl is None and t + 1e-9 >= prox_expl:
             prox_expl += TICK_EXPLORADOR
             lx, ly = robot.lidar_pos()
-            scan = lidar_scan(esc, lx, ly, robot.psi_real(), rng)
+            scan = lidar_scan(esc, lx, ly, robot.psi_real(), rng, macetas=macetas_lidar)
+            if cam_f is not None:
+                scan = cam_f.fusionar(scan, {"t": t, "puntos": camara_scan(esc, lx, ly, robot.psi_real(), rng)}, 0.5, cfg.cam_solo)
             if scan:
                 _a = np.radians([q_["angle_deg"] for q_ in scan])
                 _d = np.array([q_["distance_m"] for q_ in scan])
@@ -1410,6 +1503,16 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
             elif cola_man:                                      # maniobra en curso: se ejecuta el siguiente pulso cuando el conductor queda libre
                 if not cond.activo:
                     _ord(cola_man.pop(0), t, maniobra=False)
+            elif cfg.mx_mediavuelta and mv_pend and not cond.activo:
+                eb_mv = _rumbo_meta()
+                if abs(math.degrees(eb_mv)) < cfg.mx_mv_tol_deg or mv_ciclos >= cfg.mx_mv_ciclos:
+                    mv_pend = False                                 # ya mira hacia el inicio (o se agotaron los ciclos): el resto lo lleva la estrategia normal
+                else:
+                    mv_ciclos += 1
+                    lado_mv = "izquierda" if eb_mv > 0 else "derecha"
+                    atras_ok_mv = d.get("atras") is None or d["atras"] >= 0.30
+                    cola_man = [lado_mv] * max(1, int(cfg.mx_mv_giros)) + (["atras"] * int(cfg.mx_mv_atras) if atras_ok_mv else [])
+                    pausa_hasta = max(pausa_hasta, t)
             elif cfg.mx_anti_dither and _atrapado(t, cx_, cy_, bloqueos + PRED["giro"] + PRED["adelante"] + PRED["atras"]):
                 lado_op = ("derecha" if ultimo_giro == "izquierda" else "izquierda") if ultimo_giro else ("izquierda" if li >= ld else "derecha")
                 atras_ok = d.get("atras") is None or d["atras"] >= 0.30
@@ -1448,6 +1551,19 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 cola_man = ["atras", "atras", lado, lado, lado]
                 escapes += 1
                 prog_ref, prog_t = (cx_, cy_), t
+            elif politica is not None and t >= pol_pausa_hasta and not cond.activo:
+                px_p, py_p = robot.centro()
+                dgx, dgy = mx_meta_xy
+                con_meta_p = fase == "regreso" or cfg.mx_politica_meta
+                opciones = _pol_acciones(_feat(scan, _rumbo_meta() if con_meta_p else 0.0, math.hypot(dgx - px_p, dgy - py_p), fase == "regreso", con_meta_p))
+                hecho_p = False
+                for acc_p in opciones[:3]:
+                    if _ord(acc_p, t, maniobra=False):
+                        hecho_p = True
+                        break
+                pol_fallos = 0 if hecho_p else pol_fallos + 1
+                if pol_fallos >= 6:
+                    pol_pausa_hasta, pol_fallos = t + 8.0, 0                    # todo bloqueado para la política: 8 s con la regla de siempre
             elif plan is not None and cfg.mx_planner and t >= pl_pausa_hasta and (not cfg.mx_plan_solo_regreso or fase == "regreso"):
                 # --- ir al objetivo siguiendo la ruta planificada ---
                 px_r, py_r = robot.centro()
@@ -1459,6 +1575,8 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                 if pl_ruta is None or t - pl_t >= cfg.mx_plan_cada_s or pl_obj != tgt:
                     pl_ruta = plan.ruta((px_r, py_r), tgt, tol_m=cfg.mx_plan_tol_planta_m if tgt != mx_meta_xy else 0.3)
                     pl_t, pl_obj = t, tgt
+                    if pl_ruta is not None and tgt == mx_meta_xy:
+                        pl_ruta = _zigzag(pl_ruta)
                     if pl_ruta is None:                               # sin camino conocido: reactivo 6 s
                         pl_pausa_hasta = t + 6.0
                 if pl_ruta and not cond.activo:
@@ -1468,6 +1586,16 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     acc = ("izquierda" if eb > 0 else "derecha") if abs(math.degrees(eb)) > cfg.mx_plan_giro_deg else "adelante"
                     if _ord(acc, t, maniobra=False):
                         pl_fallos = 0
+                        if acc == "adelante":
+                            pl_giros = 0
+                        elif cfg.mx_giro_comp:
+                            pl_giros += 1
+                            if pl_giros % cfg.mx_giro_comp == 0 and frente < 1.0 and (d.get("atras") is None or d["atras"] >= 0.30):
+                                cola_man = ["atras"]                    # giro compensado: el arco del giro se paga con marcha atrás
+                        if cfg.mx_demos:
+                            dgx, dgy = tgt
+                            demos.append((_feat(scan, _rumbo_meta(), math.hypot(dgx - px_r, dgy - py_r), fase == "regreso", fase == "regreso" or cfg.mx_politica_meta),
+                                          ACCIONES.index(acc)))
                     else:
                         pl_fallos += 1
                         pl_ruta = None                                 # replanifica en el próximo tick
@@ -1547,7 +1675,13 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
                     n_giro = int(_clamp_(round(abs(math.degrees(gap)) / cfg.mx_grados_pulso), 1, cfg.mx_sonar_pulsos_max if cfg.mx_sonar else 9))
                     if cfg.mx_sonar and abs(math.degrees(gap)) > cfg.mx_sonar_atras_antes_deg and frente < 0.9 and (d.get("atras") is None or d["atras"] >= 0.45):
                         seq += ["atras"] * 2
-                seq += [lado] * n_giro
+                if cfg.mx_giro_comp and n_giro > cfg.mx_giro_comp and frente < 1.0 and (d.get("atras") is None or d["atras"] >= 0.30):
+                    for k_g in range(n_giro):                    # giro compensado: tras cada N pulsos de giro, uno atrás (el giro avanza en arco ~5 cm)
+                        seq.append(lado)
+                        if (k_g + 1) % cfg.mx_giro_comp == 0 and k_g + 1 < n_giro:
+                            seq.append("atras")
+                else:
+                    seq += [lado] * n_giro
                 if len(seq) == 1 and cfg.man_pausa_s <= 0:
                     _ord(seq[0], t, maniobra=False)
                 else:
@@ -1736,6 +1870,7 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
         if llego_ida:
             if cfg.mx_regreso:                                   # da la vuelta: el punto de inicio pasa a ser la meta
                 fase, ida_ok = "regreso", True
+                mv_pend, mv_ciclos = bool(cfg.mx_mediavuelta), 0
                 mx_meta_xy = inicio_xy
                 mx_commit, mx_hist = None, []
                 if guardian is not None:
@@ -1778,6 +1913,8 @@ def episodio(esc: Escenario, cfg: Config, semilla: int, hip: Hip | None = None,
     res["ida_ok"] = bool(ida_ok)
     res["contactos_por_accion"] = contactos_por_accion
     res["contacto_info"] = contacto_info
+    if cfg.mx_demos:
+        res["demos"] = demos
     res["sonar_log"] = sonar_log
     if guardian is not None:
         res["guardian"] = guardian.resumen()

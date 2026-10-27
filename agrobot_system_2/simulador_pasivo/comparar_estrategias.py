@@ -24,6 +24,7 @@ _d = sorted(glob.glob(os.path.expanduser("~/.agrobot/aprendizaje/misiones_2026*/
 BEST = dict(EM.EXTRA_HOY, **json.load(open(_d))["mejor"]["params"])
 PRED = dict(mx_prediccion=True, mx_pred_giro_extra_m=0.04, mx_barrido=True, mx_pred_relajar_s=30.0)
 HUECO = dict(mx_hueco=True, mx_meta=True, mx_anti_dither=True, mx_visitar=True)
+DURAS = False                                   # True: incluye las 5 misiones duras (misiones_sim._duras)
 ESTRATEGIAS = {
     "E1 reactiva clásica": dict(),
     "E2 seguir el hueco (VFH)": dict(HUECO),
@@ -42,7 +43,7 @@ ESTRATEGIAS = {
 def _job(a):
     nombre, mision, semilla = a
     try:
-        ent, esc = MS.misiones(semilla)[mision]
+        ent, esc = MS.misiones(semilla, duras=DURAS)[mision]
         S.SUBSTEP = 0.005
         c = EM.campos(BEST, ent, guardian=True, mx=False)
         c.update(ESTRATEGIAS[nombre])
@@ -74,7 +75,7 @@ def main():
     a = ap.parse_args()
     SAL.mkdir(parents=True, exist_ok=True)
     semillas = list(range(100, 100 + a.semillas))
-    nombres = list(MS.misiones(0))
+    nombres = list(MS.misiones(0, duras=DURAS))
     tr = [(e, m, s) for e in ESTRATEGIAS for m in nombres for s in semillas]
     t0 = time.time()
     with Pool(a.procs) as p:

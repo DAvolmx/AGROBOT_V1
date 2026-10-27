@@ -76,6 +76,30 @@ class Planificador:
         self._cache = (self.version, blq)
         return blq
 
+    def es_libre(self, x: float, y: float) -> bool:
+        """¿El punto cae en una celda transitable (no ocupada ni dentro del inflado)?"""
+        blq = self._bloqueado()
+        i, j = int((y - self.o[1]) / self.res_plan), int((x - self.o[0]) / self.res_plan)
+        return 0 <= i < blq.shape[0] and 0 <= j < blq.shape[1] and not blq[i, j]
+
+    def cargar_verdad(self, paredes, circulos):
+        """MAPA PERFECTO (solo simulador, para el recorrido ideal de enseñanza): rasteriza segmentos (x0,y0,x1,y1) y círculos (x,y,r) como ocupados."""
+        for (x0, y0, x1, y1) in paredes:
+            n = max(2, int(math.hypot(x1 - x0, y1 - y0) / (self.res * 0.5)))
+            for k in range(n + 1):
+                iy, ix = self._celda(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n)
+                if 0 <= iy < self.n and 0 <= ix < self.n:
+                    self.L[iy, ix] = LOG_MAX
+        for (cx, cy, r) in circulos:
+            for dx in np.arange(-r, r + 1e-9, self.res * 0.5):
+                for dy in np.arange(-r, r + 1e-9, self.res * 0.5):
+                    if dx * dx + dy * dy <= r * r:
+                        iy, ix = self._celda(cx + dx, cy + dy)
+                        if 0 <= iy < self.n and 0 <= ix < self.n:
+                            self.L[iy, ix] = LOG_MAX
+        self.version += 1
+        self._cache = None
+
     # ---------------------------------------------------------------- ruta
     def ruta(self, origen, destino, tol_m: float = 0.3, max_nodos: int = 60000):
         blq = self._bloqueado()

@@ -85,6 +85,7 @@ class SueloLibre:
         # (sendero_apariencia). Con la cámara inclinada (servo 64) daba el hueco bien donde el histograma decía «0 m» el 47 % del tiempo.
         self.metodo = self.cfg.get("metodo", "histograma")
         self._mem_ap = None
+        self.segmentador = None                  # callable frame BGR -> mapa de clases (transitabilidad.Transitabilidad); con metodo="modelo"
 
     # ------------------------------------------------------------ geometría
     @staticmethod
@@ -156,6 +157,10 @@ class SueloLibre:
                                                         float(self.cfg.get("umbral", 2.6)), float(self.cfg.get("textura", 1.2)))
             suelo = cv2.resize(m_ap, (ANCHO, ALTO), interpolation=cv2.INTER_NEAREST) > 0
             extrana = False                       # la referencia se reaprende cada fotograma con memoria propia
+        if self.metodo == "modelo" and self.segmentador is not None:
+            # UNet de transitabilidad: suelo = clase 1 (camino libre); lo demás dentro de las filas válidas es obstáculo (planta, borde bajo, pared, objeto)
+            suelo = cv2.resize(self.segmentador(frame), (ANCHO, ALTO), interpolation=cv2.INTER_NEAREST) == 1
+            extrana = False
         memoria_reaprendida = False
         if extrana and validas.any() and float(suelo[validas].mean()) < MEMORIA_INVALIDA:
             self._mem_hs, self._mem_v = ref_hs.copy(), ref_v.copy()

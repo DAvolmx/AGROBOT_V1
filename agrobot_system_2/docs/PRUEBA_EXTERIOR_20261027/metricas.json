@@ -1,0 +1,224 @@
+{
+ "sesion": "20261027_215547",
+ "entorno": "exterior",
+ "ventana_s_sesion": [
+  150.0,
+  880.0
+ ],
+ "salto_reloj": {
+  "en_t_s": 527.427,
+  "magnitud_s": 711.5
+ },
+ "mision": {
+  "duracion_s": 664,
+  "plantas_inspeccionadas": 5,
+  "inspecciones_fallidas": 7,
+  "motivos_fallo": {
+   "orden manual": 6,
+   "no logré centrar el objetivo": 1
+  },
+  "plantas": [
+   {
+    "n": 1,
+    "x": 2.52,
+    "y": 0.69,
+    "especie": "otra",
+    "p_col": 0.128,
+    "vistas": 7
+   },
+   {
+    "n": 2,
+    "x": 3.12,
+    "y": 1.17,
+    "especie": "otra",
+    "p_col": 0.093,
+    "vistas": 7
+   },
+   {
+    "n": 3,
+    "x": 3.89,
+    "y": 2.19,
+    "especie": "otra",
+    "p_col": 0.323,
+    "vistas": 7
+   },
+   {
+    "n": 4,
+    "x": 3.4,
+    "y": 1.04,
+    "especie": "otra",
+    "p_col": 0.075,
+    "vistas": 7
+   },
+   {
+    "n": 5,
+    "x": 4.82,
+    "y": 5.69,
+    "especie": "otra",
+    "p_col": 0.024,
+    "vistas": 7
+   }
+  ],
+  "detecciones_de_planta": 13
+ },
+ "estados_pct": {
+  "detenido": 59.0,
+  "mando manual": 16.6,
+  "girando": 9.7,
+  "corrigiendo rumbo": 4.7,
+  "avanzando": 4.4,
+  "maniobra de esquina": 3.6,
+  "escaneando": 1.4,
+  "otro": 0.6
+ },
+ "manual_pct_de_activo": 40.5,
+ "ekf": {
+  "cuadros_con_vx_absurda": 1,
+  "vx_max_abs_ms": 29.66,
+  "x_max_abs_m": 10242.6,
+  "salto_de_pose_tras_el_salto_de_reloj_m": 29.5
+ },
+ "recorrido": {
+  "camino_slam_m": 41.9,
+  "camino_integral_v_m": 46.7,
+  "saltos_de_pose_slam": [
+   [
+    527.8,
+    30.1
+   ],
+   [
+    528.0,
+    1.0
+   ],
+   [
+    540.2,
+    24.4
+   ]
+  ],
+  "tiempo_en_movimiento_s": 244.2,
+  "extension_xy_m": [
+   28.8,
+   12.3
+  ],
+  "poses_slam_descartadas_por_salto": 3
+ },
+ "lidar_min_m": {
+  "adelante": 0.04,
+  "atras": 0.0,
+  "izquierda": 0.04,
+  "derecha": 0.02
+ },
+ "lidar_pct_menos_20cm": {
+  "adelante": 3.8,
+  "atras": 30.9,
+  "izquierda": 12.4,
+  "derecha": 19.9
+ },
+ "lidar_p5_m": {
+  "adelante": 0.21,
+  "atras": 0.03,
+  "izquierda": 0.1,
+  "derecha": 0.12
+ },
+ "intervenciones_manuales": {
+  "eventos_asistido": 37,
+  "toasts_autonomia_reanudada": 18
+ },
+ "seguridad": {
+  "normal": 850
+ },
+ "anticolision": 3,
+ "avisos_plaga_toast": {
+  "col_amarillamiento": 7,
+  "col_malformacion": 14,
+  "col_dano_insecto": 1
+ },
+ "capturas_plaga": 22,
+ "giros": {
+  "pulsos": 106,
+  "objetivo_deg": 6.0,
+  "giroscopio": {
+   "mediana_deg": 1.5,
+   "p25_deg": 0.5,
+   "p75_deg": 4.1,
+   "menos_de_2deg_pct": 56,
+   "sentido_contrario_pct": 3
+  },
+  "rumbo_ekf": {
+   "mediana_deg": 2.4,
+   "p25_deg": 1.1,
+   "p75_deg": 4.5,
+   "menos_de_2deg_pct": 40,
+   "sentido_contrario_pct": 4
+  },
+  "duracion_mediana_s": 0.46
+ },
+ "detecciones": {
+  "total": 271,
+  "por_clase": {
+   "maceta": 193,
+   "col_amarillamiento": 61,
+   "col_dano_insecto": 8,
+   "col_malformacion": 9
+  },
+  "confianza_media": {
+   "maceta": 0.56,
+   "col_amarillamiento": 0.5,
+   "col_dano_insecto": 0.42,
+   "col_malformacion": 0.67
+  }
+ },
+ "capturas_plaga_archivos": 9,
+ "videos": [
+  {
+   "archivo": "video_1793138310792769072.avi",
+   "cuadros": 4341,
+   "duracion_s": 434,
+   "resolucion": "640x480",
+   "fps": 10.0,
+   "MB": 233
+  },
+  {
+   "archivo": "video_1793139593167997608.avi",
+   "cuadros": 914,
+   "duracion_s": 91,
+   "resolucion": "640x480",
+   "fps": 10.0,
+   "MB": 12
+  }
+ ],
+ "entorno_auto": {
+  "muestras": 133,
+  "sugerido": {
+   "interior": 133
+  },
+  "modo_en_uso": {
+   "interior": 22,
+   "exterior": 111
+  },
+  "etiqueta_operador": {
+   "exterior": 123,
+   "null": 10
+  },
+  "puntuacion_media": 0.79,
+  "rasgos_medios": {
+   "brillo": 0.421,
+   "cielo": 0.04,
+   "verde": 0.007,
+   "rugosidad": 0.064,
+   "cercano": 0.969
+  }
+ },
+ "scans": {
+  "exterior": {
+   "n": 6447,
+   "sin_retorno_pct": 22.1,
+   "mediana_alcance_m": 1.27
+  },
+  "interior_mismo_dia": {
+   "n": 5011,
+   "sin_retorno_pct": 14.2,
+   "mediana_alcance_m": 1.03
+  }
+ }
+}

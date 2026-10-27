@@ -1,0 +1,39 @@
+{
+ "modelo": "/home/jetson/Desktop/AGROBOT/agrobot_system_2/simulador_pasivo/percepcion_sintetica/modelos/yolo/col_plagas_v2/weights/best.pt",
+ "datos": {
+  "nota": "dataset ya preparado"
+ },
+ "mAP50": 0.61,
+ "mAP50_95": 0.291,
+ "precision": 0.689,
+ "recall": 0.587,
+ "por_clase_mAP50": {
+  "col_planta": 0.809,
+  "col_cogollo": 0.791,
+  "dano_hoja": 0.137,
+  "pulgon": 0.705
+ },
+ "falsos_positivos": {
+  "fondos_val": {
+   "fotos": 34,
+   "cajas": 0,
+   "cajas_por_foto": 0.0
+  },
+  "coles_operador_74": {
+   "fotos": 74,
+   "cajas": 25,
+   "por_clase": {
+    "col_planta": 0,
+    "col_cogollo": 1,
+    "dano_hoja": 0,
+    "pulgon": 24
+   }
+  }
+ },
+ "previo_col_10h": {
+  "mAP50": 0.591,
+  "dano_hoja": 0.171
+ },
+ "segundos": 21,
+ "NO_DEMOSTRADO": "validación con fotos del mismo origen; las coles del operador no están etiquetadas (solo se cuentan cajas)."
+}

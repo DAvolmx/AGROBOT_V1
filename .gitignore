@@ -68,3 +68,7 @@ agrobot_system_2/datos_plantas_medicinales/
 
 # Pesos descargables de CLIP (354 MB; pasan el límite de GitHub). Se vuelven a bajar solos con clip.load().
 agrobot_system_2/jetson/backend/models/weights/
+
+# Fotos personales de la casa/huerta (negativos duros): se suben a Kaggle privado, NO a git
+agrobot_system_2/tools/kaggle/plagasx/publicar_negativos/images/
+agrobot_system_2/tools/kaggle/plagasx/publicar_negativos/labels/

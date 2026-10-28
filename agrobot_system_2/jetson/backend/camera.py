@@ -386,6 +386,28 @@ class CameraWorker:
                 return None
         return self._maceta_mod
 
+    def _modelo_col(self, cfg):
+        """Carga perezosa del detector de COLES (detection.modelo_col, 2026-10-28): da las cajas col_planta/col_cogollo que sirven de referencia a CLIP en campo abierto,
+        donde no hay macetas. Sin él, con `plaga_sin_maceta="suprimir"` no habría ningún aviso de plaga en una huerta. None si no está o falló."""
+        nombre = cfg.get("modelo_col", "agrobot_col_yolo11n.pt")
+        if not nombre or getattr(self, "_col_mod", None) is False:
+            return None
+        if getattr(self, "_col_mod", None) is None or getattr(self, "_col_nombre", None) != nombre:
+            from pathlib import Path
+            ruta = Path(__file__).resolve().parent / "models" / nombre
+            if not ruta.exists():
+                self._col_mod = False
+                return None
+            try:
+                from ultralytics import YOLO
+                self._col_mod, self._col_nombre = YOLO(str(ruta)), nombre
+                print(f"[camara] detector de coles cargado: {nombre}", flush=True)
+            except Exception as exc:
+                print(f"[camara] no se pudo cargar {nombre}: {exc}", flush=True)
+                self._col_mod = False
+                return None
+        return self._col_mod
+
     def _bucle_inferencia(self):
         while not self._stop.is_set():
             modelo = self.modelo
@@ -468,6 +490,23 @@ class CameraWorker:
                 except Exception as exc:
                     print(f"[camara] detector de macetas desactivado: {exc}", flush=True)
                     self._maceta_mod = False
+
+            # Tercer modelo: detector de COLES (col_planta/col_cogollo), referencia de CLIP donde no hay macetas (huerta con coles sembradas).
+            mod_col = self._modelo_col(cfg) if cfg.get("plaga_usar_plantas", True) else None
+            if mod_col is not None:
+                try:
+                    kw = {} if self._device is None else {"device": self._device}
+                    rc = mod_col(frame, imgsz=int(cfg.get("col_imgsz", 480)), conf=float(cfg.get("col_conf", 0.35)), verbose=False, **kw)[0]
+                    for box in rc.boxes:
+                        nom = mod_col.names[int(box.cls[0])]
+                        if nom not in ("col_planta", "col_cogollo"):
+                            continue
+                        x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
+                        cajas.append({"class": nom, "confidence": float(box.conf[0]), "xyxy": (x1, y1, x2, y2)})
+                        nuevas.append((nom, float(box.conf[0])))
+                except Exception as exc:
+                    print(f"[camara] detector de coles desactivado: {exc}", flush=True)
+                    self._col_mod = False
 
             if cfg.get("plaga_solo_en_col", True) and not self._especie_roto:
                 try:

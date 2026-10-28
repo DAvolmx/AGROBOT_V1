@@ -2183,6 +2183,7 @@ def _grabar_video(on: bool):
 
 
 _servo_bajo = ServoBajo()
+REPOSO_DEG_INTERIOR = _servo_bajo.reposo_deg
 _zoom_auto = ZoomAuto()
 _zoom_puesto_por_auto = False
 
@@ -2257,6 +2258,10 @@ async def _bucle_servo_macetas():
                 continue
             h = f[0].shape[0]
             cajas = [b["xyxy"] for b in lista if b.get("class") == "maceta" and float(b.get("confidence", 0)) >= 0.35]
+            # Exterior (2026-10-28): con la cámara a 98° (15° bajo el horizonte) el suelo cercano ocupaba media imagen y no se veían ni las plantas ni el sendero
+            # más allá de 1 m. En ese modo el reposo sube a `servo_exterior_deg` (~3° bajo el horizonte): se ve el camino libre y las plantas delante.
+            _servo_bajo.reposo_deg = (float(state.config.get("autonomia", {}).get("servo_exterior_deg", 112))
+                                      if conductor is not None and conductor.modo == "exterior" else REPOSO_DEG_INTERIOR)
             nuevo = _servo_bajo.paso(cajas, h, float(state.servo_angle), time.monotonic())
             if nuevo is not None:
                 state.servo_angle = clamp_servo(float(nuevo))

@@ -62,6 +62,8 @@ DEFAULTS = {
         "plaga_bordes_max": 0.30,          # textura de pasto/paja (≈0,35) frente a hoja de col (≤0,26)
         "plaga_solo_en_col": True,         # los avisos de plaga solo valen si CLIP dice que la maceta del cuadro es una col (el detector PLAGASX le pone una plaga a cualquier planta)
         "plaga_p_col_min": 0.55,           # probabilidad mínima de «col» de CLIP (coliflor 0,94-0,99; otras plantas 0,06-0,40; una maceta dudosa dio 0,50)
+        "modelo_col": "agrobot_col_yolo11n.pt",   # detector de coles (col_planta/col_cogollo): referencia de CLIP en campo abierto
+        "col_conf": 0.35, "col_imgsz": 480,
         "plaga_usar_plantas": True,        # sin macetas, CLIP revisa la planta detectada (col_planta/col_cogollo): campo con coles sembradas
         "plaga_sin_maceta": "suprimir",    # sin ninguna maceta en el cuadro el aviso de plaga se descarta (puertas, cajas, paredes: 16 de 17 avisos falsos del 28-oct); "permitir" para cultivo a campo abierto sin macetas
         "plaga_caja_max_frac": 0.30,       # una caja de plaga que cubre esta fracción del cuadro se anota como rótulo, no como marco
@@ -138,6 +140,8 @@ DEFAULTS = {
         "man_pausa_s": 0.0,
         # Maniobra de esquina (2026-10-24): 1 / 0 / 1 = comportamiento de siempre. Valores del simulador: ver docs/REPORTE_MEJORAS_20261024.
         "man_giro_pulsos": 1,
+        "servo_exterior_deg": 112,         # reposo de la cámara en modo exterior (98° = 15° bajo el horizonte; 112° ≈ 3° bajo el horizonte)
+        "prioridad_adelante": False,      # sin marcha atrás: giros en el sitio/arco y siempre hacia donde el camino esté libre (el robot no tiene sensores atrás y pisó plantas)
         "mx_giro_comp": 0,                # giro compensado: cada N pulsos de giro seguidos un pulso atrás si hay pared cerca (0 = apagado; N=3 fue el mejor en simulación)
         "giro_lazo_cerrado": False,       # el pulso de giro del explorador gira `mx_grados_pulso` medidos con el giroscopio (giro_cerrado.py) en vez de un tiempo fijo
         "man_retroceso_cm": 0.0,

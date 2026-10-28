@@ -114,3 +114,13 @@ def test_prefiere_el_hueco_mas_cercano_a_la_meta():
     scan = [{"angle_deg": a % 360, "distance_m": 5.0 if (abs(a - 60) <= 20 or abs(a + 60) <= 20) else 0.3} for a in range(-180, 180)]
     a = _correr_con_scan({"mx_hueco": True, "mx_grados_pulso": 30.0}, scan, ticks=3.2, meta=(-50.0, 5.0))
     assert a[0] == "derecha"
+
+
+def test_prioridad_adelante_no_retrocede_en_esquina():
+    a = _correr({"man_retroceso_cm": 35, "man_atras_pulsos": 2, "man_giro_pulsos": 1, "prioridad_adelante": True}, ticks=3.6)
+    assert "atras" not in a and a.count("izquierda") >= 1
+
+
+def test_prioridad_adelante_no_retrocede_si_algo_esta_al_costado():
+    a = _correr({"prioridad_adelante": True}, frente=0.30, ticks=1.5)
+    assert "atras" not in a

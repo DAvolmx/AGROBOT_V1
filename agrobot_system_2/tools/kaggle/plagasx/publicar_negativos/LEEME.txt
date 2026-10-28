@@ -1,0 +1,6 @@
+Fondos SIN planta que el detector PLAGASX marcó como col_dano_insecto/col_malformacion (2026-10-22). Etiqueta vacía = negativo.
+Úsalos como negativos al reentrenar (mezclar con el dataset de coles).
+
+2026-10-22 v2: + 52 fotos del operador SIN coles (baldosa interior, pasto/paja, pasillo de cemento, macetas de otras plantas) como negativos.
+
+2026-10-28 v3: + 107 fotos de la PRUEBA DE EXTERIOR 2 (huerta/patio de la casa) donde PLAGASX disparó sobre algo que NO es col (flores, suculentas, tierra, llantas, pared): negativos duros. Se descartaron las fotos con personas/piel y las que el detector de coles + CLIP confirmaron como col. Etiqueta vacía = negativo.

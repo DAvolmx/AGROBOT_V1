@@ -371,7 +371,7 @@ class ExploradorReactivo:
             margen = float(cfg.get("margen_giro_m", 0.18))   # al girar, la esquina del chasis barre ~12 cm más allá del costado; 0,18 = barrido sala en L 2026-10-23
             atras = self._hueco(d, "atras")
             ok_atras = not (cfg.get("e11_activo", False) and cfg.get("e11_predictor", True)) or self._despejado("atras", cfg)
-            if ok_atras and d.get("cerca") is not None and d["cerca"] < margen and atras > max(0.30, float(cfg.get("retroceso_libre_cm", 30)) / 100.0):
+            if ok_atras and not cfg.get("prioridad_adelante", False) and d.get("cerca") is not None and d["cerca"] < margen and atras > max(0.30, float(cfg.get("retroceso_libre_cm", 30)) / 100.0):
                 self.estado = f"algo a {d['cerca'] * 100:.0f} cm del costado: retrocedo antes de girar"
                 self._rumbo_ref = None
                 self._conducir_cb("atras", False)
@@ -871,6 +871,8 @@ class ExploradorReactivo:
                         tope = 30 if cfg.get("e11_sonar", False) else 9
                         n_giro = int(max(1, min(tope, round(abs(math.degrees(gap)) / float(cfg.get("mx_grados_pulso", 6.0))))))
                     ret_cm = float(cfg.get("man_retroceso_cm", 0.0))
+                    if cfg.get("prioridad_adelante", False):
+                        ret_cm = 0.0               # sin marcha atrás (28-oct, exterior: sin sensores atrás pisó plantas; 35 % de la distancia de la autonomía fue hacia atrás)
                     if ret_cm > 0 and frente < ret_cm / 100.0 and atras >= max(retro_libre, 0.30):
                         self.estado = f"esquina: retrocedo {n_atras} pulso(s) (frente {frente:.2f} m)"
                         for _ in range(n_atras):
@@ -882,7 +884,7 @@ class ExploradorReactivo:
                     self.giros += 1
                     # Giro compensado (2026-10-27, simulado: mx_giro_comp): el chasis gira en arco y avanza ~5 cm por pulso; tras cada N giros
                     # seguidos, un pulso atrás si hay pared cerca y espacio detrás. 0 = apagado.
-                    comp = int(cfg.get("mx_giro_comp", 0))
+                    comp = 0 if cfg.get("prioridad_adelante", False) else int(cfg.get("mx_giro_comp", 0))
                     for k_g in range(n_giro - 1):
                         await self._pausa_pulso()
                         if not self.activo or self.pausado or time.monotonic() < self._mando_cedido_hasta:
@@ -902,7 +904,7 @@ class ExploradorReactivo:
                         await asyncio.sleep(float(cfg["man_pausa_s"]))     # deja que el LIDAR se asiente antes de decidir
                     continue
 
-                if self._hueco(d, "atras") >= retro_libre:
+                if self._hueco(d, "atras") >= retro_libre and not cfg.get("prioridad_adelante", False):
                     self.estado = "sin salida: retrocediendo"
                     self._conducir("atras")
                     continue

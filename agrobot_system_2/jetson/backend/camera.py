@@ -473,7 +473,7 @@ class CameraWorker:
                 try:
                     import especie_clip
                     cajas, nuevas = filtrar_plagas_por_especie(frame, cajas, nuevas, cfg.get("clases_planta", []), especie_clip.clasificar, self._cache_especie,
-                                                               time.monotonic(), float(cfg.get("plaga_p_col_min", 0.55)), sin_maceta=str(cfg.get("plaga_sin_maceta", "suprimir")))
+                                                               time.monotonic(), float(cfg.get("plaga_p_col_min", 0.55)), sin_maceta=str(cfg.get("plaga_sin_maceta", "suprimir")), usar_plantas=bool(cfg.get("plaga_usar_plantas", True)))
                 except ImportError:
                     self._especie_roto = True
             with self._lock:
@@ -517,7 +517,7 @@ class CameraWorker:
 ZOOM_MAX = 4.0
 
 
-def filtrar_plagas_por_especie(frame, cajas, nuevas, clases_planta, clasificar, cache, ahora, p_col_min: float = 0.5, vigencia_s: float = 4.0, sin_maceta: str = "permitir"):
+def filtrar_plagas_por_especie(frame, cajas, nuevas, clases_planta, clasificar, cache, ahora, p_col_min: float = 0.5, vigencia_s: float = 4.0, sin_maceta: str = "permitir", usar_plantas: bool = False):
     """Los avisos de plaga solo valen sobre COLES (2026-10-28): el detector PLAGASX solo conoce enfermedades de col y a cualquier planta le pone una (en la prueba de
     exterior salieron 22 avisos sobre suculentas). Si en el cuadro hay una maceta detectada, se pregunta a CLIP (`clasificar(frame, caja)` -> {"p_col": ...}) qué planta es:
     si ninguna es col, se descartan las cajas y los avisos de plaga (las plantas/macetas se conservan). Si CLIP falla, NO se filtra.
@@ -528,6 +528,8 @@ def filtrar_plagas_por_especie(frame, cajas, nuevas, clases_planta, clasificar, 
     if not any(n not in clases_planta for n, _ in nuevas) and not any(c["class"] not in clases_planta for c in cajas):
         return cajas, nuevas
     macetas = sorted((c for c in cajas if c["class"] == "maceta"), key=lambda c: -c["confidence"])[:2]
+    if not macetas and usar_plantas:                                   # campo abierto, coles sembradas: se pregunta a CLIP por la planta detectada
+        macetas = sorted((c for c in cajas if c["class"] in ("col_planta", "col_cogollo")), key=lambda c: -c["confidence"])[:2]
     if not macetas:
         if sin_maceta == "suprimir":
             return ([c for c in cajas if c["class"] in clases_planta], [(n, c) for n, c in nuevas if n in clases_planta])

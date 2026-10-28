@@ -62,6 +62,7 @@ DEFAULTS = {
         "plaga_bordes_max": 0.30,          # textura de pasto/paja (≈0,35) frente a hoja de col (≤0,26)
         "plaga_solo_en_col": True,         # los avisos de plaga solo valen si CLIP dice que la maceta del cuadro es una col (el detector PLAGASX le pone una plaga a cualquier planta)
         "plaga_p_col_min": 0.55,           # probabilidad mínima de «col» de CLIP (coliflor 0,94-0,99; otras plantas 0,06-0,40; una maceta dudosa dio 0,50)
+        "plaga_usar_plantas": True,        # sin macetas, CLIP revisa la planta detectada (col_planta/col_cogollo): campo con coles sembradas
         "plaga_sin_maceta": "suprimir",    # sin ninguna maceta en el cuadro el aviso de plaga se descarta (puertas, cajas, paredes: 16 de 17 avisos falsos del 28-oct); "permitir" para cultivo a campo abierto sin macetas
         "plaga_caja_max_frac": 0.30,       # una caja de plaga que cubre esta fracción del cuadro se anota como rótulo, no como marco
         "plaga_persistencia_ventana": 5,

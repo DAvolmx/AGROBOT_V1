@@ -80,3 +80,12 @@ def test_suprimir_conserva_la_maceta_y_su_aviso_de_planta():
     cajas = [_caja("maceta"), _caja("col_dano_insecto")]
     c, n = filtrar_plagas_por_especie(None, cajas[1:] + [], [("col_dano_insecto", 0.8), ("maceta", 0.6)], PLANTA, Clip(0.9), {}, 0.0, sin_maceta="suprimir")
     assert c == [] and n == [("maceta", 0.6)]
+
+
+def test_campo_abierto_usa_la_planta_detectada_como_referencia():
+    cajas = [_caja("col_planta"), _caja("col_dano_insecto")]
+    nuevas = [("col_dano_insecto", 0.8)]
+    c, n = filtrar_plagas_por_especie(None, cajas, nuevas, PLANTA, Clip(0.95), {}, 0.0, usar_plantas=True)
+    assert len(c) == 2 and n == nuevas
+    c, n = filtrar_plagas_por_especie(None, cajas, nuevas, PLANTA, Clip(0.1), {}, 0.0, usar_plantas=True)
+    assert [x["class"] for x in c] == ["col_planta"] and n == []

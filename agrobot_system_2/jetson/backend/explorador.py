@@ -144,6 +144,7 @@ class ExploradorReactivo:
         self._rumbo_corr = None            # rumbo_fusion.CorrectorRumbo
         self._rumbo_pend = False           # hay un pulso recto cuya caída de rumbo aún no se midió
         self._corr_propia = False          # el pulso en curso es una corrección de rumbo (no reinicia la referencia)
+        self.ocupado_cb = None             # () -> bool: el conductor de pulsos sigue en un pulso (lo pone jetson_server)
         self.correcciones_rumbo = 0
         # Guardián del sendero (guardian_sendero.py): se asigna desde fuera; sin él (o con autonomia.guardian_sendero_activo=false) no hace nada.
         # Maniobras específicas (2026-10-24, validadas en el simulador por misiones; todas con interruptor en autonomia.mx_*): ir al hueco,
@@ -318,6 +319,21 @@ class ExploradorReactivo:
         xs = [x for x, y in ((q["distance_m"] * math.cos(math.radians(q["angle_deg"])), q["distance_m"] * math.sin(math.radians(q["angle_deg"]))) for q in scan)
               if x > f and abs(y) < medio]
         return min(frente, min(xs) - f) if xs else frente
+
+    async def _pausa_pulso(self, base: float = 1.05, tope: float = 4.0):
+        """Pausa entre pulsos. Con giros de LAZO CERRADO (autonomia.giro_lazo_cerrado) un pulso dura 0,5-3 s y no se puede mandar otro hasta que acabe: el
+        siguiente se descartaba en silencio y el giro quedaba corto (2026-10-28). Si el servidor da `ocupado_cb`, se espera a que el conductor quede libre."""
+        await asyncio.sleep(base)
+        if self.ocupado_cb is None:
+            return
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < tope and self.activo and not self.pausado:
+            try:
+                if not self.ocupado_cb():
+                    return
+            except Exception:
+                return
+            await asyncio.sleep(0.1)
 
     def _conducir(self, accion, maniobra=True, esc_dur=1.0):
         """Envía un pulso. Con E11 activo, antes lo pasa por el predictor de colisión; devuelve True si se envió."""
@@ -868,7 +884,7 @@ class ExploradorReactivo:
                     # seguidos, un pulso atrás si hay pared cerca y espacio detrás. 0 = apagado.
                     comp = int(cfg.get("mx_giro_comp", 0))
                     for k_g in range(n_giro - 1):
-                        await asyncio.sleep(1.05)
+                        await self._pausa_pulso()
                         if not self.activo or self.pausado or time.monotonic() < self._mando_cedido_hasta:
                             break
                         d_g = self._distancias()
@@ -877,7 +893,7 @@ class ExploradorReactivo:
                         if comp and n_giro > comp and (k_g + 1) % comp == 0 and self._hueco(d_g, "adelante") < 1.0 \
                                 and self._hueco(d_g, "atras") >= 0.30:
                             self._conducir("atras", maniobra=False)
-                            await asyncio.sleep(1.05)
+                            await self._pausa_pulso()
                             if not self.activo or self.pausado or time.monotonic() < self._mando_cedido_hasta:
                                 break
                         self._conducir(lado, maniobra=maniobra)

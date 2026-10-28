@@ -2997,7 +2997,7 @@ def _conducir_pulso(accion: str, maniobra: bool = True, esc_dur: float = 1.0):
     # Sin IMU fresco cae al pulso de siempre.
     if accion in ("izquierda", "derecha") and state.config["autonomia"].get("giro_lazo_cerrado", False) and _gyro_dps() is not None:
         grados = float(state.config["autonomia"].get("mx_grados_pulso", 6.0))
-        if conductor.girar_grados(grados if accion == "izquierda" else -grados, _gyro_dps, w_rps=0.6, t_max_s=1.2):
+        if conductor.girar_grados(grados if accion == "izquierda" else -grados, _gyro_dps, w_rps=0.6, t_max_s=2.0):
             return
     conductor.ordenar(accion, v_max=v_max,
                       omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra, esc_dur=esc_dur)
@@ -4680,6 +4680,7 @@ async def start_background(app: web.Application):
         explorador.guardian = guardian_sendero.GuardianSendero(guardian_sendero.MemoriaCorrecciones())
         explorador.sensores_guardian = _sensores_guardian
         explorador.scan_cb = _scan_explorador
+        explorador.ocupado_cb = lambda: conductor.activo
         explorador.geom_cb = lambda: state.config["slam"]
     except Exception as exc:  # noqa: BLE001
         print(f"[guardián] no disponible: {exc}", flush=True)

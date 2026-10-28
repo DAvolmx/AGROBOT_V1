@@ -46,7 +46,7 @@ async def main():
                 seg = ult.get("seguridad") or {}
                 mov = est.get("motor", {}).get("referencias", {}) or {}
                 x, y, th = pose.get("x"), pose.get("y"), pose.get("theta_deg")
-                hist.append((ahora, x, y))
+                hist.append((ahora, x, y, th))
                 alertas = []
                 f, i, dr = d.get("adelante"), d.get("izquierda"), d.get("derecha")
                 en_marcha = abs(mov.get("v_aplicada", 0) or 0) > 0.01 or abs(mov.get("omega_aplicada", 0) or 0) > 0.05
@@ -55,10 +55,10 @@ async def main():
                         alertas.append(f"hueco {nombre} {v * 100:.0f} cm EN MARCHA")
                 if x is not None and len(hist) >= 4 and ex.get("activo"):
                     ref = next((h for h in reversed(hist[:-1]) if ahora - h[0] >= 30), None)
-                    if ref and ref[1] is not None and math.hypot(x - ref[1], y - ref[2]) < 0.05:
-                        alertas.append("SIN AVANCE 30 s con la autonomía activa")
-                if len(hist) >= 2 and None not in (x, hist[-2][1]) and math.hypot(x - hist[-2][1], y - hist[-2][2]) > 1.0:
-                    alertas.append(f"SALTO de pose {math.hypot(x - hist[-2][1], y - hist[-2][2]):.1f} m")
+                    if ref and ref[1] is not None and math.hypot(x - ref[1], y - ref[2]) < 0.05 and (th is None or ref[3] is None or abs((th - ref[3] + 180) % 360 - 180) < 5):
+                        alertas.append("SIN AVANCE NI GIRO 30 s con la autonomía activa")      # un giro en el sitio (rumbo cambia) NO es atasco
+                if len(hist) >= 2 and None not in (x, hist[-2][1]) and math.hypot(x - hist[-2][1], y - hist[-2][2]) > 2.5:
+                    alertas.append(f"SALTO de pose {math.hypot(x - hist[-2][1], y - hist[-2][2]):.1f} m en {INTERVALO:.0f} s (a 0,2 m/s lo normal es <2,5)")
                 if seg.get("nivel") not in (None, "normal"):
                     alertas.append(f"seguridad {seg.get('nivel')}: {seg.get('motivos')}")
                 if not est.get("c3", {}).get("conectado"):

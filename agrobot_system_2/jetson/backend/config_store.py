@@ -60,6 +60,9 @@ DEFAULTS = {
         "plaga_requiere_vegetacion": True,
         "plaga_vegetacion_min": 0.05,
         "plaga_bordes_max": 0.30,          # textura de pasto/paja (≈0,35) frente a hoja de col (≤0,26)
+        "plaga_solo_en_col": True,         # los avisos de plaga solo valen si CLIP dice que la maceta del cuadro es una col (el detector PLAGASX le pone una plaga a cualquier planta)
+        "plaga_p_col_min": 0.5,            # probabilidad mínima de «col» de CLIP
+        "plaga_caja_max_frac": 0.30,       # una caja de plaga que cubre esta fracción del cuadro se anota como rótulo, no como marco
         "plaga_persistencia_ventana": 5,
         "plaga_persistencia_min": 3,
         "confidence_threshold": 0.45,

@@ -141,6 +141,8 @@ class CameraWorker:
         self._nitidos = []
         self._res_abierta = (640, 480)
         self._cajas = []             # últimas detecciones dibujables
+        self._cache_especie = {}     # caja de maceta -> (t, p_col de CLIP): ver filtrar_plagas_por_especie
+        self._especie_roto = False
         self._cajas_ts = 0.0
         self._ultimo_aviso = {}      # clase -> ts del último aviso emitido
         self._hist_clases = []       # clases vistas en los últimos fotogramas (persistencia)
@@ -467,6 +469,13 @@ class CameraWorker:
                     print(f"[camara] detector de macetas desactivado: {exc}", flush=True)
                     self._maceta_mod = False
 
+            if cfg.get("plaga_solo_en_col", True) and not self._especie_roto:
+                try:
+                    import especie_clip
+                    cajas, nuevas = filtrar_plagas_por_especie(frame, cajas, nuevas, cfg.get("clases_planta", []), especie_clip.clasificar, self._cache_especie,
+                                                               time.monotonic(), float(cfg.get("plaga_p_col_min", 0.5)))
+                except ImportError:
+                    self._especie_roto = True
             with self._lock:
                 self._cajas = cajas
                 self._cajas_ts = time.time()
@@ -506,6 +515,35 @@ class CameraWorker:
 
 
 ZOOM_MAX = 4.0
+
+
+def filtrar_plagas_por_especie(frame, cajas, nuevas, clases_planta, clasificar, cache, ahora, p_col_min: float = 0.5, vigencia_s: float = 4.0):
+    """Los avisos de plaga solo valen sobre COLES (2026-10-28): el detector PLAGASX solo conoce enfermedades de col y a cualquier planta le pone una (en la prueba de
+    exterior salieron 22 avisos sobre suculentas). Si en el cuadro hay una maceta detectada, se pregunta a CLIP (`clasificar(frame, caja)` -> {"p_col": ...}) qué planta es:
+    si ninguna es col, se descartan las cajas y los avisos de plaga (las plantas/macetas se conservan). Sin maceta en el cuadro, o si CLIP falla, NO se filtra (como antes).
+    `cache` {caja_cuantizada: (t, p_col)} evita llamar a CLIP en cada cuadro (cuesta ~0,5 s en CPU). Devuelve (cajas, nuevas)."""
+    if not any(n not in clases_planta for n, _ in nuevas) and not any(c["class"] not in clases_planta for c in cajas):
+        return cajas, nuevas
+    macetas = sorted((c for c in cajas if c["class"] == "maceta"), key=lambda c: -c["confidence"])[:2]
+    if not macetas:
+        return cajas, nuevas
+    es_col = False
+    for c in macetas:
+        clave = tuple(int(v) // 48 for v in c["xyxy"])
+        hit = cache.get(clave)
+        if hit is None or ahora - hit[0] > vigencia_s:
+            try:
+                hit = (ahora, float(clasificar(frame, c["xyxy"]).get("p_col", 0.0)))
+            except Exception:
+                return cajas, nuevas
+            cache[clave] = hit
+            if len(cache) > 32:
+                cache.pop(next(iter(cache)))
+        es_col = es_col or hit[1] >= p_col_min
+    if es_col:
+        return cajas, nuevas
+    return ([c for c in cajas if c["class"] in clases_planta],
+            [(n, c) for n, c in nuevas if n in clases_planta])
 
 
 def dibujar_cajas(cv2, frame, cajas, frac_max: float = 0.30, clases_planta=()):

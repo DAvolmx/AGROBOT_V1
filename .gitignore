@@ -65,3 +65,6 @@ agrobot_system_2/simulador_pasivo/percepcion_sintetica/modelos/*intento*
 agrobot_system_2/drivers/
 agrobot_system_2/simulador_pasivo/percepcion_sintetica/yolo_col/
 agrobot_system_2/datos_plantas_medicinales/
+
+# Pesos descargables de CLIP (354 MB; pasan el límite de GitHub). Se vuelven a bajar solos con clip.load().
+agrobot_system_2/jetson/backend/models/weights/

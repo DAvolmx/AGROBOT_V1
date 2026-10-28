@@ -324,7 +324,7 @@ class CameraWorker:
 
                 try:
                     cfg_det = self._get_config()["detection"]
-                    dibujar_cajas(cv2, frame, cajas, float(cfg_det.get("plaga_caja_max_frac", 0.55)), cfg_det.get("clases_planta", []))
+                    dibujar_cajas(cv2, frame, cajas, float(cfg_det.get("plaga_caja_max_frac", 0.30)), cfg_det.get("clases_planta", []))
                 except Exception:
                     dibujar_cajas(cv2, frame, cajas)
 
@@ -508,7 +508,7 @@ class CameraWorker:
 ZOOM_MAX = 4.0
 
 
-def dibujar_cajas(cv2, frame, cajas, frac_max: float = 0.55, clases_planta=()):
+def dibujar_cajas(cv2, frame, cajas, frac_max: float = 0.30, clases_planta=()):
     """Dibuja las cajas detectadas sobre `frame` (ya copiado). Una caja de PLAGA que cubre >= `frac_max` del cuadro no localiza nada (el detector de plagas
     da a veces la imagen entera, 2026-10-27: 4 de 4 cajas a >60 % en la misión de plantas): rodeaba toda la pantalla. Esas se anotan como rótulo abajo a la
     izquierda en vez de un marco. Las plantas/macetas se dibujan siempre."""
@@ -525,8 +525,9 @@ def dibujar_cajas(cv2, frame, cajas, frac_max: float = 0.55, clases_planta=()):
     for k, texto in enumerate(rotulos[:3]):
         y = alto - 10 - 22 * k
         (tw, th), _ = cv2.getTextSize(texto, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
-        cv2.rectangle(frame, (6, y - th - 5), (14 + tw, y + 5), (0, 0, 0), -1)
-        cv2.putText(frame, texto, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (60, 200, 255), 1)
+        x = max(6, (ancho - tw) // 2)                  # abajo y al CENTRO: la esquina izquierda es del minimapa del dashboard y la derecha, del STOP
+        cv2.rectangle(frame, (x - 4, y - th - 5), (x + tw + 4, y + 5), (0, 0, 0), -1)
+        cv2.putText(frame, texto, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (60, 200, 255), 1)
 
 
 def _recorte_zoom(cv2, frame, z):

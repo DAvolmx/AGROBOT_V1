@@ -12,7 +12,7 @@ def test_caja_de_plaga_de_imagen_completa_no_dibuja_marco():
     img = np.zeros((480, 640, 3), np.uint8)
     dibujar_cajas(cv2, img, [{"class": "col_amarillamiento", "confidence": 0.5, "xyxy": (0, 0, 639, 479)}], 0.55, ["maceta"])
     assert _borde_verde(img) == 0
-    assert img[430:480, :60].any()                  # el rótulo sí aparece abajo a la izquierda
+    assert img[430:480, 200:440].any()              # el rótulo sí aparece abajo, al centro
 
 
 def test_caja_pequena_de_plaga_si_se_dibuja():
@@ -25,3 +25,9 @@ def test_maceta_grande_siempre_se_dibuja():
     img = np.zeros((480, 640, 3), np.uint8)
     dibujar_cajas(cv2, img, [{"class": "maceta", "confidence": 0.9, "xyxy": (10, 10, 630, 470)}], 0.55, ["maceta"])
     assert _borde_verde(img) > 500
+
+
+def test_caja_de_plaga_del_40_por_ciento_tambien_es_rotulo():
+    img = np.zeros((480, 640, 3), np.uint8)
+    dibujar_cajas(cv2, img, [{"class": "col_malformacion", "confidence": 0.6, "xyxy": (0, 0, 256, 479)}], 0.30, ["maceta"])
+    assert _borde_verde(img) == 0

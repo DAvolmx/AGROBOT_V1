@@ -1,0 +1,2035 @@
+{
+ "stats": {
+  "lineas_index_html": 4259,
+  "tamano_kb": 240,
+  "botones": 93,
+  "deslizadores": 53,
+  "interruptores": 10,
+  "lienzos": 5,
+  "ids": 343,
+  "rutas_rest_backend": 128,
+  "rutas_usadas_por_el_dashboard": 65,
+  "rutas_usadas_por_alguna_pagina": 72,
+  "mensajes_ws_manejados": 25,
+  "mensajes_ws_emitidos": 32,
+  "pestanas": 12,
+  "lineas_jetson_server_py": 5346,
+  "aria_label": 6,
+  "atributos_title": 32,
+  "media_queries": 16,
+  "confirmaciones_confirm": 11,
+  "usos_localstorage": 16,
+  "intervalos_setInterval": 8,
+  "llamadas_fetch": 64,
+  "reconexion_ws": true,
+  "autenticacion_basic_opcional": true,
+  "clave_configurada": true,
+  "paginas_auxiliares": 4
+ },
+ "rutas_por_grupo": {
+  "c3": 10,
+  "ws": 1,
+  "video": 2,
+  "drive": 3,
+  "emergencia": 1,
+  "paso": 2,
+  "sendero": 1,
+  "suelo": 2,
+  "evasion": 3,
+  "nav": 7,
+  "mapas": 5,
+  "exploracion": 3,
+  "simulador": 3,
+  "giro_cerrado": 2,
+  "maniobra_giro": 2,
+  "camara": 4,
+  "misiones": 2,
+  "mision_plantas": 2,
+  "vision_activa": 2,
+  "patrol": 5,
+  "saludo": 1,
+  "session-report": 1,
+  "models": 3,
+  "hardware": 2,
+  "calibration": 2,
+  "mission": 2,
+  "asistente": 1,
+  "entorno": 2,
+  "calibracion": 1,
+  "params": 2,
+  "lidar": 1,
+  "obstacle_status": 1,
+  "costmap": 7,
+  "ocupado": 1,
+  "health": 1,
+  "seguridad": 3,
+  "captures": 3,
+  "nav_cal": 3,
+  "training": 6,
+  "asistido": 4,
+  "training.html": 1,
+  "comunicacion": 1,
+  "wifi": 1,
+  "diagnostico": 1,
+  "motor": 3,
+  "estado": 1,
+  "raíz": 2,
+  "recoleccion": 2,
+  "recoleccion-export": 1,
+  "etiquetado": 6
+ },
+ "rutas": [
+  {
+   "metodo": "GET",
+   "ruta": "/api/c3/pines",
+   "manejador": "c3_pines.get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/c3/pines",
+   "manejador": "c3_pines.set_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/c3/pines/reset",
+   "manejador": "c3_pines.reset_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/c3/pines/intercambiar",
+   "manejador": "c3_pines.swap_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/c3/prueba",
+   "manejador": "c3_pines.test_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/c3/limites",
+   "manejador": "c3_pines.lim_get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/c3/limites",
+   "manejador": "c3_pines.lim_set_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/c3/limites/reset",
+   "manejador": "c3_pines.lim_reset_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/c3/setup",
+   "manejador": "c3_setup.get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/c3/setup/{action}",
+   "manejador": "c3_setup.post_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/ws",
+   "manejador": "ws_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/video",
+   "manejador": "video_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Sirve el MJPEG. No toca la cámara: solo consume lo que el hilo de captura ya dejó listo (ver camera.py). Antes este handler abría su propio `VideoCapture(0)` por petición —dos pestañas del dashboard eran dos capturas pel",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/video/record",
+   "manejador": "video_record_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Inicia o detiene la grabación de video desde la cámara. POST {\"action\": \"start\"|\"stop\"|\"status\"}.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/drive",
+   "manejador": "drive_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/drive {\"accion\": \"adelante|atras|izquierda|derecha|parar\", \"escala\": 0.1..1, \"maniobra\": true}",
+   "usada_por": [
+    "index.html",
+    "manejo.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/emergencia",
+   "manejador": "emergencia_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/emergencia — parada total por HTTP (el WebSocket se cae al bloquear la pantalla del móvil; una petición HTTP llega o da error).",
+   "usada_por": [
+    "index.html",
+    "manejo.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/paso",
+   "manejador": "paso_get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/paso — en qué va el movimiento robótico por pulsos.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/paso",
+   "manejador": "paso_post_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/paso {\"accion\": \"avanzar\", \"cm\": 50} | {\"accion\": \"girar\", \"grados\": -90} | {\"accion\": \"parar\"}; opcional \"escala\" (0,1-1).",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/drive/mode",
+   "manejador": "drive_mode_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET: modo actual. POST {\"modo\": ..., \"perfil\": bool}: cambia el modo.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/drive/mode",
+   "manejador": "drive_mode_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET: modo actual. POST {\"modo\": ..., \"perfil\": bool}: cambia el modo.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/sendero/vista.jpg",
+   "manejador": "sendero_vista_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/sendero/vista.jpg — lo que ve el detector de hileras ahora: cámara con las plantas marcadas + vista cenital con hileras y sendero. Para ajustar en campo el rango de verde y la geometría de la cámara.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/suelo/vista.jpg",
+   "manejador": "suelo_vista_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/suelo/vista.jpg — suelo libre por cámara: verde = suelo, rojo = base de obstáculos, recuadro = franja de referencia.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/suelo",
+   "manejador": "suelo_estado_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/suelo — resumen del suelo libre (sin la máscara).",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/evasion/start",
+   "manejador": "evasion_start_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/evasion/start {\"segundos\": 120, \"objetivo_deg\": 0}",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/evasion/stop",
+   "manejador": "evasion_stop_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/evasion",
+   "manejador": "evasion_get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/nav/reset_map",
+   "manejador": "nav_reset_map_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/nav/reset_map — borra el mapa de slam_toolbox y empieza de cero.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/mapas",
+   "manejador": "mapas_listar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/mapas/guardar",
+   "manejador": "mapas_guardar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/mapas/guardar {\"nombre\": \"invernadero\", \"sobrescribir\": false}",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/mapas/cargar",
+   "manejador": "mapas_cargar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/mapas/cargar {\"nombre\": \"invernadero\"}",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/mapas/digitalizar",
+   "manejador": "mapas_digitalizar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/mapas/digitalizar {\"nombre\": \"invernadero\"} -> plano vectorial (SVG, DXF, JSON y PNG) en maps/<nombre>/digital/. Hace falta el mapa.pgm/mapa.yaml de ese mapa (los guarda «Guardar mapa»).",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/exploracion/regresar",
+   "manejador": "exploracion_regresar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/exploracion/regresar — E11: el robot da la vuelta y vuelve al punto de salida por una ruta A* sobre el mapa que acumuló.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/simulador/subir_datos",
+   "manejador": "simulador_subir_datos_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/simulador/subir_datos {\"nombre\"?: \"...\", \"mapa\"?: \"<mapa ya guardado>\"}",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/mapas/digital/{nombre}/{archivo}",
+   "manejador": "mapas_digital_archivo_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/mapas/digital/<nombre>/<archivo>: descarga lo generado por /api/mapas/digitalizar.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/giro_cerrado",
+   "manejador": "giro_cerrado_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/giro_cerrado — último giro de lazo cerrado. POST {\"grados\": 15, \"w\": 0.6} — gira esos grados (+ izquierda) midiendo con el giroscopio y para al alcanzarlos. Se cancela con la parada total. Rechaza si ya hay un m",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/giro_cerrado",
+   "manejador": "giro_cerrado_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/giro_cerrado — último giro de lazo cerrado. POST {\"grados\": 15, \"w\": 0.6} — gira esos grados (+ izquierda) midiendo con el giroscopio y para al alcanzarlos. Se cancela con la parada total. Rechaza si ya hay un m",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/maniobra_giro",
+   "manejador": "maniobra_giro_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/maniobra_giro — estado. POST {\"grados\": 180|-180|360|-360, \"tramo\": 30} — gira ese ángulo en el sitio (+ izquierda) en tramos de lazo cerrado, corrigiendo la deriva con marcha atrás y parando si no hay espacio o",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/maniobra_giro",
+   "manejador": "maniobra_giro_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/maniobra_giro — estado. POST {\"grados\": 180|-180|360|-360, \"tramo\": 30} — gira ese ángulo en el sitio (+ izquierda) en tramos de lazo cerrado, corrigiendo la deriva con marcha atrás y parando si no hay espacio o",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/simulador",
+   "manejador": "simulador_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/simulador — estado del simulador visual. POST {\"accion\": \"iniciar\"|\"detener\", \"escenario\"?}.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/simulador",
+   "manejador": "simulador_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/simulador — estado del simulador visual. POST {\"accion\": \"iniciar\"|\"detener\", \"escenario\"?}.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/camara/cajas",
+   "manejador": "camara_cajas_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/camara/cajas — lo que el robot detecta AHORA (clase, confianza, caja y distancia por cámara a la cara delantera).",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/camara/cruda.jpg",
+   "manejador": "camara_cruda_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/camara/cruda.jpg — el último fotograma SIN cajas dibujadas.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/misiones",
+   "manejador": "misiones_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/misiones — catálogo y estado. POST {\"mision\": \"mapear\"|\"dataset\"|\"inspeccion\", \"accion\": \"iniciar\"|\"detener\", \"opciones\": {...}}.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/misiones",
+   "manejador": "misiones_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/misiones — catálogo y estado. POST {\"mision\": \"mapear\"|\"dataset\"|\"inspeccion\", \"accion\": \"iniciar\"|\"detener\", \"opciones\": {...}}.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/mision_plantas",
+   "manejador": "mision_plantas_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET/POST /api/mision_plantas {\"activa\": true|false} — la misión de la demo: explorar, mapear y escanear plantas en maceta.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/mision_plantas",
+   "manejador": "mision_plantas_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET/POST /api/mision_plantas {\"activa\": true|false} — la misión de la demo: explorar, mapear y escanear plantas en maceta.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/vision_activa",
+   "manejador": "vision_activa_get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/vision_activa — estado de la visión activa y su configuración.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/vision_activa",
+   "manejador": "vision_activa_post_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/vision_activa {\"activa\": true|false} — la ENCIENDE (mueve el servo y el robot en pulsos cortos) o la para.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/patrol",
+   "manejador": "patrol_status_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/patrol/record",
+   "manejador": "patrol_record_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Graba el punto donde está el robot ahora mismo.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/exploracion/start",
+   "manejador": "exploracion_start_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/exploracion/start — autonomía reactiva: recorre y mapea.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/exploracion/stop",
+   "manejador": "exploracion_stop_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/patrol/auto",
+   "manejador": "patrol_auto_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/patrol/auto {\"activa\": true} — graba un punto cada 1,5 m mientras el operador conduce, para no tener que ir pulsando Grabar.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/patrol/clear",
+   "manejador": "patrol_clear_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/patrol/scan",
+   "manejador": "patrol_scan_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Barrido manual bajo demanda, sin esperar a los 2 minutos.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/saludo",
+   "manejador": "saludo_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/saludo — izquierda, derecha, mira arriba, foco x3 y barrido de cámara.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/session-report",
+   "manejador": "session_report_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/models",
+   "manejador": "models_list_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/models/load",
+   "manejador": "models_load_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/models/presets",
+   "manejador": "models_presets_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/hardware",
+   "manejador": "hardware_get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/hardware",
+   "manejador": "hardware_update_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/calibration",
+   "manejador": "calibration_get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/calibration",
+   "manejador": "calibration_update_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/mission/start",
+   "manejador": "mission_start_handler",
+   "modulo": "jetson_server.py",
+   "doc": "MODO AUTÓNOMO. Único punto de entrada: arranca la patrulla por los waypoints grabados y carga el YOLO.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/mission/stop",
+   "manejador": "mission_stop_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/asistente/estado",
+   "manejador": "asistente_estado_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/asistente/estado — foto compacta de TODO lo que hace falta para manejar el robot de forma asistida (Claude u otro operador remoto): hueco libre del LIDAR, pose en el mapa, autonomía en marcha, enlace con la C3, ",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/entorno",
+   "manejador": "entorno_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/entorno — qué cree el robot que es el entorno. POST {\"activo\": true|false} lo activa/apaga (persistente). Apagado solo SUGIERE: no cambia nada.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/entorno",
+   "manejador": "entorno_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/entorno — qué cree el robot que es el entorno. POST {\"activo\": true|false} lo activa/apaga (persistente). Apagado solo SUGIERE: no cambia nada.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/calibracion/imu_nivel",
+   "manejador": "calibrar_imu_nivel_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/calibracion/imu_nivel {\"reset\": true} para borrarla. Con el robot QUIETO y NIVELADO: promedia ~5 s de acelerómetro crudo y guarda la gravedad medida; desde entonces el IMU se usa corregido (inclinación y cabece",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/camara/zoom",
+   "manejador": "camara_zoom_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET/POST /api/camara/zoom {\"zoom\": 1..4} — zoom de la cámara para inspeccionar plantas/plagas. Con zoom > 1 se captura a 1280x720 y se recorta el centro (detalle real). Solo con el robot quieto: con exploración/patrulla ",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/camara/zoom",
+   "manejador": "camara_zoom_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET/POST /api/camara/zoom {\"zoom\": 1..4} — zoom de la cámara para inspeccionar plantas/plagas. Con zoom > 1 se captura a 1280x720 y se recorta el centro (detalle real). Solo con el robot quieto: con exploración/patrulla ",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/params",
+   "manejador": "params_get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/params/{section}",
+   "manejador": "params_update_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/lidar/scan",
+   "manejador": "lidar_scan_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Punto de enganche para quien lea el RPLIDAR C1 (por ejemplo un script con la librería `rplidar` corriendo aparte, o el nodo sllidar_ros2): POST /api/lidar/scan con {\"points\": [{\"angle_deg\": .., \"distance_m\": ..}, ...]}",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/obstacle_status",
+   "manejador": "obstacle_status_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Retorna el estado actual del sistema de evasión de obstáculos.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/costmap",
+   "manejador": "costmap_status_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/costmap — resumen del costmap local.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/costmap/grid",
+   "manejador": "costmap_grid_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/costmap/grid — rejilla como lista de listas (para debug/visor).",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/costmap/reset",
+   "manejador": "costmap_reset_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/costmap/reset",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/costmap/save",
+   "manejador": "local_map_save_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/costmap/save — guarda el costmap local con nombre.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/costmap/load",
+   "manejador": "local_map_load_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/costmap/load — restaura un costmap guardado.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/costmap/maps",
+   "manejador": "local_map_list_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/costmap/maps — lista de mapas locales guardados.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/costmap/delete",
+   "manejador": "local_map_delete_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/costmap/delete — borra un mapa guardado.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/ocupado",
+   "manejador": "ocupado_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/ocupado — {\"ocupado\": bool, \"motivos\": [...]}.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/health",
+   "manejador": "health_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/seguridad",
+   "manejador": "seguridad_get_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/seguridad/rearmar",
+   "manejador": "seguridad_rearmar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/seguridad/modo-seguro",
+   "manejador": "modo_seguro_toggle_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Activa/desactiva el modo seguro completamente.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/captures",
+   "manejador": "captures_list_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/captures/clear",
+   "manejador": "captures_clear_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/nav/set_goal",
+   "manejador": "nav_set_goal_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/nav/set_goal {\"x\": .., \"y\": .., \"theta_deg\": ..} El click en el mini-mapa del dashboard llega aquí ya convertido a coordenadas del mundo (metros, frame \"map\") usando la resolución/ origen que trae el propio men",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/nav/cancel",
+   "manejador": "nav_cancel_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/nav/restart",
+   "manejador": "nav_restart_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Reinicia el servicio Nav2 (killea y relanza)",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/nav/save_map",
+   "manejador": "nav_save_map_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/nav/save_map — cierra la sesión de mapeo: le pide a nav2_map_server que escriba maps/agrobot_map.{yaml,pgm} a partir del mapa que slam_toolbox tiene armado en memoria en ese momento. Requiere correr esto MIENTR",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/nav/mode",
+   "manejador": "nav_mode_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET: modo actual. POST {\"mode\": \"mapping\"|\"localization\"}: solo lo anota para la UI — relanzar los nodos ROS correctos se hace a mano (ver README), cambiar este valor no reinicia ningún proceso.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/nav/mode",
+   "manejador": "nav_mode_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET: modo actual. POST {\"mode\": \"mapping\"|\"localization\"}: solo lo anota para la UI — relanzar los nodos ROS correctos se hace a mano (ver README), cambiar este valor no reinicia ningún proceso.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/nav_cal/start",
+   "manejador": "nav_cal_start_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/nav_cal/stop",
+   "manejador": "nav_cal_stop_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/nav_cal/status",
+   "manejador": "nav_cal_status_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "STATIC",
+   "ruta": "/captures",
+   "manejador": "CAPTURES_DIR",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/training/correct_pose",
+   "manejador": "training_correct_pose_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/training/save_furrows",
+   "manejador": "training_save_furrows_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/training/save_scan_points",
+   "manejador": "training_save_scan_points_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/training/generate_route",
+   "manejador": "training_generate_route_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/training/data",
+   "manejador": "training_data_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/training/log_correction",
+   "manejador": "training_log_correction_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/asistido",
+   "manejador": "asistido_estado_handler",
+   "modulo": "jetson_server.py",
+   "doc": "GET /api/asistido — estado del mando, resumen de correcciones y ajustes sugeridos.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/asistido/reanudar",
+   "manejador": "asistido_reanudar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/asistido/reanudar — devuelve el mando a la autonomía que se interrumpió.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/asistido/soltar",
+   "manejador": "asistido_soltar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/asistido/soltar — se queda en manual: la autonomía interrumpida NO se reanuda.",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/asistido/aplicar",
+   "manejador": "asistido_aplicar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "POST /api/asistido/aplicar {\"id\": ...} — aplica UNA sugerencia (nunca se aplican solas).",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/training.html",
+   "manejador": "_training_redirige",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/comunicacion/estado",
+   "manejador": "comunicacion_estado_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Retorna estado de todos los sistemas de comunicación.",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/wifi/modo",
+   "manejador": "wifi_modo_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Cambia entre 'estacion' (Lora_Wan) y 'patrullaje' (AP propio).",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/diagnostico/wifi",
+   "manejador": "diagnostico_wifi_handler",
+   "modulo": "jetson_server.py",
+   "doc": "Retorna análisis detallado del WiFi (caídas, salud, etc).",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/motor/comando",
+   "manejador": "motor_comando_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/motor/parar",
+   "manejador": "motor_parar_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/motor/toggle-safeguard",
+   "manejador": "motor_toggle_safeguard_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/estado/completo",
+   "manejador": "estado_completo_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [
+    "manejo.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/",
+   "manejador": "index_handler",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "STATIC",
+   "ruta": "/",
+   "manejador": "DASHBOARD_DIR",
+   "modulo": "jetson_server.py",
+   "doc": "",
+   "usada_por": [],
+   "usada_por_dashboard": false
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/recoleccion",
+   "manejador": "r.api",
+   "modulo": "recoleccion.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/recoleccion/{action}",
+   "manejador": "r.api",
+   "modulo": "recoleccion.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/recoleccion-export",
+   "manejador": "r.download",
+   "modulo": "recoleccion.py",
+   "doc": "",
+   "usada_por": [
+    "index.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/etiquetado/lista",
+   "manejador": "e.lista",
+   "modulo": "etiquetado.py",
+   "doc": "",
+   "usada_por": [
+    "etiquetar.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/etiquetado/img/{id}",
+   "manejador": "e.imagen",
+   "modulo": "etiquetado.py",
+   "doc": "",
+   "usada_por": [
+    "etiquetar.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/etiquetado/etiquetas/{id}",
+   "manejador": "e.leer",
+   "modulo": "etiquetado.py",
+   "doc": "",
+   "usada_por": [
+    "etiquetar.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "POST",
+   "ruta": "/api/etiquetado/etiquetas/{id}",
+   "manejador": "e.guardar",
+   "modulo": "etiquetado.py",
+   "doc": "",
+   "usada_por": [
+    "etiquetar.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/etiquetado/resumen",
+   "manejador": "e.resumen",
+   "modulo": "etiquetado.py",
+   "doc": "",
+   "usada_por": [
+    "etiquetar.html"
+   ],
+   "usada_por_dashboard": true
+  },
+  {
+   "metodo": "GET",
+   "ruta": "/api/etiquetado/exportar",
+   "manejador": "e.exportar",
+   "modulo": "etiquetado.py",
+   "doc": "Zip listo para subir como dataset de Kaggle: images/, labels/, dataset.yaml (sin particiones: el notebook las hace).",
+   "usada_por": [
+    "etiquetar.html"
+   ],
+   "usada_por_dashboard": true
+  }
+ ],
+ "ws_maneja": [
+  "actuator_setpoint",
+  "actuator_status",
+  "asistido",
+  "capture",
+  "captures_cleared",
+  "config_update",
+  "detection",
+  "drive_mode",
+  "entorno",
+  "env_telemetry",
+  "exploracion",
+  "exploracion_event",
+  "health",
+  "lidar_distancias",
+  "lidar_scan",
+  "map",
+  "mission_state",
+  "obstacle_warning",
+  "odom_webcam",
+  "pose",
+  "scan_mapa",
+  "seguridad",
+  "snapshot",
+  "system_stats",
+  "toast"
+ ],
+ "ws_emite": [
+  "actuator_setpoint",
+  "actuator_status",
+  "asistido",
+  "capture",
+  "captures_cleared",
+  "config_update",
+  "detection",
+  "drive_mode",
+  "emergency_stop",
+  "entorno",
+  "env_telemetry",
+  "error",
+  "evasion",
+  "exploracion",
+  "health",
+  "lidar_distancias",
+  "lidar_scan",
+  "map",
+  "mision_plantas",
+  "misiones",
+  "mission_state",
+  "obstacle_warning",
+  "odom_webcam",
+  "patrol_event",
+  "pose",
+  "scan_mapa",
+  "seguridad",
+  "snapshot",
+  "system_stats",
+  "toast",
+  "vision_activa",
+  "zoom_auto"
+ ],
+ "controles": {
+  "scrim": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "btn-colapsar": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "as-reanudar": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/asistido/reanudar"
+    ],
+    "escribe": false
+   }
+  ],
+  "as-reanuda-s": [
+   {
+    "evento": "change",
+    "urls": [
+     "/api/params/autonomia"
+    ],
+    "escribe": false
+   }
+  ],
+  "as-soltar": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/asistido/soltar",
+     "/api/params"
+    ],
+    "escribe": false
+   }
+  ],
+  "ac-guardar": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/params/control",
+     "/api/params/slam",
+     "/api/sendero/vista.jpg"
+    ],
+    "escribe": false
+   }
+  ],
+  "as-sendero-on": [
+   {
+    "evento": "change",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "sim-iniciar": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "sim-detener": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "gallery-filter": [
+   {
+    "evento": "change",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "gallery-clear-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/captures/clear"
+    ],
+    "escribe": true
+   }
+  ],
+  "gallery-report-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/captures",
+     "/api/session-report"
+    ],
+    "escribe": true
+   }
+  ],
+  "mini-zoom-in": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "mini-zoom-out": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/training/data"
+    ],
+    "escribe": false
+   }
+  ],
+  "map-zoom-mas": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "map-zoom-menos": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "map-centrar": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "map-terminar": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "map-deshacer": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "map-borrar": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "map-guardar": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "map-ruta": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "modo-manual": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "modo-auto": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "modo-cal": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "btn-wp-grabar": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/patrol/record"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-wp-escanear": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/patrol/scan"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-patrulla-on": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/mission/start"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-patrulla-off": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/mission/stop"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-wp-borrar": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/patrol/clear"
+    ],
+    "escribe": true
+   }
+  ],
+  "nav-reset-map-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/mapas",
+     "/api/nav/reset_map"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-expl-on": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/exploracion/start"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-expl-off": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/exploracion/stop"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-expl-volver": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/exploracion/regresar"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-mision-on": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/mision_plantas",
+     "/api/misiones"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-misiones-off": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/misiones"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-mision-off": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/mision_plantas"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-cal-start": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/nav_cal/start"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-cal-stop": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/nav_cal/stop"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-cal-patrol": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/mission/start"
+    ],
+    "escribe": true
+   }
+  ],
+  "btn-cal-again": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "p-autonomia-save": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "p-sendero-save": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "sendero-activo": [
+   {
+    "evento": "change",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "p-dist-puntos": [
+   {
+    "evento": "change",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "auto-grabar": [
+   {
+    "evento": "change",
+    "urls": [
+     "/api/patrol/auto"
+    ],
+    "escribe": true
+   }
+  ],
+  "mapa-guardar-btn": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "subir-simulador-btn": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "radar-range": [
+   {
+    "evento": "input",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "radar-range-dash": [
+   {
+    "evento": "input",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "btn-tema": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "speed-scale": [
+   {
+    "evento": "input",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "maniobra-toggle": [
+   {
+    "evento": "change",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "entorno-toggle": [
+   {
+    "evento": "change",
+    "urls": [
+     "/api/drive/mode",
+     "/api/entorno"
+    ],
+    "escribe": true
+   }
+  ],
+  "servo-slider": [
+   {
+    "evento": "input",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "led-toggle": [
+   {
+    "evento": "change",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "zoom-slider": [
+   {
+    "evento": "input",
+    "urls": [
+     "/api/camara/zoom"
+    ],
+    "escribe": true
+   }
+  ],
+  "saludo-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/saludo"
+    ],
+    "escribe": true
+   }
+  ],
+  "scan-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/patrol/scan"
+    ],
+    "escribe": true
+   }
+  ],
+  "rec-video-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/video/record"
+    ],
+    "escribe": true
+   }
+  ],
+  "refresh-models-btn": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "scan-models-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/models/scan"
+    ],
+    "escribe": true
+   }
+  ],
+  "autonomous-mode-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/mission/start",
+     "/api/mission/stop"
+    ],
+    "escribe": true
+   }
+  ],
+  "ov-guardar": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "ov-habilitada": [
+   {
+    "evento": "change",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "ov-publicar": [
+   {
+    "evento": "change",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "p-detection-save": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "p-safety-save": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "p-control-save": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "p-slam-save": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "hw-save-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/hardware"
+    ],
+    "escribe": true
+   }
+  ],
+  "cal-servo": [
+   {
+    "evento": "input",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "cal-autozero-btn": [
+   {
+    "evento": "click",
+    "urls": [],
+    "escribe": false
+   }
+  ],
+  "cal-save-btn": [
+   {
+    "evento": "click",
+    "urls": [
+     "/api/calibration",
+     "/api/wifi/modo"
+    ],
+    "escribe": true
+   }
+  ]
+ }
+}

@@ -1,0 +1,163 @@
+{
+ "01_dashboard": {
+  "alto": 2000,
+  "marcados": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24
+  ],
+  "faltan": []
+ },
+ "02_manejo_asistido": {
+  "alto": 3000,
+  "marcados": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8
+  ],
+  "faltan": []
+ },
+ "03_galeria": {
+  "alto": 920,
+  "marcados": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "faltan": []
+ },
+ "04_navegacion_manual": {
+  "alto": 2600,
+  "marcados": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11
+  ],
+  "faltan": []
+ },
+ "04b_navegacion_autonomo": {
+  "alto": 1500,
+  "marcados": [
+   1,
+   2,
+   3,
+   4,
+   5
+  ],
+  "faltan": []
+ },
+ "04c_navegacion_calibracion": {
+  "alto": 1100,
+  "marcados": [
+   1,
+   2
+  ],
+  "faltan": []
+ },
+ "05_slam_telemetria": {
+  "alto": 1652,
+  "marcados": [
+   1,
+   2,
+   3,
+   4,
+   5
+  ],
+  "faltan": []
+ },
+ "06_modelos_ia": {
+  "alto": 1500,
+  "marcados": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "faltan": []
+ },
+ "07_simulacion": {
+  "alto": 920,
+  "marcados": [
+   1,
+   2,
+   3
+  ],
+  "faltan": []
+ },
+ "08_motores_servo": {
+  "alto": 1297,
+  "marcados": [
+   1
+  ],
+  "faltan": []
+ },
+ "09_config_hardware": {
+  "alto": 920,
+  "marcados": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "faltan": []
+ },
+ "10_parametros": {
+  "alto": 2500,
+  "marcados": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8
+  ],
+  "faltan": []
+ },
+ "11_sistema": {
+  "alto": 1200,
+  "marcados": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "faltan": []
+ }
+}

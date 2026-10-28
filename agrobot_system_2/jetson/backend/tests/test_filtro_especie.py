@@ -61,3 +61,22 @@ def test_sin_plagas_no_llama_a_clip():
     clip = Clip(0.1)
     c, n = correr([_caja("maceta")], [("maceta", 0.7)], clip)
     assert clip.llamadas == 0 and len(c) == 1
+
+
+def test_sin_maceta_se_suprime_si_se_pide():
+    cajas = [_caja("col_dano_insecto", (0, 0, 640, 480))]
+    clip = Clip(0.99)
+    c, n = filtrar_plagas_por_especie(None, cajas, [("col_dano_insecto", 0.8)], PLANTA, clip, {}, 0.0, sin_maceta="suprimir")
+    assert c == [] and n == [] and clip.llamadas == 0
+
+
+def test_sin_maceta_por_defecto_no_cambia_nada():
+    cajas = [_caja("col_dano_insecto", (0, 0, 640, 480))]
+    c, n = filtrar_plagas_por_especie(None, cajas, [("col_dano_insecto", 0.8)], PLANTA, Clip(0.0), {}, 0.0)
+    assert len(c) == 1 and len(n) == 1
+
+
+def test_suprimir_conserva_la_maceta_y_su_aviso_de_planta():
+    cajas = [_caja("maceta"), _caja("col_dano_insecto")]
+    c, n = filtrar_plagas_por_especie(None, cajas[1:] + [], [("col_dano_insecto", 0.8), ("maceta", 0.6)], PLANTA, Clip(0.9), {}, 0.0, sin_maceta="suprimir")
+    assert c == [] and n == [("maceta", 0.6)]

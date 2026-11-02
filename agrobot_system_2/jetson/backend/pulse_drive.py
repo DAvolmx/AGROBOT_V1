@@ -37,6 +37,11 @@ ACCIONES = ("adelante", "atras", "izquierda", "derecha")
 
 # Duraciones por modo. `vel_factor` escala la velocidad pedida ANTES de los
 # clamps de manual_demo.
+# 2026-10-29: el robot gira con menos fuerza a la izquierda: su pulso de giro (y el tope de tiempo del lazo cerrado) dura este factor más.
+GIRO_IZQ_FACTOR = 2.3
+W_GIRO_BASE = 0.6          # rad/s de arranque de un giro de lazo cerrado sin aprendizaje
+W_GIRO_MIN, W_GIRO_MAX = 0.45, 1.2
+
 MODOS = {
     "interior": {"pulso_recto_s": .8, "pulso_giro_s": .4, "vel_factor": 1.0},
     # Pulsos CORTOS (2026-10-02, pedido del operador): la mitad que interior.
@@ -58,20 +63,41 @@ class ConductorPulsos:
         self._tarea = None
         self.ultimo_giro = None
         self.anticipo_giro_s = 0.30          # inercia del giro: se APRENDE de cada giro medido (EMA)
+        # Fuerza de arranque del giro, aprendida por sentido (2026-11-02): cada giro empezaba en 0,6 rad/s y en hierba/tierra pasaba el primer medio segundo
+        # sin girar hasta que el lazo subía la fuerza. Ahora arranca con la que funcionó la última vez en ese sentido (+1 izquierda, -1 derecha).
+        self.w_giro = {1.0: W_GIRO_BASE, -1.0: W_GIRO_BASE}
         self.modo = "preciso"
 
     @property
     def activo(self):
         return self._tarea is not None and not self._tarea.done()
 
-    def girar_grados(self, grados: float, get_gyro_dps, *, w_rps: float = 0.6, anticipo_s: float | None = None, t_max_s: float = 2.0) -> bool:
+    def girar_grados(self, grados: float, get_gyro_dps, *, w_rps: float | None = None, anticipo_s: float | None = None, t_max_s: float = 2.0) -> bool:
         """Gira `grados` (+ = izquierda) en LAZO CERRADO con el giroscopio (giro_cerrado.py). No bloquea: crea la tarea como `ordenar`.
-        `get_gyro_dps()` -> °/s o None si no hay IMU fresco (entonces no se mueve). False si ya hay un movimiento en curso."""
+        `get_gyro_dps()` -> °/s o None si no hay IMU fresco (entonces no se mueve). False si ya hay un movimiento en curso.
+        `w_rps` None = la fuerza aprendida para ese sentido (`w_giro`)."""
         if self.activo:
             return False
         self.ultimo_giro = None
+        if grados > 0:
+            t_max_s *= GIRO_IZQ_FACTOR
+        if w_rps is None:
+            w_rps = self.w_giro[1.0 if grados >= 0 else -1.0]
         self._tarea = asyncio.create_task(self._girar(float(grados), get_gyro_dps, w_rps, anticipo_s, t_max_s))
         return True
+
+    def aprender_fuerza(self, g) -> None:
+        """Ajusta la fuerza de arranque del sentido de `g` (GiroCerrado terminado): si el lazo tuvo que subirla, la próxima arranca más fuerte; si giró
+        sin subirla, baja un poco (no gastar par de más ni pasarse en suelo duro). Un giro que acabó por tiempo sin girar deja la fuerza al máximo usado."""
+        sentido = g.signo
+        actual = self.w_giro[sentido]
+        if g.motivo == "alcanzado":
+            nuevo = 0.6 * actual + 0.4 * g.w if g.w > actual * 1.01 else actual * 0.97
+        elif g.motivo == "tiempo" and abs(g.integ) < 0.5 * abs(g.objetivo):
+            nuevo = max(actual, g.w)
+        else:
+            return
+        self.w_giro[sentido] = round(min(W_GIRO_MAX, max(W_GIRO_MIN, nuevo)), 3)
 
     async def _girar(self, grados, get_gyro_dps, w_rps, anticipo_s, t_max_s):
         from giro_cerrado import GiroCerrado
@@ -104,6 +130,7 @@ class ConductorPulsos:
             medido = g.anticipo_medido()
             if medido is not None:
                 self.anticipo_giro_s = min(0.6, max(0.05, 0.7 * self.anticipo_giro_s + 0.3 * medido))
+            self.aprender_fuerza(g)
         finally:
             self.ultimo_giro = g.resumen()
             if asyncio.current_task() is self._tarea:
@@ -130,7 +157,7 @@ class ConductorPulsos:
         if accion == 'adelante':
             return [(v, 0., m["pulso_recto_s"])]
         sentido = 1. if accion == 'izquierda' else -1.
-        return [(v, sentido * w, m["pulso_giro_s"])]
+        return [(v, sentido * w, m["pulso_giro_s"] * (GIRO_IZQ_FACTOR if accion == 'izquierda' else 1.0))]
 
     def ordenar(self, accion, v_max, omega_max, maniobra=True, esc_dur=1.0):
         segmentos = self.segmentos(accion, v_max, omega_max, maniobra)

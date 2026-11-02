@@ -43,6 +43,8 @@ try:
 except ImportError:                    # sin el módulo el explorador sigue como siempre
     _RF = None
 
+from atasco import DetectorAtasco
+
 TICK_S = 0.25
 
 # Los umbrales de decisión (cuánto hueco hace falta para avanzar, girar o
@@ -175,6 +177,15 @@ class ExploradorReactivo:
         self.regreso_estado = "no"          # no | en curso | completo | sin ruta
         self.guardian = None
         self.sensores_guardian = None       # () -> dict: LIDAR + cámara + IMU (ver jetson_server._sensores_guardian)
+        # --- Autonomía robusta (2026-11-02) ---
+        # girar_a_rumbo_cb: corutina(rumbo_deg) -> dict de giro_objetivo (lo pone jetson_server). Con autonomia.giro_objetivo_activo los giros de esquina
+        # apuntan a un RUMBO medido con la pose en vez de contar pulsos.
+        self.girar_a_rumbo_cb = None
+        # Atasco medido pulso a pulso y salida escalonada (atasco.py), con autonomia.atasco_escalado.
+        self._atasco = DetectorAtasco()
+        # Motivos por los que la autonomía espera sin moverse aunque siga activa: "localizacion" (vigía de la pose), "atasco" (rendido, espera al operador).
+        self.bloqueos: dict[str, str] = {}
+        self._t_rendido = 0.0
 
     # ------------------------------------------------------------------
     def iniciar(self) -> tuple[bool, str]:
@@ -208,6 +219,8 @@ class ExploradorReactivo:
             self._visitas = {}
         if self.guardian is not None:
             self.guardian.ref, self.guardian.pend = [], None
+        self._atasco.reiniciar()
+        self.bloqueos.pop("atasco", None)
         self._grabar_recorrido(True)      # deja el rastro del recorrido
         self._tarea = asyncio.create_task(self._bucle())
         return True, "explorando: avanza, esquiva y mapea"
@@ -223,6 +236,8 @@ class ExploradorReactivo:
     def continuar(self):
         if self.pausado:
             self.pausado = False
+            if self.bloqueos.pop("atasco", None):         # el operador lo movió: se reintenta desde el nivel 1
+                self._atasco.reiniciar()
             dt = time.monotonic() - getattr(self, "_t_pausa", time.monotonic())
             self._ref_t += dt                # el rato en pausa no cuenta como atasco
             self._ref_pose = None
@@ -250,7 +265,8 @@ class ExploradorReactivo:
              "paradas_estrechas": self.paradas_estrechas,
              "avisos_estrechos": self.avisos_estrechos,
              "bucles": self.bucles, "callejones": self.callejones,
-             "aprendidas": self.aprendidas, "pulsos_politica": self.pulsos_politica}
+             "aprendidas": self.aprendidas, "pulsos_politica": self.pulsos_politica,
+             "atasco": self._atasco.snapshot(), "bloqueos": dict(self.bloqueos)}
         if self._seguidor is not None:
             d["sendero"] = self._seguidor.snapshot()
         return d
@@ -374,14 +390,24 @@ class ExploradorReactivo:
             if ok_atras and not cfg.get("prioridad_adelante", False) and d.get("cerca") is not None and d["cerca"] < margen and atras > max(0.30, float(cfg.get("retroceso_libre_cm", 30)) / 100.0):
                 self.estado = f"algo a {d['cerca'] * 100:.0f} cm del costado: retrocedo antes de girar"
                 self._rumbo_ref = None
+                self._medir_pulso("atras")
                 self._conducir_cb("atras", False)
                 return
         if accion in ("izquierda", "derecha", "atras") and not self._corr_propia:
             self._rumbo_ref = None          # giro o marcha atrás a propósito: el rumbo deseado será el nuevo
+        self._medir_pulso(accion)
         if esc_dur != 1.0:
             self._conducir_cb(accion, maniobra, esc_dur)
         else:
             self._conducir_cb(accion, maniobra)
+
+    def _medir_pulso(self, accion):
+        """Apunta el pulso en el detector de atasco (cierra el anterior con la pose de ahora). Solo con autonomia.atasco_escalado."""
+        if (self._get_config() or {}).get("atasco_escalado", False):
+            try:
+                self._atasco.pulso(accion, self._get_pose())
+            except Exception:              # noqa: BLE001 — medir nunca debe impedir conducir
+                pass
 
     def _rumbo_correccion(self, cfg):
         """Pulso de corrección ('izquierda'/'derecha') para volver al rumbo del tramo recto, o None.
@@ -602,6 +628,18 @@ class ExploradorReactivo:
                     self.estado = "en pausa (mando manual)"
                     continue
 
+                if "atasco" in self.bloqueos and time.monotonic() - self._t_rendido >= float(self._get_config().get("atasco_reintento_s", 90.0)):
+                    self.bloqueos.pop("atasco", None)     # se reintenta solo: un robot rendido para siempre es una autonomía terminada
+                    self._atasco.reiniciar()
+                    self._emitir(evento="atasco_reintento")
+                if self.bloqueos:
+                    estado = "en espera: " + "; ".join(self.bloqueos.values())
+                    if estado != self.estado:
+                        self._parar()
+                    self.estado = estado
+                    self._ref_t = time.monotonic()       # esperar no es estar atascado
+                    continue
+
                 if time.monotonic() - self._ultimo_escaneo >= self._get_config()["escaneo_periodo_s"]:
                     self.estado = "escaneando"   # SCAN_SWEEP del firmware: 10 s
                     self._parar()
@@ -624,9 +662,11 @@ class ExploradorReactivo:
                 if time.monotonic() < self._mando_cedido_hasta:
                     continue
 
-                if self._atascado():
+                if self._atascado() or self._atasco.atascado:
                     if not await self._probar_aprendido():
                         await self._desatascar()
+                    else:
+                        self._atasco.atascado = False
                     continue
 
                 self._registrar_celda()
@@ -880,6 +920,8 @@ class ExploradorReactivo:
                             await asyncio.sleep(1.05)
                             if self._hueco(self._distancias(), "atras") < 0.30:
                                 break
+                    if await self._girar_hacia_hueco(cfg, lado, gap, avance_libre):
+                        continue
                     self._conducir(lado, maniobra=maniobra)
                     self.giros += 1
                     # Giro compensado (2026-10-27, simulado: mx_giro_comp): el chasis gira en arco y avanza ~5 cm por pulso; tras cada N giros
@@ -1147,7 +1189,79 @@ class ExploradorReactivo:
             self._emitir(evento="error_sendero", detalle=str(exc))
             return None
 
+    async def _girar_hacia_hueco(self, cfg, lado: str, gap, avance_libre: float) -> bool:
+        """Giro de esquina por RUMBO (giro_objetivo.py): apunta al centro del hueco libre del scan (o 30° al lado elegido si no hay hueco claro) y gira hasta
+        mirarlo, midiendo con la pose. True si lo hizo (el ciclo siguiente vuelve a decidir); False = usar los pulsos de siempre."""
+        if not cfg.get("giro_objetivo_activo", False) or self.girar_a_rumbo_cb is None:
+            return False
+        if cfg.get("e11_activo", False) and cfg.get("e11_predictor", True) and not self._despejado("giro", cfg, lado):
+            return False                     # el predictor no deja girar a ese lado: el camino de siempre busca la alternativa
+        pose = self._get_pose()
+        if pose is None:
+            return False
+        signo = 1.0 if lado == "izquierda" else -1.0
+        if gap is None:
+            gap = self._mejor_hueco(avance_libre + 0.30, 0.2)
+        grados = math.degrees(gap) if gap is not None and gap * signo > 0 else 30.0 * signo
+        grados = max(-90.0, min(90.0, grados))
+        self.estado = f"girando a la {lado} hasta el rumbo {pose['theta_deg'] + grados:.0f}° ({grados:+.0f}°)"
+        self._medir_pulso(None)                # cierra el pulso pendiente; el giro se mide aparte
+        res = await self.girar_a_rumbo_cb(pose["theta_deg"] + grados)
+        if res is None:
+            return False                       # sin IMU / sin pose: pulsos de siempre
+        self.giros += 1
+        self._emitir(evento="giro_rumbo", pedido=round(grados, 1), **{k: res.get(k) for k in ("girado_deg", "error_deg", "motivo", "tramos")})
+        if res.get("motivo") == "sin avance" and cfg.get("atasco_escalado", False):
+            self._atasco.giro_sin_avance(self._get_pose())
+        return True
+
     async def _desatascar(self):
+        cfg = self._get_config() or {}
+        if cfg.get("atasco_escalado", False):
+            await self._desatascar_escalado(cfg)
+            return
+        self._atasco.atascado = False
+        await self._desatascar_simple()
+
+    async def _desatascar_escalado(self, cfg):
+        """Salida escalonada (atasco.py): cada atasco sin progreso sube de nivel; al final se rinde y espera al operador."""
+        if not self._atasco.atascado:
+            self._atasco._declarar(self._get_pose(), f"la pose no cambió {ATASCO_MOVIMIENTO_M * 100:.0f} cm en {ATASCO_S:.0f} s")
+        self.desatascos += 1
+        d = self._distancias()
+        lado = self._lado_costmap() or self._mejor_lado(d)
+        motivo = self._atasco.motivo
+        plan = self._atasco.plan(lado_libre=lado,
+                                 hueco_atras=self._hueco(d, "atras") >= max(0.30, cfg["retroceso_libre_cm"] / 100.0),
+                                 hueco_delante=self._hueco(d, "adelante") >= cfg["avance_libre_cm"] / 100.0)
+        self.estado = f"desatascando (nivel {self._atasco.nivel})"
+        self._emitir(evento="desatasco", total=self.desatascos, nivel=self._atasco.nivel, motivo=motivo, plan=[list(p) for p in plan])
+        for paso in plan:
+            if not self.activo or self.pausado:
+                break
+            if paso[0] == "rendirse":
+                self.bloqueos["atasco"] = f"atascado sin salida ({paso[1]}): mover el robot a mano o reanudar"
+                self._t_rendido = time.monotonic()
+                self._parar()
+                self._emitir(evento="atasco_sin_salida", detalle=paso[1])
+                break
+            if paso[0] == "girar":
+                pose = self._get_pose()
+                hecho = None
+                if cfg.get("giro_objetivo_activo", False) and self.girar_a_rumbo_cb is not None and pose is not None:
+                    hecho = await self.girar_a_rumbo_cb(pose["theta_deg"] + paso[1])
+                if hecho is None:
+                    lado_g = "izquierda" if paso[1] > 0 else "derecha"
+                    for _ in range(max(1, round(abs(paso[1]) / float(cfg.get("mx_grados_pulso", 6.0))))):
+                        self._conducir_cb(lado_g, False)
+                        await self._pausa_pulso()
+                self.giros += 1
+            else:
+                self._conducir_cb(paso[0], False)     # sin el predictor: es la salida de un sitio donde todo parece bloqueado
+                await self._pausa_pulso()
+        self._ref_pose, self._ref_t = None, time.monotonic()
+
+    async def _desatascar_simple(self):
         """El robot cree que se mueve pero la pose no cambia: rueda patinando,
         enganchado en una planta o contra algo que el LIDAR no ve (hueco bajo,
         rama fina). Se retrocede y se gira al lado contrario del último.

@@ -144,6 +144,13 @@ DEFAULTS = {
         "prioridad_adelante": False,      # sin marcha atrás: giros en el sitio/arco y siempre hacia donde el camino esté libre (el robot no tiene sensores atrás y pisó plantas)
         "mx_giro_comp": 0,                # giro compensado: cada N pulsos de giro seguidos un pulso atrás si hay pared cerca (0 = apagado; N=3 fue el mejor en simulación)
         "giro_lazo_cerrado": False,       # el pulso de giro del explorador gira `mx_grados_pulso` medidos con el giroscopio (giro_cerrado.py) en vez de un tiempo fijo
+        # ===== Autonomía robusta (2026-11-02). Probado en tests y simulación, NO en el robot real. =====
+        "vigia_pose_activo": False,       # vigia_pose.py: la autonomía navega con una pose que no salta si el SLAM/EKF saltan; perdida = espera quieta
+        "giro_objetivo_activo": False,    # giro_objetivo.py: los giros de esquina/desatasco apuntan a un rumbo medido con la pose, no a N pulsos
+        "giro_objetivo_tol_deg": 6.0,
+        "giro_objetivo_tramo_deg": 30.0,
+        "giro_fuerza_aprendida": False,   # pulse_drive.w_giro: cada giro arranca con la fuerza que funcionó la última vez en ese sentido
+        "atasco_escalado": False, "atasco_reintento_s": 90.0,         # atasco.py: atasco medido pulso a pulso (≈5 s, no 25) y salida que sube de nivel hasta rendirse y avisar
         "man_retroceso_cm": 0.0,
         "man_atras_pulsos": 1,
         # Maniobras específicas (2026-10-24; simuladas por misiones). TODAS APAGADAS: ir al hueco del scan, rumbo a la meta y escape de nicho.
@@ -315,6 +322,10 @@ DEFAULTS = {
         # no avanza si hay algo a menos de margen+deslizamiento (slam.*) ni sin datos frescos del LIDAR.
         # El manejo manual no se toca. Apagarlo solo para pruebas.
         "freno_lidar_autonomo": True,
+        # DETECTOR DE VUELCO entrenado (detector_vuelco.py, 2026-11-02): gravedad filtrada (mediana de muestras sin golpe) y persistencia; con él
+        # el modo seguro deja de juzgar la inclinación con la lectura instantánea (92 falsas alarmas por hora de marcha en la telemetría real).
+        # En VUELCO para la autonomía y avisa; se libera solo al enderezar el robot. Probado con vuelcos simulados + 183 h reales, NO con un vuelco real.
+        "vuelco_detector": False,
         # ANTICOLISIÓN CON RETROCESO (anticolision.py, 2026-10-21): si el robot VA A TOCAR algo delante (hueco < disparo_m) cancela
         # el avance y retrocede retroceso_m si detrás hay sitio. Independiente del freno de arriba. Solo ve lo que ve el LIDAR
         # (plano a 37,5 cm): no detecta cajas, bolsas, mantas ni macetas bajas.

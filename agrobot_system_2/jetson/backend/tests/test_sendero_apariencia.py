@@ -35,3 +35,12 @@ def test_vision_sendero_elige_el_metodo_por_config():
     vs = sendero.VisionSendero()
     r = vs.detectar(cv2, _escena(), {"sendero_metodo": "apariencia"}, GEO)
     assert r.get("metodo") == "apariencia"
+
+
+def test_filtros_devuelve_mascara_conectada_a_la_franja_de_referencia():
+    import sendero_filtros as SF
+    m, s = SF.mascara(cv2, _escena(), 0.0)
+    assert m.shape == (240, 320) and s.shape == (240, 320)
+    assert m[230, 160] > 0 and m[230, 5] == 0                    # el camino liso del centro sí; la cama con textura de la orilla no
+    r = A.detectar_apariencia(cv2, _escena(), {"sendero_apariencia_filtros": True}, GEO, sendero.Cenital(GEO), A.MemoriaApariencia())
+    assert r["metodo"] == "apariencia"

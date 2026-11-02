@@ -1,0 +1,127 @@
+1
+00:00:00,000 --> 00:00:03,204
+Hola, bienvenidos de nuevo a LDZ-byTech.
+
+2
+00:00:03,554 --> 00:00:09,998
+En la parte uno vimos cómo está organizado AgroBot. En esta segunda parte lo vemos por fuera y en acción.
+
+3
+00:00:10,348 --> 00:00:18,568
+Vamos a ver cómo está construido, qué ve su cámara, y cómo se ven las inferencias de la inteligencia artificial en tiempo real.
+
+4
+00:00:19,818 --> 00:00:27,353
+Este es AgroBot. Tiene un chasis rojo con amortiguadores de resorte, que ayudan a absorber el terreno irregular.
+
+5
+00:00:27,703 --> 00:00:36,364
+Arriba va una caja negra con la computadora Jetson y la electrónica, y encima de ella el LIDAR, que ve en trescientos sesenta grados.
+
+6
+00:00:36,714 --> 00:00:42,101
+Usa cuatro ruedas con taco para agarrar en tierra, y se mueve girando como un tanque.
+
+7
+00:00:42,451 --> 00:00:48,569
+A la derecha lo ven en el laboratorio, listo para una prueba con cuatro plantas en maceta puestas en fila.
+
+8
+00:00:49,819 --> 00:00:57,935
+Antes de salir al campo pruebo todo en interior. Pongo cuatro plantas en maceta en fila, y el robot las recorre.
+
+9
+00:00:58,285 --> 00:01:05,053
+Se acerca a cada una, se detiene, la escanea con la cámara y toma fotos desde distintos ángulos.
+
+10
+00:01:05,403 --> 00:01:10,941
+Después sigue con la siguiente, evitando los banquitos y las paredes con ayuda del LIDAR.
+
+11
+00:01:12,191 --> 00:01:20,306
+Esta imagen de la izquierda viene de la cámara con una regla en píxeles encima. La uso para calibrar a qué distancia está cada cosa.
+
+12
+00:01:20,656 --> 00:01:25,602
+Las otras dos son fotos en vivo, tomadas ahora mismo desde la transmisión del robot.
+
+13
+00:01:25,952 --> 00:01:33,719
+Las cajas verdes son el detector de macetas, con su confianza al lado. Entre más cerca de uno, más seguro está el modelo.
+
+14
+00:01:34,969 --> 00:01:45,221
+Y ahora sí, grabaciones del robot. Esto es lo que ve la cámara mientras recorre una hilera de coles en el huerto, con las detecciones dibujadas encima.
+
+15
+00:01:45,571 --> 00:01:53,489
+La caja verde sigue a la planta mientras el robot avanza. En azul aparece el detector de coles, que marca el cogollo.
+
+16
+00:01:53,839 --> 00:02:04,404
+Aquí hay un error que estoy corrigiendo: el detector de macetas marca la col como si fuera una maceta, porque la tierra y la planta se parecen a lo que aprendió.
+
+17
+00:02:05,654 --> 00:02:15,383
+En este clip el robot pasa junto a una col grande. Con la cámara elevada a ciento doce grados ya se ve la planta completa y también el suelo delante.
+
+18
+00:02:15,733 --> 00:02:24,267
+Antes la cámara miraba demasiado abajo y solo veía tierra. Elevarla fue uno de los cambios más importantes de esta prueba.
+
+19
+00:02:25,517 --> 00:02:34,352
+Este es el sendero real donde probé el robot. Las coles son jóvenes, así que aparecen pequeñas y es difícil detectarlas de lejos.
+
+20
+00:02:34,702 --> 00:02:41,598
+Se nota lo angosto que es el camino, y por eso el robot sufrió. Ya lo estoy ensanchando para la siguiente prueba.
+
+21
+00:02:42,848 --> 00:02:51,056
+Aquí el robot recorre un jardín con macetas. El detector las encuentra bien, y entre más se acerca, más seguro está.
+
+22
+00:02:51,406 --> 00:02:57,629
+También marca una bolsa negra como si fuera una maceta, otro error que sigue en mi lista.
+
+23
+00:02:57,979 --> 00:03:10,205
+Cuando la cámara se pega a las flores, aparecen cajas rojas de amarillamiento que ocupan toda la imagen. Esas son falsas alertas, y son justo las que intento eliminar con el segundo modelo.
+
+24
+00:03:11,455 --> 00:03:20,069
+En esta última grabación hay macetas con plantas que sí tienen hojas amarillas, y el modelo de macetas las detecta con buena confianza.
+
+25
+00:03:20,419 --> 00:03:32,273
+La caja roja con la alerta de amarillamiento a veces abarca toda la imagen. Eso significa que el modelo no está señalando una hoja concreta, y por eso no lo dejo decidir solo.
+
+26
+00:03:32,623 --> 00:03:38,904
+Cada alerta pasa por una revisión adicional, y yo valido las fotos antes de usarlas para entrenar.
+
+27
+00:03:40,154 --> 00:03:49,407
+Para resumir cómo leer las cajas. Verde son macetas, azul y amarillo son coles y cogollos, y rojo son posibles plagas o daños.
+
+28
+00:03:49,757 --> 00:03:54,320
+El número al lado es la confianza del modelo, entre cero y uno.
+
+29
+00:03:54,670 --> 00:04:01,079
+Pero ojo: una detección no es un diagnóstico. Es una pista para revisar, no una conclusión.
+
+30
+00:04:02,329 --> 00:04:11,396
+Los siguientes pasos son probar con el sendero más ancho, entrenar con más fotos reales de coles, y corregir las confusiones que vimos hoy.
+
+31
+00:04:11,746 --> 00:04:14,741
+Iré mostrando los resultados aquí en el canal.
+
+32
+00:04:15,091 --> 00:04:22,034
+Si te gustó, suscríbete a LDZ-byTech, deja tus preguntas en los comentarios y nos vemos en el próximo video.

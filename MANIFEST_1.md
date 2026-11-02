@@ -15,7 +15,7 @@
 > Cualquier LLM o persona que retome este proyecto debe poder reconstruir
 > el estado completo del sistema leyendo solo este archivo.
 
-Última actualización: 2026-10-27
+Última actualización: 2026-11-02
 
 ---
 
@@ -4932,4 +4932,41 @@ al 80 %/100 %, watchdog del loop). Robot en el pasillo.
 - **Avisos de plaga solo sobre coles (28-oct):** `camera.filtrar_plagas_por_especie` (`detection.plaga_solo_en_col`, `plaga_p_col_min` = 0,5, `plaga_caja_max_frac` = 0,30). Si el cuadro tiene una maceta detectada y CLIP (`especie_clip.py`) no la reconoce como col, se descartan las cajas y los avisos de plaga (se conservan macetas/plantas); sin maceta en el cuadro o si CLIP falla no se filtra. Caché de 4 s por maceta (CLIP cuesta ~0,5 s en CPU). Tests `test_filtro_especie.py`. Se aplica al reiniciar el backend; sin probar en el robot.
 - **Prueba en L (28-oct):** datos y resumen en `~/.agrobot/pruebas/L_20261028/` (fuera del repo). Herramientas nuevas: `tools/monitor_prueba.py` (una línea cada 10 s, solo lee), `tools/prueba_giros_real.py`, `tools/prueba_giro_360.py` (con parada de emergencia propia) y `tools/guardar_prueba_L_20261028.py`. `jetson_server.guardar_mapa_mision` recibe una COPIA del estado de la misión (si se relanzaba al instante, plantas.json salía con 0 plantas). Hallazgo: los giros de lazo cerrado de 15–22° funcionan; los pulsos de 6° de la exploración dan ≈1°.
 - **Escenario en L: simulación y cambios (28-oct):** `simulador_pasivo/entrenar_L.py` y `entrenar_L_freno.py` (L de 0,70/0,90 m con 4 plantas; resultados en `docs/escenario_L_20261028/RESULTADOS.md`: ningún parámetro de giro, freno o ancho arregló la vuelta en simulación). Cambios al robot según las mediciones reales: `autonomia.mx_grados_pulso` 6→12 con `giro_lazo_cerrado`; `ExploradorReactivo._pausa_pulso` (espera al conductor entre pulsos de giro de 1–3 s, `ocupado_cb` lo pone `jetson_server`); `t_max_s` del giro de lazo cerrado 2,0 s. Para volver atrás: `mx_grados_pulso = 6`.
+
+### 2026-11-02 — Autonomía robusta: vigía de la pose, giro hasta un rumbo, atasco escalonado y detector de vuelco entrenado
+Detalle: `agrobot_system_2/docs/AUTONOMIA_ROBUSTA_20261102.md` y `docs/VUELCO_DETECTOR_20261102/INFORME.md`. **Nada probado en el robot real; el backend corre el código viejo hasta reiniciarlo.**
+- **Vigía de la pose** (`jetson/backend/vigia_pose.py`, `autonomia.vigia_pose_activo`, encendido en la config viva):
+  - explorador, misión de plantas, visión activa y misiones usan `_pose_robusta()` en vez de `ros_bridge.pose_en_mapa`;
+  - un salto del SLAM (> 0,5 m / 25°; 0,15 m durante 20 s tras un salto de reloj) se descarta y se sigue con odometría («anclada»); un salto imposible de la odometría se absorbe;
+  - «perdida» (6 m / 180 s anclada, EKF sin medidas o sin odometría) deja la autonomía en espera (`explorador.bloqueos`), con ZUPT, y sigue sola cuando el SLAM vuelve;
+  - `GET/POST /api/localizacion`; `vigia_pose.sospechar()` desde `_vigia_reloj`. Nav2 (patrulla) no lo usa.
+- **Giro hasta un rumbo** (`giro_objetivo.py`, `autonomia.giro_objetivo_activo`, `giro_objetivo_tol_deg` = 6, `giro_objetivo_tramo_deg` = 30):
+  - el explorador gira en las esquinas hasta mirar al centro del hueco del scan (o 30° al lado elegido), en tramos de lazo cerrado medidos con la pose (`jetson_server._girar_a_rumbo`, `ExploradorReactivo._girar_hacia_hueco`);
+  - dos tramos que no giran = «sin avance» = atasco;
+  - **fuerza aprendida** (`autonomia.giro_fuerza_aprendida`, `ConductorPulsos.w_giro`/`aprender_fuerza`): cada giro arranca con la fuerza que funcionó la última vez en ese sentido.
+- **Atasco por pulso** (`atasco.py`, `autonomia.atasco_escalado`):
+  - 3 pulsos rectos de menos de 3 cm o 4 giros de menos de 1,5° = atasco (antes 20 cm en 25 s, que se mantiene como red);
+  - salida que sube de nivel: atrás + 30° → atrás ×2 + 60° al otro lado → balanceo + 90° → se rinde y espera al operador (`bloqueos["atasco"]`, se quita al soltar el mando manual);
+  - en el simulador (invernadero) reduce el tiempo en contacto de 59 a 28 s, pero no saca al robot.
+- **Detector de vuelco** (`detector_vuelco.py`, `safety.vuelco_detector`, **APAGADO**, `_bucle_vuelco`, `GET /api/vuelco`):
+  - REEMPLAZA la regla instantánea de `modo_seguro` (≥ 38°, o ≥ 22° + 90 °/s) cuando se enciende: esa regla daba 93 falsas alarmas por hora de marcha en 183 h de telemetría real (golpes de los pulsos de ±2 g y 190 °/s; paquetes del IMU congelados 2–5 s);
+  - entrenado con CEM (`simulador_pasivo/vuelco_datos.py`, `entrenar_vuelco.py`) sobre vuelcos simulados con el péndulo de `fallos_3d` + ruido real;
+  - en la prueba: 110/128 vuelcos, 0/232 falsas simuladas, 0 falsas reales;
+  - caché de datos en `~/.agrobot/vuelco/real_imu.npz` (fuera del repo).
+- Interruptores nuevos en `config_store.py` (todos `False` por defecto). Pruebas: `test_vigia_pose.py`, `test_autonomia_robusta.py`, `test_detector_vuelco.py`; 433 pruebas del backend pasan.
+
+### 2026-11-02 (ronda 2) — Simulador fiel al backend, atasco que no se rinde por indecisión y reentrenamiento del vuelco
+Detalle: sección «Ronda 2» de `agrobot_system_2/docs/AUTONOMIA_ROBUSTA_20261102.md`. Nada probado en el robot real.
+- **`simulador_pasivo/correr.py`, cuatro diferencias con el robot corregidas:**
+  - el `conducir` del simulador no aceptaba `esc_dur` y el explorador REVENTABA (TypeError) en el primer pulso de rumbo;
+  - el pulso de giro iba a tiempo fijo, cuando el robot gira por giroscopio (`giro_lazo_cerrado`);
+  - el explorador no recibía `scan_cb`, así que el hueco, el predictor E11 y el sonar estaban apagados en la simulación;
+  - la cámara se fusionaba en `adelante` aunque `autonomia.camara_obstaculos` estuviera apagado.
+  
+  Además: giro a rumbo conectado (`girar_a_rumbo_cb`) y opción `--aprendizaje` para que cada corrida use su propio `maniobras.json`.
+- **`giro_objetivo.girar_a_rumbo()`:** el bucle de giro hasta un rumbo pasa a ser una función compartida por el backend (`jetson_server._girar_a_rumbo`) y el simulador. Para si la pose y el giroscopio discrepan en más de 25° en un tramo (`SALTO_POSE_DEG`): en la simulación, un cierre de bucle del SLAM hizo girar 390° persiguiendo el rumbo.
+- **`atasco.py`, se rinde solo ante un atasco FÍSICO:** pulsos que no mueven o un giro «sin avance». El criterio de 25 s también salta cuando el robot no avanza porque decide no avanzar; en el primer A/B la rendición dejó al robot parado en 4 de 5 escenarios. Ahora, sin atasco físico, vuelve al nivel 1. Tras rendirse, reintenta solo a los `autonomia.atasco_reintento_s` (90 s; evento `atasco_reintento`).
+- **Hallazgo del A/B (5 escenarios, 300 s):** con la cámara fusionada (`camara_obstaculos` + `camara_como_lidar`) el explorador del simulador casi no avanza. La paja del borde del sendero aparece como obstáculo a ~25 cm. Sin cámara recorre de 2 a 4,5 veces más (invernadero 4,4 → 19,9 m), pero pisó 4 plantas. **No cambié la config del robot:** hay que confirmar en el robot real si la cámara ve esos falsos obstáculos.
+- **Vuelco v2** (`docs/VUELCO_DETECTOR_20261102/v2/`): probé un segundo nivel (inclinación más baja durante más tiempo). No mejoró (109/128 con y sin él) y lo quité. Los vuelcos «no detectados» se detectan tarde: 124/128 antes de 6 s y 125/128 alguna vez. Los parámetros siguen siendo los de v1.
+- Pruebas: 437 del backend pasan (+4: bucle de giro compartido, giro que para ante un salto de la pose, atasco físico y no físico).
 

@@ -1,0 +1,792 @@
+{
+  "fecha": "2026-11-02 03:02",
+  "duracion_min": 15.4,
+  "datos": {
+    "sesiones_entrenamiento": 169,
+    "sesiones_prueba": 45,
+    "horas_marcha_entrenamiento": 2.24,
+    "horas_marcha_prueba": 0.68,
+    "simulados_por_lote": 360,
+    "trozos_ruido": 493
+  },
+  "params_entrenados": {
+    "g_tol": 0.243,
+    "w_gate_dps": 23.082,
+    "ventana_s": 0.914,
+    "n_min": 4,
+    "lim_lateral_deg": 41.375,
+    "lim_frontal_deg": 38.8,
+    "persistencia_s": 1.07
+  },
+  "params_defecto": {
+    "g_tol": 0.15,
+    "w_gate_dps": 60.0,
+    "ventana_s": 0.8,
+    "n_min": 3,
+    "lim_lateral_deg": 35.0,
+    "lim_frontal_deg": 40.0,
+    "persistencia_s": 0.6,
+    "prec_deg": 18.0,
+    "prec_s": 2.0,
+    "liberar_deg": 15.0,
+    "liberar_s": 3.0
+  },
+  "historia": [
+    {
+      "iter": 0,
+      "coste": 46.149,
+      "media_elite": 63.6
+    },
+    {
+      "iter": 1,
+      "coste": 50.831,
+      "media_elite": 55.145
+    },
+    {
+      "iter": 2,
+      "coste": 34.378,
+      "media_elite": 41.145
+    },
+    {
+      "iter": 3,
+      "coste": 31.191,
+      "media_elite": 32.311
+    },
+    {
+      "iter": 4,
+      "coste": 30.277,
+      "media_elite": 31.576
+    },
+    {
+      "iter": 5,
+      "coste": 24.172,
+      "media_elite": 24.966
+    },
+    {
+      "iter": 6,
+      "coste": 23.428,
+      "media_elite": 24.278
+    },
+    {
+      "iter": 7,
+      "coste": 22.459,
+      "media_elite": 23.166
+    },
+    {
+      "iter": 8,
+      "coste": 21.781,
+      "media_elite": 23.087
+    },
+    {
+      "iter": 9,
+      "coste": 21.129,
+      "media_elite": 22.378
+    }
+  ],
+  "regla_actual": {
+    "sim_entrenamiento": {
+      "positivos": 140,
+      "negativos": 220,
+      "detectados": 47,
+      "fallos": 93,
+      "falsas_en_negativos": 204,
+      "falsas_antes_del_vuelco": 93,
+      "lat_media_s": -0.059,
+      "lat_p90_s": 0.16,
+      "por_tipo": {
+        "obstaculo": {
+          "n": 61,
+          "detectados": 22
+        },
+        "giro": {
+          "n": 37,
+          "detectados": 12
+        },
+        "morro": {
+          "n": 42,
+          "detectados": 13
+        },
+        "casi": {
+          "n": 86,
+          "falsas": 81
+        },
+        "talud": {
+          "n": 58,
+          "falsas": 56
+        },
+        "llano": {
+          "n": 20,
+          "falsas": 16
+        },
+        "bache": {
+          "n": 56,
+          "falsas": 51
+        }
+      }
+    },
+    "sim_prueba": {
+      "positivos": 128,
+      "negativos": 232,
+      "detectados": 51,
+      "fallos": 77,
+      "falsas_en_negativos": 216,
+      "falsas_antes_del_vuelco": 77,
+      "lat_media_s": -0.105,
+      "lat_p90_s": 0.103,
+      "por_tipo": {
+        "morro": {
+          "n": 36,
+          "detectados": 9
+        },
+        "giro": {
+          "n": 35,
+          "detectados": 16
+        },
+        "obstaculo": {
+          "n": 57,
+          "detectados": 26
+        },
+        "bache": {
+          "n": 81,
+          "falsas": 74
+        },
+        "casi": {
+          "n": 81,
+          "falsas": 77
+        },
+        "llano": {
+          "n": 18,
+          "falsas": 15
+        },
+        "talud": {
+          "n": 52,
+          "falsas": 50
+        }
+      }
+    },
+    "real_entrenamiento": {
+      "falsas_en_marcha": 217,
+      "por_hora_de_marcha": 96.877,
+      "alarmas_quieto": 41,
+      "precauciones_en_marcha": 362,
+      "horas_marcha": 2.24,
+      "detalle": [
+        {
+          "sesion": "19700101_000129",
+          "t": 1787.6
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 1948.3
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2014.1
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2122.2
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2170.3
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2189.1
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2241.7
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2286.7
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2329.1
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2360.7
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2479.6
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2535.1
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2735.9
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 3058.3
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 3343.3
+        },
+        {
+          "sesion": "19700101_000130",
+          "t": 465.4
+        },
+        {
+          "sesion": "19700101_000130",
+          "t": 571.5
+        },
+        {
+          "sesion": "19700101_000130",
+          "t": 624.2
+        },
+        {
+          "sesion": "19700101_000132",
+          "t": 82.2
+        },
+        {
+          "sesion": "19700101_000132",
+          "t": 130.8
+        },
+        {
+          "sesion": "19700101_000132",
+          "t": 288.1
+        },
+        {
+          "sesion": "19700101_000132",
+          "t": 349.7
+        },
+        {
+          "sesion": "19700101_000132",
+          "t": 1209.1
+        },
+        {
+          "sesion": "19700101_000200",
+          "t": 1582.7
+        },
+        {
+          "sesion": "19700101_000200",
+          "t": 1626.2
+        },
+        {
+          "sesion": "19700101_000200",
+          "t": 1789.2
+        },
+        {
+          "sesion": "19700101_000200",
+          "t": 2041.8
+        },
+        {
+          "sesion": "19700101_000200",
+          "t": 2542.4
+        },
+        {
+          "sesion": "19700101_000200",
+          "t": 2689.5
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 236.4
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 1084.0
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 2007.5
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 2741.2
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 2792.9
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 3472.9
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 3680.5
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 3990.4
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 4044.4
+        },
+        {
+          "sesion": "19700101_000201",
+          "t": 4085.5
+        },
+        {
+          "sesion": "19700101_000205",
+          "t": 134.9
+        }
+      ]
+    },
+    "real_prueba": {
+      "falsas_en_marcha": 63,
+      "por_hora_de_marcha": 92.699,
+      "alarmas_quieto": 3,
+      "precauciones_en_marcha": 152,
+      "horas_marcha": 0.68,
+      "detalle": [
+        {
+          "sesion": "20261027_191114",
+          "t": 361.3
+        },
+        {
+          "sesion": "20261027_191114",
+          "t": 387.9
+        },
+        {
+          "sesion": "20261027_191114",
+          "t": 418.9
+        },
+        {
+          "sesion": "20261027_191114",
+          "t": 483.0
+        },
+        {
+          "sesion": "20261027_191114",
+          "t": 503.2
+        },
+        {
+          "sesion": "20261027_215547",
+          "t": 302.5
+        },
+        {
+          "sesion": "20261027_215547",
+          "t": 381.4
+        },
+        {
+          "sesion": "20261027_215547",
+          "t": 505.4
+        },
+        {
+          "sesion": "20261027_215547",
+          "t": 644.6
+        },
+        {
+          "sesion": "20261028_013742",
+          "t": 210.8
+        },
+        {
+          "sesion": "20261028_013742",
+          "t": 262.9
+        },
+        {
+          "sesion": "20261028_013742",
+          "t": 652.6
+        },
+        {
+          "sesion": "20261028_013742",
+          "t": 742.9
+        },
+        {
+          "sesion": "20261028_013742",
+          "t": 819.9
+        },
+        {
+          "sesion": "20261028_013742",
+          "t": 894.1
+        },
+        {
+          "sesion": "20261028_013742",
+          "t": 925.5
+        },
+        {
+          "sesion": "20261028_013742",
+          "t": 1088.2
+        },
+        {
+          "sesion": "20261028_023530",
+          "t": 139.7
+        },
+        {
+          "sesion": "20261028_023530",
+          "t": 422.5
+        },
+        {
+          "sesion": "20261028_023530",
+          "t": 465.4
+        },
+        {
+          "sesion": "20261028_023530",
+          "t": 670.1
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 110.2
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 333.9
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 646.9
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 846.0
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 880.0
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 908.6
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 955.7
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1007.9
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1092.0
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1112.3
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1277.7
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1307.7
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1334.8
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1391.6
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1536.0
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1884.2
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1910.5
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 2061.0
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 2330.3
+        }
+      ]
+    }
+  },
+  "detector_defecto": {
+    "sim_entrenamiento": {
+      "positivos": 140,
+      "negativos": 220,
+      "detectados": 131,
+      "fallos": 9,
+      "falsas_en_negativos": 8,
+      "falsas_antes_del_vuelco": 2,
+      "lat_media_s": 1.534,
+      "lat_p90_s": 2.261,
+      "por_tipo": {
+        "obstaculo": {
+          "n": 61,
+          "detectados": 56
+        },
+        "giro": {
+          "n": 37,
+          "detectados": 35
+        },
+        "morro": {
+          "n": 42,
+          "detectados": 40
+        },
+        "casi": {
+          "n": 86,
+          "falsas": 3
+        },
+        "talud": {
+          "n": 58,
+          "falsas": 3
+        },
+        "llano": {
+          "n": 20,
+          "falsas": 0
+        },
+        "bache": {
+          "n": 56,
+          "falsas": 2
+        }
+      }
+    },
+    "sim_prueba": {
+      "positivos": 128,
+      "negativos": 232,
+      "detectados": 121,
+      "fallos": 7,
+      "falsas_en_negativos": 5,
+      "falsas_antes_del_vuelco": 1,
+      "lat_media_s": 1.509,
+      "lat_p90_s": 2.155,
+      "por_tipo": {
+        "morro": {
+          "n": 36,
+          "detectados": 35
+        },
+        "giro": {
+          "n": 35,
+          "detectados": 32
+        },
+        "obstaculo": {
+          "n": 57,
+          "detectados": 54
+        },
+        "bache": {
+          "n": 81,
+          "falsas": 2
+        },
+        "casi": {
+          "n": 81,
+          "falsas": 2
+        },
+        "llano": {
+          "n": 18,
+          "falsas": 0
+        },
+        "talud": {
+          "n": 52,
+          "falsas": 1
+        }
+      }
+    },
+    "real_entrenamiento": {
+      "falsas_en_marcha": 17,
+      "por_hora_de_marcha": 7.589,
+      "alarmas_quieto": 0,
+      "precauciones_en_marcha": 18,
+      "horas_marcha": 2.24,
+      "detalle": [
+        {
+          "sesion": "19700101_000129",
+          "t": 2074.4
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2535.8
+        },
+        {
+          "sesion": "19700101_000129",
+          "t": 2552.9
+        },
+        {
+          "sesion": "19700101_000200",
+          "t": 2721.8
+        },
+        {
+          "sesion": "20261003_153140",
+          "t": 2285.6
+        },
+        {
+          "sesion": "20261007_155209",
+          "t": 1291.6
+        },
+        {
+          "sesion": "20261007_164040",
+          "t": 1134.6
+        },
+        {
+          "sesion": "20261007_164040",
+          "t": 1158.2
+        },
+        {
+          "sesion": "20261007_164040",
+          "t": 1532.7
+        },
+        {
+          "sesion": "20261021_150357",
+          "t": 614.9
+        },
+        {
+          "sesion": "20261021_150357",
+          "t": 816.5
+        },
+        {
+          "sesion": "20261022_212712",
+          "t": 752.1
+        },
+        {
+          "sesion": "20261022_212712",
+          "t": 835.0
+        },
+        {
+          "sesion": "20261022_220259",
+          "t": 2650.8
+        },
+        {
+          "sesion": "20261023_050415",
+          "t": 1632.8
+        },
+        {
+          "sesion": "20261026_140930",
+          "t": 1284.1
+        },
+        {
+          "sesion": "20261026_140930",
+          "t": 1814.1
+        }
+      ]
+    },
+    "real_prueba": {
+      "falsas_en_marcha": 5,
+      "por_hora_de_marcha": 7.357,
+      "alarmas_quieto": 1,
+      "precauciones_en_marcha": 3,
+      "horas_marcha": 0.68,
+      "detalle": [
+        {
+          "sesion": "20261028_023530",
+          "t": 220.5
+        },
+        {
+          "sesion": "20261028_141932",
+          "t": 1186.3
+        },
+        {
+          "sesion": "20261029_225529",
+          "t": 518.1
+        },
+        {
+          "sesion": "20261029_225529",
+          "t": 690.7
+        },
+        {
+          "sesion": "20261029_225529",
+          "t": 912.7
+        }
+      ]
+    }
+  },
+  "detector_entrenado": {
+    "sim_entrenamiento": {
+      "positivos": 140,
+      "negativos": 220,
+      "detectados": 129,
+      "fallos": 11,
+      "falsas_en_negativos": 0,
+      "falsas_antes_del_vuelco": 0,
+      "lat_media_s": 2.061,
+      "lat_p90_s": 2.514,
+      "por_tipo": {
+        "obstaculo": {
+          "n": 61,
+          "detectados": 56
+        },
+        "giro": {
+          "n": 37,
+          "detectados": 33
+        },
+        "morro": {
+          "n": 42,
+          "detectados": 40
+        },
+        "casi": {
+          "n": 86,
+          "falsas": 0
+        },
+        "talud": {
+          "n": 58,
+          "falsas": 0
+        },
+        "llano": {
+          "n": 20,
+          "falsas": 0
+        },
+        "bache": {
+          "n": 56,
+          "falsas": 0
+        }
+      }
+    },
+    "sim_prueba": {
+      "positivos": 128,
+      "negativos": 232,
+      "detectados": 110,
+      "fallos": 18,
+      "falsas_en_negativos": 0,
+      "falsas_antes_del_vuelco": 0,
+      "lat_media_s": 2.047,
+      "lat_p90_s": 2.62,
+      "por_tipo": {
+        "morro": {
+          "n": 36,
+          "detectados": 33
+        },
+        "giro": {
+          "n": 35,
+          "detectados": 29
+        },
+        "obstaculo": {
+          "n": 57,
+          "detectados": 48
+        },
+        "bache": {
+          "n": 81,
+          "falsas": 0
+        },
+        "casi": {
+          "n": 81,
+          "falsas": 0
+        },
+        "llano": {
+          "n": 18,
+          "falsas": 0
+        },
+        "talud": {
+          "n": 52,
+          "falsas": 0
+        }
+      }
+    },
+    "real_entrenamiento": {
+      "falsas_en_marcha": 0,
+      "por_hora_de_marcha": 0.0,
+      "alarmas_quieto": 0,
+      "precauciones_en_marcha": 6,
+      "horas_marcha": 2.24,
+      "detalle": []
+    },
+    "real_prueba": {
+      "falsas_en_marcha": 0,
+      "por_hora_de_marcha": 0.0,
+      "alarmas_quieto": 1,
+      "precauciones_en_marcha": 3,
+      "horas_marcha": 0.68,
+      "detalle": []
+    }
+  }
+}

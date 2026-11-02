@@ -52,9 +52,13 @@ def rasgos(cv2, img):
     return np.dstack([lab[..., 1], lab[..., 2], L, tex])
 
 
-def mascara_camino(cv2, img, memoria: MemoriaApariencia, umbral: float = UMBRAL, peso_textura: float = 1.2):
+def mascara_camino(cv2, img, memoria: MemoriaApariencia, umbral: float = UMBRAL, peso_textura: float = 1.2, filtros: bool = False,
+                   umbral_filtros: float = 0.0):
     """Umbral/peso por entorno (barrido sobre los videos del operador, 2026-10-22): interior 2,6 / 1,2 marca ~65 % de la imagen como
     suelo (la baldosa, sin paredes ni canasto); huerta 1,4 / 2,5 marca ~30–43 % (el camino pisado, sin las camas de la misma tierra)."""
+    if filtros:                                                       # combinación de color, textura y bordes verticales (sendero_filtros.py)
+        import sendero_filtros
+        return sendero_filtros.mascara(cv2, img, umbral_filtros)
     h, w = img.shape[:2]
     F = rasgos(cv2, img)
     ref = F[int(h * REF_F[0]):int(h * REF_F[1]), int(w * REF_C[0]):int(w * REF_C[1])].reshape(-1, 4)
@@ -77,10 +81,12 @@ def mascara_camino(cv2, img, memoria: MemoriaApariencia, umbral: float = UMBRAL,
 
 def detectar_apariencia(cv2, frame, cfg, geo, cenital, memoria: MemoriaApariencia, centro_previo: float = 0.0) -> dict:
     chico = cv2.resize(frame, (S.ANCHO_ANALISIS, S.ALTO_ANALISIS), interpolation=cv2.INTER_AREA)
-    if cfg.get("sendero_igualar_luz", True):
+    filtros = bool(cfg.get("sendero_apariencia_filtros", False))
+    if cfg.get("sendero_igualar_luz", True) and not filtros:         # los filtros se entrenaron con la imagen cruda
         chico = S.igualar_luz(cv2, chico)
     camino, _ = mascara_camino(cv2, chico, memoria, float(cfg.get("sendero_apariencia_umbral", UMBRAL)),
-                               float(cfg.get("sendero_apariencia_textura", 1.2)))
+                               float(cfg.get("sendero_apariencia_textura", 1.2)), filtros,
+                               float(cfg.get("sendero_apariencia_filtros_umbral", 0.0)))
     res = {"lateral_m": None, "angulo_deg": None, "error_m": None, "ancho_m": None, "bordes_m": (None, None), "confianza": 0.0,
            "estado": "", "mascara": camino, "metodo": "apariencia"}
     if camino.mean() < 2:

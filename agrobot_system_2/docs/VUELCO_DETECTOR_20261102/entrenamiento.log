@@ -1,0 +1,17 @@
+banco de ruido real: 493 trozos de 6 s en marcha
+reales: entrenamiento 169 sesiones (155.8 h, 2.2 h en marcha, 435 trozos a revisar); prueba 45 sesiones (27.2 h, 0.7 h en marcha, 98 trozos)
+simulados: 140 vuelcos + 220 negativos por lote
+[cem] iter 1/10 mejor 46.15 (global 46.15) det 110/140 fp_sim 0 fp_real 1 lat 2.175 s  {'g_tol': 0.268, 'w_gate_dps': 104.925, 'ventana_s': 0.912, 'n_min': 3, 'lim_lateral_deg': 47.758, 'lim_frontal_deg': 62.053, 'persistencia_s': 1.456}
+[cem] iter 2/10 mejor 50.83 (global 46.15) det 120/140 fp_sim 0 fp_real 2 lat 2.232 s  {'g_tol': 0.164, 'w_gate_dps': 42.813, 'ventana_s': 1.418, 'n_min': 4, 'lim_lateral_deg': 39.209, 'lim_frontal_deg': 29.148, 'persistencia_s': 1.313}
+[cem] iter 3/10 mejor 34.38 (global 34.38) det 126/140 fp_sim 0 fp_real 1 lat 2.066 s  {'g_tol': 0.239, 'w_gate_dps': 34.927, 'ventana_s': 0.776, 'n_min': 4, 'lim_lateral_deg': 46.414, 'lim_frontal_deg': 41.646, 'persistencia_s': 1.082}
+[cem] iter 4/10 mejor 31.19 (global 31.19) det 116/140 fp_sim 0 fp_real 0 lat 2.198 s  {'g_tol': 0.244, 'w_gate_dps': 23.294, 'ventana_s': 0.777, 'n_min': 4, 'lim_lateral_deg': 41.004, 'lim_frontal_deg': 46.543, 'persistencia_s': 1.199}
+[cem] iter 5/10 mejor 30.28 (global 30.28) det 131/140 fp_sim 0 fp_real 1 lat 1.947 s  {'g_tol': 0.229, 'w_gate_dps': 40.972, 'ventana_s': 1.046, 'n_min': 4, 'lim_lateral_deg': 41.264, 'lim_frontal_deg': 45.992, 'persistencia_s': 1.03}
+[cem] iter 6/10 mejor 24.17 (global 24.17) det 125/140 fp_sim 0 fp_real 0 lat 2.062 s  {'g_tol': 0.245, 'w_gate_dps': 21.415, 'ventana_s': 0.881, 'n_min': 4, 'lim_lateral_deg': 41.543, 'lim_frontal_deg': 46.203, 'persistencia_s': 1.056}
+[cem] iter 7/10 mejor 23.43 (global 23.43) det 126/140 fp_sim 0 fp_real 0 lat 2.071 s  {'g_tol': 0.246, 'w_gate_dps': 23.601, 'ventana_s': 0.89, 'n_min': 4, 'lim_lateral_deg': 41.583, 'lim_frontal_deg': 47.481, 'persistencia_s': 1.067}
+[cem] iter 8/10 mejor 22.46 (global 22.46) det 128/140 fp_sim 0 fp_real 0 lat 2.103 s  {'g_tol': 0.244, 'w_gate_dps': 21.107, 'ventana_s': 0.859, 'n_min': 4, 'lim_lateral_deg': 40.567, 'lim_frontal_deg': 40.315, 'persistencia_s': 1.072}
+[cem] iter 9/10 mejor 21.78 (global 21.78) det 128/140 fp_sim 0 fp_real 0 lat 2.002 s  {'g_tol': 0.243, 'w_gate_dps': 21.131, 'ventana_s': 0.893, 'n_min': 4, 'lim_lateral_deg': 40.991, 'lim_frontal_deg': 37.124, 'persistencia_s': 0.993}
+[cem] iter 10/10 mejor 21.13 (global 21.13) det 129/140 fp_sim 0 fp_real 0 lat 2.061 s  {'g_tol': 0.243, 'w_gate_dps': 23.082, 'ventana_s': 0.914, 'n_min': 4, 'lim_lateral_deg': 41.375, 'lim_frontal_deg': 38.8, 'persistencia_s': 1.07}
+listo en 15.4 min -> /home/jetson/Desktop/AGROBOT/agrobot_system_2/docs/VUELCO_DETECTOR_20261102/resultado.json
+regla_actual         PRUEBA: detecta 51/128 (lat -0.105 s, p90 0.103), falsas sim 216/232, falsas reales en marcha 63 (92.699/h)
+detector_defecto     PRUEBA: detecta 121/128 (lat 1.509 s, p90 2.155), falsas sim 5/232, falsas reales en marcha 5 (7.357/h)
+detector_entrenado   PRUEBA: detecta 110/128 (lat 2.047 s, p90 2.62), falsas sim 0/232, falsas reales en marcha 0 (0.0/h)

@@ -1,0 +1,7 @@
+{
+ "title": "agrobot-sendero-ext",
+ "id": "davidgomez32/agrobot-sendero-ext",
+ "licenses": [{"name": "CC0-1.0"}],
+ "subtitle": "Fotos de huerta etiquetadas con la trayectoria recorrida por el robot AGROBOT",
+ "isPrivate": true
+}

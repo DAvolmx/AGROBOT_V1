@@ -69,6 +69,7 @@ PERFILES = {
         "sendero_metodo": "apariencia",        # si se enciende la visión dentro: el suelo por apariencia separa bien la baldosa
         "sendero_apariencia_umbral": 2.6,
         "sendero_apariencia_textura": 1.2,
+        "sendero_apariencia_filtros": False,   # los filtros se entrenaron solo con fotos de huerta
     },
     "exterior": {
         "escala_velocidad": 0.5,
@@ -88,6 +89,10 @@ PERFILES = {
         "sendero_metodo": "apariencia",
         "sendero_apariencia_umbral": 1.4,
         "sendero_apariencia_textura": 2.5,
+        # 2026-10-29: color + textura + bordes verticales (sendero_filtros.py). En 2 sesiones de huerta reservadas, a igual recall de camino (~76 %)
+        # marca 29 % de «peligro» (planta/obstáculo dado por camino) frente a 53 % de la apariencia sola. Umbral -0,25 = permisivo.
+        "sendero_apariencia_filtros": True,
+        "sendero_apariencia_filtros_umbral": -0.25,
     },
 }
 
@@ -100,6 +105,7 @@ SECCION = {
     "cono_frontal_deg": "slam", "corredor_holgura_cm": "slam",
     "sendero_vision": "autonomia", "sendero_paja": "autonomia", "sendero_metodo": "autonomia",
     "sendero_apariencia_umbral": "autonomia", "sendero_apariencia_textura": "autonomia",
+    "sendero_apariencia_filtros": "autonomia", "sendero_apariencia_filtros_umbral": "autonomia",
 }
 
 

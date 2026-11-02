@@ -1,0 +1,155 @@
+1
+00:00:00,000 --> 00:00:03,204
+Hola, bienvenidos de nuevo a LDZ-byTech.
+
+2
+00:00:03,554 --> 00:00:08,756
+En esta tercera parte vamos a hablar del simulador que viene dentro del dashboard de AgroBot.
+
+3
+00:00:09,106 --> 00:00:17,244
+Veremos cómo se usa, cómo convierto lo que el robot mide en un mundo virtual, y cómo se ve un entrenamiento real corriendo.
+
+4
+00:00:18,494 --> 00:00:23,405
+Probar en el campo es lento, y un error puede dañar plantas o al propio robot.
+
+5
+00:00:23,755 --> 00:00:32,892
+En el simulador puedo repetir el mismo caso miles de veces, cambiar el ruido de los sensores, y ajustar los parámetros sin sacar el robot de la mesa.
+
+6
+00:00:34,142 --> 00:00:37,416
+El simulador está en la pestaña Simulación del dashboard.
+
+7
+00:00:37,766 --> 00:00:44,500
+Con el botón Iniciar se lanza como un proceso aparte, y el dashboard lo muestra dentro de la misma página.
+
+8
+00:00:44,850 --> 00:00:50,725
+Consume procesador y tarjeta gráfica, por eso lo detengo antes de usar el robot de verdad.
+
+9
+00:00:51,975 --> 00:01:06,116
+Lo más importante: el simulador no usa una copia de la lógica. Ejecuta los mismos módulos que corren en la Jetson, el freno por LIDAR, el seguidor de sendero, el explorador y el conductor por pulsos.
+
+10
+00:01:06,466 --> 00:01:13,710
+Simula un LIDAR de setecientos veinte rayos con ruido, una cámara sintética, y un chasis que patina al girar.
+
+11
+00:01:14,060 --> 00:01:26,529
+También modela el servo de la cámara y un SLAM con deriva. Y distingue lo que es alto, como las paredes, de lo que solo ve la cámara, como las plantas pequeñas, que el robot puede pisar.
+
+12
+00:01:27,779 --> 00:01:41,444
+Esta es la pantalla del simulador. A la izquierda se ven las cuatro vistas que genera: el mundo en tres dimensiones, lo que ve la cámara, lo que detecta el seguidor de sendero, y el mapa que va construyendo el SLAM.
+
+13
+00:01:41,794 --> 00:01:51,338
+Arriba hay un modo Manual, donde manejo el robot virtual con las flechas, y un modo Auto, donde el explorador real toma el control.
+
+14
+00:01:51,688 --> 00:01:56,053
+Aquí el robot recorre una réplica del sendero de la prueba de exterior dos.
+
+15
+00:01:57,303 --> 00:02:07,311
+Ahora, la digitalización. El robot recorre un lugar real y el SLAM construye un mapa de ocupación, que es una cuadrícula de celdas libres y ocupadas.
+
+16
+00:02:07,661 --> 00:02:14,766
+Un programa de digitalización extrae de esa cuadrícula los muros como líneas rectas, y les calcula la longitud.
+
+17
+00:02:15,116 --> 00:02:25,008
+A la izquierda ven el mapa real, con ruido y huecos. A la derecha, el plano ya limpio, listo para convertirse en un mundo del simulador.
+
+18
+00:02:26,258 --> 00:02:33,410
+Para saber si la digitalización es confiable, la probé contra diez mapas de interior cuya forma real conozco.
+
+19
+00:02:33,760 --> 00:02:40,470
+Recorro cada mapa con un LIDAR simulado y le agrego deriva de posición, como la que mide el robot real.
+
+20
+00:02:40,820 --> 00:02:53,580
+Sin deriva recupera el noventa y tres por ciento de los muros, con un error medio de cuatro centímetros. Con una deriva del uno por ciento baja al ochenta y dos, y con el tres por ciento ya se deteriora bastante.
+
+21
+00:02:53,930 --> 00:03:01,720
+Conclusión: la digitalización es buena si el SLAM es bueno, y por eso importa cerrar bien los bucles al mapear.
+
+22
+00:03:02,970 --> 00:03:12,513
+Y así se ve el resultado dentro del simulador. Aquí cargué el laboratorio digitalizado, y después un mapa real que recorrió el robot en una misión.
+
+23
+00:03:12,863 --> 00:03:23,916
+Desde el dashboard puedo subir los datos que el robot recolectó, el mapa, el recorrido y las plantas escaneadas, y el simulador crea con ellos un mundo nuevo.
+
+24
+00:03:24,266 --> 00:03:31,464
+Así reproduzco en la mesa el mismo lugar donde falló el robot, y pruebo cambios antes de salir otra vez.
+
+25
+00:03:32,714 --> 00:03:43,964
+El simulador también trae un editor de mapas. Puedo dibujar el sendero, las paredes, las hileras de cultivo, las plantas y los puntos donde el robot debe escanear.
+
+26
+00:03:44,314 --> 00:03:49,748
+O partir de un mapa real del robot, y guardarlo para simular directamente en él.
+
+27
+00:03:50,998 --> 00:03:59,485
+Y ahora un entrenamiento de verdad. A la derecha se ve la consola de la búsqueda de parámetros, mientras el simulador corre a la izquierda.
+
+28
+00:03:59,835 --> 00:04:08,612
+Es un método de búsqueda evolutiva con simulación Monte Carlo. En cada generación se prueban varios candidatos de parámetros en semillas nuevas.
+
+29
+00:04:08,962 --> 00:04:18,273
+Cada línea muestra el mejor costo de la generación, el costo de los parámetros que uso hoy, y el promedio de la población. Mientras más bajo, mejor.
+
+30
+00:04:18,623 --> 00:04:24,382
+Esta es una versión corta, de unos cuatro minutos. Las corridas reales duran horas.
+
+31
+00:04:25,632 --> 00:04:32,981
+Al terminar, los mejores candidatos se validan en semillas que nunca vieron, y se comparan contra los parámetros de hoy.
+
+32
+00:04:33,331 --> 00:04:47,355
+En esta corrida corta, con solo cuatro semillas nuevas, los parámetros de hoy lograron un cincuenta por ciento de éxito, y el mejor candidato un cien por ciento. Son muy pocas semillas, así que es solo una ilustración.
+
+33
+00:04:47,705 --> 00:04:56,297
+En el sendero de exterior, con una corrida larga, el éxito en simulación subió de sesenta y dos a noventa y seis por ciento.
+
+34
+00:04:56,647 --> 00:05:03,392
+Pero nada se instala solo. Yo reviso los resultados, decido, y después lo pruebo con el robot real.
+
+35
+00:05:04,642 --> 00:05:09,205
+Hay que ser honestos con los límites. Una simulación no es la realidad.
+
+36
+00:05:09,555 --> 00:05:19,923
+Por ejemplo, el escenario en forma de L todavía no se resuelve en simulación, y el simulador no modela el giro de lazo cerrado que sí usa el robot.
+
+37
+00:05:20,273 --> 00:05:28,167
+Por eso uso el simulador para descartar ideas malas y proponer buenas, y la última palabra la tiene el campo.
+
+38
+00:05:29,417 --> 00:05:32,157
+Esto fue todo sobre el simulador de AgroBot.
+
+39
+00:05:32,507 --> 00:05:39,485
+Si te gustó, suscríbete a LDZ-byTech, deja tus preguntas en los comentarios y nos vemos en el próximo video.

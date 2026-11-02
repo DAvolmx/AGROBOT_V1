@@ -71,6 +71,9 @@ from camara_lidar import CamaraComoLidar
 from maniobra_giro import ManiobraGiro
 import misiones as misiones_mod
 from reloj import DetectorSalto
+from vigia_pose import VigiaPose, OK as LOC_OK, ANCLADA as LOC_ANCLADA, PERDIDA as LOC_PERDIDA
+from giro_objetivo import girar_a_rumbo
+from detector_vuelco import DetectorVuelco, VUELCO as V_VUELCO, PRECAUCION as V_PRECAUCION
 import suelo_libre as suelo_mod
 from barrido_tilt import (BarridoTilt, FrenoProactivo, EstimadorAltura,
                           inclinacion_por_servo, SERVO_LEJOS_DEG, SERVO_CERCA_DEG)
@@ -1040,6 +1043,29 @@ def current_pose() -> dict:
     return ros_fused_pose if ros_fused_pose is not None else pose_estimator.snapshot()
 
 
+# Vigía de la pose (vigia_pose.py, 2026-11-02): la autonomía navega con una pose que no salta aunque el SLAM o el EKF salten (27-oct: saltos de 30 y 24 m
+# tras un salto del reloj). Con autonomia.vigia_pose_activo=false todo usa pose_en_mapa() como antes.
+vigia_pose = VigiaPose()
+
+
+def _vigia_pose_activo() -> bool:
+    return bool(state.config["autonomia"].get("vigia_pose_activo", False))
+
+
+def _vigia_pose_paso() -> dict:
+    """Un paso del vigía con las poses de ahora (map->base_link del TF y odom del EKF)."""
+    var = (ros_fused_pose or {}).get("var_vx")
+    odom = ros_fused_pose if pose_confiable() else None
+    return vigia_pose.paso(time.monotonic(), ros_bridge.pose_en_mapa(), odom, var)
+
+
+def _pose_robusta() -> dict | None:
+    """La pose con la que decide la autonomía (explorador, misión, visión activa)."""
+    if not _vigia_pose_activo():
+        return ros_bridge.pose_en_mapa()
+    return _vigia_pose_paso()["pose"]
+
+
 def pose_edad_s() -> float | None:
     """Segundos desde la última pose del EKF, o None si nunca llegó una.
 
@@ -1351,13 +1377,23 @@ def _detener_autonomia():
 MODO_SEGURO_HZ = 5
 
 
+detector_vuelco = DetectorVuelco()
+
+
+def _vuelco_detector_activo() -> bool:
+    return bool(state.config["safety"].get("vuelco_detector", False))
+
+
 def _imu_vuelco() -> dict:
     """Acelerómetro (g) y velocidad de balanceo (gyroY, eje de avance) del
     último paquete del IMU, para que modo_seguro detecte inclinación/vuelco.
-    Vacío si aún no hay IMU: así no dispara nada."""
+    Vacío si aún no hay IMU: así no dispara nada.
+    Con safety.vuelco_detector la inclinación la juzga detector_vuelco (filtrada): al modo seguro solo le llega un vuelco CONFIRMADO."""
     env = state.env_telemetry or {}
     if "accelZ" not in env or not _imu_fresco():
         return {}
+    if _vuelco_detector_activo():
+        return {"inclinacion_deg": 90.0} if detector_vuelco.estado == V_VUELCO else {}
     return {
         "acc": (env.get("accelX", 0.0), env.get("accelY", 0.0), env.get("accelZ", 0.0)),
         "giro_roll_dps": env.get("gyroY", 0.0),
@@ -1465,6 +1501,48 @@ async def modo_seguro_toggle_handler(request: web.Request):
         return web.json_response({"error": str(e)}, status=400)
 
 
+async def _bucle_vuelco():
+    """Detector de vuelco (detector_vuelco.py) con cada paquete NUEVO del IMU. En VUELCO: para la autonomía y los motores y avisa; en PRECAUCIÓN avisa.
+    Se libera solo cuando el robot vuelve a estar derecho unos segundos."""
+    ultimo_rx = None
+    previo = detector_vuelco.estado
+    while True:
+        await asyncio.sleep(0.05)
+        try:
+            env = state.env_telemetry or {}
+            rx = env.get("_received_at")
+            if rx is None or rx == ultimo_rx or "accelZ" not in env:
+                continue
+            ultimo_rx = rx
+            est = detector_vuelco.paso(time.monotonic(), (env.get("accelX", 0.0), env.get("accelY", 0.0), env.get("accelZ", 0.0)),
+                                       (env.get("gyroX", 0.0), env.get("gyroY", 0.0), env.get("gyroZ", 0.0)))
+            if est == previo:
+                continue
+            previo = est
+            if not _vuelco_detector_activo():
+                continue
+            snap = detector_vuelco.snapshot()
+            _evento("vuelco", snap)
+            if est == V_VUELCO:
+                _detener_autonomia()
+                if conductor is not None:
+                    conductor.parar()
+                await state.broadcast({"type": "toast", "data": {"kind": "error", "title": "VUELCO", "message": f"{snap['motivo']}. Motores parados: enderezar el robot."}})
+                _schedule(_avisar_al_gateway({"tipo": "seguridad", "titulo": "AgroBot VOLCADO", "mensaje": snap["motivo"]}))
+            elif est == V_PRECAUCION:
+                await state.broadcast({"type": "toast", "data": {"kind": "warning", "title": "Inclinación alta", "message": snap["motivo"]}})
+            else:
+                await state.broadcast({"type": "toast", "data": {"kind": "success", "title": "Robot derecho", "message": "El detector de vuelco se liberó."}})
+        except Exception as exc:
+            print(f"[vuelco] {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(1.0)
+
+
+async def vuelco_handler(request: web.Request):
+    """GET /api/vuelco — estado del detector de vuelco (balanceo, cabeceo, estado)."""
+    return web.json_response({"activo": _vuelco_detector_activo(), **detector_vuelco.snapshot(), "params": detector_vuelco.p})
+
+
 async def _bucle_rampa():
     """Hace avanzar la rampa del actuador a 20 Hz, llegue o no un comando."""
     while True:
@@ -1562,9 +1640,64 @@ async def _vigia_reloj():
             except OSError:
                 pass
             _evento("reloj", {"delta_s": round(delta, 1)})
+            vigia_pose.sospechar(time.monotonic(), 20.0)          # es justo cuando el SLAM/EKF suelen saltar
             await state.broadcast({"type": "toast", "data": {"kind": "warning", "title": "Salto de reloj", "message": msg}})
         except Exception as exc:
             print(f"[reloj] vigía: {type(exc).__name__}: {exc}", flush=True)
+
+
+async def _vigia_pose_bucle():
+    """Vigía de la pose a 10 Hz: avisa de los cambios de estado y, si la localización está PERDIDA, deja la autonomía en espera (sin moverse) y pide ZUPT
+    al EKF. Cuando el SLAM vuelve, la autonomía sigue sola (no hace falta reiniciar nada)."""
+    previo = None
+    ultimo_zupt = 0.0
+    while True:
+        await asyncio.sleep(0.1)
+        try:
+            bloqueos = getattr(explorador, "bloqueos", None)      # la FSM (maquina_estados) no los tiene
+            if not _vigia_pose_activo() or not ros_bridge.available:
+                if bloqueos is not None:
+                    bloqueos.pop("localizacion", None)
+                previo = None
+                continue
+            r = _vigia_pose_paso()
+            est = r["estado"]
+            for ev in vigia_pose.eventos:
+                _evento("localizacion", ev)
+            vigia_pose.eventos.clear()
+            if est == LOC_PERDIDA:
+                if bloqueos is not None:
+                    bloqueos["localizacion"] = f"localización perdida ({r['motivo']}): espero a que vuelva el SLAM"
+                if time.monotonic() - ultimo_zupt > 1.0 and actuator_proto is not None and actuator_proto.en_reposo():
+                    ultimo_zupt = time.monotonic()
+                    ros_bridge.publish_zupt()                     # quieto de verdad: que el EKF deje de extrapolar
+            elif bloqueos is not None:
+                bloqueos.pop("localizacion", None)
+            if previo is not None and est != previo:
+                if est == LOC_PERDIDA:
+                    toast = ("error", "Localización perdida", f"{r['motivo']}. La autonomía espera quieta; sigue sola si el SLAM se recupera.")
+                elif est == LOC_ANCLADA:
+                    toast = ("warning", "Pose del SLAM descartada", f"{r['motivo']}. Sigo con la odometría hasta que el SLAM vuelva.")
+                elif est == LOC_OK:
+                    toast = ("success", "Localización recuperada", r["motivo"])
+                else:
+                    toast = None
+                if toast:
+                    await state.broadcast({"type": "toast", "data": {"kind": toast[0], "title": toast[1], "message": toast[2]}})
+            previo = est
+        except Exception as exc:
+            print(f"[vigía pose] {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(1.0)
+
+
+async def localizacion_handler(request: web.Request):
+    """GET /api/localizacion — estado del vigía de la pose. POST {"x","y","theta_deg"} — el operador fija la pose (sale de anclada/perdida)."""
+    if request.method == "POST":
+        body = await request.json()
+        ok = vigia_pose.reubicar(time.monotonic(), body)
+        return web.json_response({"ok": ok, **vigia_pose.snapshot()}, status=200 if ok else 409)
+    return web.json_response({"activo": _vigia_pose_activo(), **vigia_pose.snapshot(), "pose": vigia_pose.pose_dict(),
+                              "eventos": vigia_pose.eventos[-10:]})
 
 
 async def _vigia_lidar():
@@ -2331,7 +2464,7 @@ def _crear_mision_plantas():
                                                                   "message": ", ".join(f"{k}: {v}" for k, v in e.items() if k != "tipo")}}))
 
     mision_plantas = mp.MisionPlantas(explorador=explorador, vision=vision_activa, get_macetas=_macetas_ahora,
-                                      get_pose=ros_bridge.pose_en_mapa, led=_poner_led, grabar=_grabar_video,
+                                      get_pose=_pose_robusta, led=_poner_led, grabar=_grabar_video,
                                       get_config=lambda: {**state.config.get("mision_plantas", {}), **_mision_plantas_extra}, on_event=evento)
     _crear_gestor_misiones()
 
@@ -2367,7 +2500,7 @@ def _crear_gestor_misiones():
 
     gestor_misiones = misiones_mod.GestorMisiones(
         carpeta=Path.home() / ".agrobot", mision_plantas=mision_plantas, explorador=explorador, vision=vision_activa,
-        aplicar_ajustes=aplicar, quitar_ajustes=quitar, guardar_mapa=guardar, get_pose=ros_bridge.pose_en_mapa, on_event=evento)
+        aplicar_ajustes=aplicar, quitar_ajustes=quitar, guardar_mapa=guardar, get_pose=_pose_robusta, on_event=evento)
 
 
 async def misiones_handler(request: web.Request):
@@ -2550,7 +2683,7 @@ def _crear_vision_activa():
         ocupado=lambda: conductor.activo, parar=lambda: conductor.parar(),
         distancias=lambda: lidar_reactive.distancias(state.config["slam"]), edad_scan=lidar_reactive.edad_scan_s,
         get_config=lambda: {**state.config.get("vision_activa", {}), **_mision_vision_override}, on_event=evento, capturar=capturar, clasificar=clasificar, girar=lambda g: conductor.girar_grados(g, _gyro_dps),
-        get_pose=ros_bridge.pose_en_mapa, enlace_ok=lambda: enlace_c3 is not None and enlace_c3.connected,
+        get_pose=_pose_robusta, enlace_ok=lambda: enlace_c3 is not None and enlace_c3.connected,
         autonomia_activa=_autonomia_sin_mision, reloj=time.time)
 
 
@@ -3002,10 +3135,19 @@ def _conducir_pulso(accion: str, maniobra: bool = True, esc_dur: float = 1.0):
     # Sin IMU fresco cae al pulso de siempre.
     if accion in ("izquierda", "derecha") and state.config["autonomia"].get("giro_lazo_cerrado", False) and _gyro_dps() is not None:
         grados = float(state.config["autonomia"].get("mx_grados_pulso", 6.0))
-        if conductor.girar_grados(grados if accion == "izquierda" else -grados, _gyro_dps, w_rps=0.6, t_max_s=2.0):
+        w = None if state.config["autonomia"].get("giro_fuerza_aprendida", False) else 0.6
+        if conductor.girar_grados(grados if accion == "izquierda" else -grados, _gyro_dps, w_rps=w, t_max_s=2.0):
             return
     conductor.ordenar(accion, v_max=v_max,
                       omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra, esc_dur=esc_dur)
+
+
+async def _girar_a_rumbo(rumbo_deg: float) -> dict | None:
+    """Gira hasta mirar a `rumbo_deg` (marco del mapa) en tramos de lazo cerrado, midiendo el rumbo con la pose robusta (giro_objetivo.py).
+    None si no se puede (sin IMU fresco, sin pose o el conductor ocupado): quien llama usa los pulsos de siempre."""
+    def seguir():
+        return explorador is None or (explorador.activo and not explorador.pausado and not getattr(explorador, "bloqueos", None))
+    return await girar_a_rumbo(conductor, rumbo_deg, _pose_robusta, _gyro_dps, state.config["autonomia"], seguir)
 
 
 def _evento(tipo: str, data: dict):
@@ -4596,6 +4738,8 @@ async def start_background(app: web.Application):
     app["rampa_task"] = asyncio.create_task(_bucle_rampa())
     app["vigia_lidar_task"] = asyncio.create_task(_vigia_lidar())
     app["vigia_reloj_task"] = asyncio.create_task(_vigia_reloj())
+    app["vigia_pose_task"] = asyncio.create_task(_vigia_pose_bucle())
+    app["vuelco_task"] = asyncio.create_task(_bucle_vuelco())
     app["vigia_asistido_task"] = asyncio.create_task(_vigia_asistido())
     app["servo_macetas_task"] = asyncio.create_task(_bucle_servo_macetas())
     app["zoom_auto_task"] = asyncio.create_task(_bucle_zoom_auto())
@@ -4616,7 +4760,7 @@ async def start_background(app: web.Application):
         send_nav_goal=ros_bridge.send_nav_goal,
         cancel_nav_goal=ros_bridge.cancel_nav_goal,
         estado_meta=ros_bridge.estado_meta,
-        get_pose=ros_bridge.pose_en_mapa,
+        get_pose=_pose_robusta,
         barrido=_barrido_camara,
         on_event=_patrol_event,
         ruta_waypoints=WAYPOINTS_PATH,
@@ -4664,7 +4808,7 @@ async def start_background(app: web.Application):
             print(f"[exploración] FSM no disponible ({exc}); uso ExploradorReactivo", flush=True)
     explorador = _ClaseExpl(
         distancias=_distancias_explorador,
-        get_pose=ros_bridge.pose_en_mapa,
+        get_pose=_pose_robusta,
         conducir=_conducir_pulso,
         parar=lambda: conductor.parar(),
         escanear=patrol.escanear,
@@ -4689,6 +4833,7 @@ async def start_background(app: web.Application):
         explorador.geom_cb = lambda: state.config["slam"]
     except Exception as exc:  # noqa: BLE001
         print(f"[guardián] no disponible: {exc}", flush=True)
+    explorador.girar_a_rumbo_cb = _girar_a_rumbo
 
     pose_estimator.gyro_weight = state.config["slam"]["pose_gyro_trust"]
 
@@ -4922,6 +5067,7 @@ async def training_correct_pose_handler(request: web.Request):
     theta = float(body.get("theta_deg", 0.0))
     asistido.evento_pose(x, y, theta, current_pose())
     ros_bridge.publish_initial_pose(x, y, theta)
+    vigia_pose.reubicar(time.monotonic(), {"x": x, "y": y, "theta_deg": theta})
     _training_data["corrections"].append({
         "ts": time.time(), "x": x, "y": y, "theta_deg": theta})
     _save_training_data()
@@ -5237,6 +5383,9 @@ def create_app() -> web.Application:
     app.router.add_get("/api/costmap/maps", local_map_list_handler)
     app.router.add_post("/api/costmap/delete", local_map_delete_handler)
     app.router.add_get("/api/ocupado", ocupado_handler)
+    app.router.add_get("/api/localizacion", localizacion_handler)
+    app.router.add_get("/api/vuelco", vuelco_handler)
+    app.router.add_post("/api/localizacion", localizacion_handler)
     app.router.add_get("/api/health", health_handler)
     app.router.add_get("/api/seguridad", seguridad_get_handler)
     app.router.add_post("/api/seguridad/rearmar", seguridad_rearmar_handler)

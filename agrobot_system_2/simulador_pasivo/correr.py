@@ -272,7 +272,9 @@ class Episodio:
         # 2026-10-02 (suelo_libre.py). Sin esto el simulador entrenaba con un
         # freno que ya no es el del robot y la pesa invisible lo chocaba.
         from suelo_libre import SueloLibre
-        self.suelo = SueloLibre(reloj=lambda: self.reloj.t)
+        self.suelo = SueloLibre(cfg={"metodo": os.environ.get("AGROBOT_SUELO_METODO", "apariencia"),
+                                     "umbral": self.cfg["autonomia"].get("suelo_umbral", 2.6), "textura": self.cfg["autonomia"].get("suelo_textura", 1.2)},  # como jetson_server (2026-10-22); antes: histograma
+                                reloj=lambda: self.reloj.t)
         self.lidar.hueco_camara = lambda: self.suelo.hueco_delante(
             self.cfg["slam"]["robot_ancho_cm"] / 100.0)
         self.costmap = CostmapLocal()

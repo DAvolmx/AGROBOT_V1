@@ -1,0 +1,259 @@
+{
+ "escenarios": [
+  "invernadero",
+  "hileras",
+  "callejon",
+  "serpentina",
+  "trampa_bucle",
+  "campo_abierto"
+ ],
+ "semillas_validacion": [
+  1020368,
+  1517629
+ ],
+ "hoy": {
+  "camara_obstaculos": 1.0,
+  "camara_como_lidar": 1.0,
+  "suelo_umbral": 2.6,
+  "suelo_textura": 1.2,
+  "avance_libre_cm": 100.0,
+  "lado_libre_cm": 60.0,
+  "retroceso_libre_cm": 30.0,
+  "man_histeresis_cm": 17.9,
+  "man_pausa_s": 1.3,
+  "mx_grados_pulso": 12.0,
+  "e11_pred_margen_m": 0.067,
+  "atasco_reintento_s": 90.0
+ },
+ "validacion": [
+  {
+   "nombre": "HOY",
+   "params": {
+    "camara_obstaculos": 1.0,
+    "camara_como_lidar": 1.0,
+    "suelo_umbral": 2.6,
+    "suelo_textura": 1.2,
+    "avance_libre_cm": 100.0,
+    "lado_libre_cm": 60.0,
+    "retroceso_libre_cm": 30.0,
+    "man_histeresis_cm": 17.9,
+    "man_pausa_s": 1.3,
+    "mx_grados_pulso": 12.0,
+    "e11_pred_margen_m": 0.067,
+    "atasco_reintento_s": 90.0
+   },
+   "costo": -2.204,
+   "por_esc": {
+    "invernadero": {
+     "recorrido_m": 2.67,
+     "celdas": 5.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "hileras": {
+     "recorrido_m": 2.09,
+     "celdas": 3.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "callejon": {
+     "recorrido_m": 2.92,
+     "celdas": 4.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "serpentina": {
+     "recorrido_m": 4.54,
+     "celdas": 8.5,
+     "plantas_pisadas": 2.0,
+     "colisiones": 0.0
+    },
+    "trampa_bucle": {
+     "recorrido_m": 2.41,
+     "celdas": 4.0,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "campo_abierto": {
+     "recorrido_m": 3.56,
+     "celdas": 7.5,
+     "plantas_pisadas": 0.5,
+     "colisiones": 0.0
+    }
+   },
+   "gen": null
+  },
+  {
+   "nombre": "top1",
+   "params": {
+    "camara_obstaculos": 1.0,
+    "camara_como_lidar": 1.0,
+    "suelo_umbral": 4.839,
+    "suelo_textura": 1.088,
+    "avance_libre_cm": 50.356,
+    "lado_libre_cm": 57.389,
+    "retroceso_libre_cm": 24.331,
+    "man_histeresis_cm": 15.352,
+    "man_pausa_s": 0.521,
+    "mx_grados_pulso": 10.151,
+    "e11_pred_margen_m": 0.036,
+    "atasco_reintento_s": 119.353
+   },
+   "costo": -1.968,
+   "por_esc": {
+    "invernadero": {
+     "recorrido_m": 2.75,
+     "celdas": 4.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "hileras": {
+     "recorrido_m": 1.6,
+     "celdas": 3.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "callejon": {
+     "recorrido_m": 2.35,
+     "celdas": 4.0,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "serpentina": {
+     "recorrido_m": 2.2,
+     "celdas": 4.0,
+     "plantas_pisadas": 2.0,
+     "colisiones": 0.0
+    },
+    "trampa_bucle": {
+     "recorrido_m": 3.55,
+     "celdas": 8.0,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "campo_abierto": {
+     "recorrido_m": 11.8,
+     "celdas": 23.0,
+     "plantas_pisadas": 2.5,
+     "colisiones": 0.5
+    }
+   },
+   "gen": 6
+  },
+  {
+   "nombre": "top2",
+   "params": {
+    "camara_obstaculos": 1.0,
+    "camara_como_lidar": 1.0,
+    "suelo_umbral": 4.398,
+    "suelo_textura": 1.199,
+    "avance_libre_cm": 60.9,
+    "lado_libre_cm": 52.627,
+    "retroceso_libre_cm": 25.577,
+    "man_histeresis_cm": 10.334,
+    "man_pausa_s": 0.435,
+    "mx_grados_pulso": 6.0,
+    "e11_pred_margen_m": 0.02,
+    "atasco_reintento_s": 140.461
+   },
+   "costo": -2.093,
+   "por_esc": {
+    "invernadero": {
+     "recorrido_m": 2.83,
+     "celdas": 4.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "hileras": {
+     "recorrido_m": 1.64,
+     "celdas": 2.0,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "callejon": {
+     "recorrido_m": 2.88,
+     "celdas": 4.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "serpentina": {
+     "recorrido_m": 1.92,
+     "celdas": 4.0,
+     "plantas_pisadas": 1.5,
+     "colisiones": 0.0
+    },
+    "trampa_bucle": {
+     "recorrido_m": 2.63,
+     "celdas": 5.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "campo_abierto": {
+     "recorrido_m": 4.31,
+     "celdas": 8.5,
+     "plantas_pisadas": 0.5,
+     "colisiones": 0.0
+    }
+   },
+   "gen": 4
+  },
+  {
+   "nombre": "top3",
+   "params": {
+    "camara_obstaculos": 1.0,
+    "camara_como_lidar": 1.0,
+    "suelo_umbral": 4.745,
+    "suelo_textura": 0.916,
+    "avance_libre_cm": 63.054,
+    "lado_libre_cm": 64.187,
+    "retroceso_libre_cm": 24.457,
+    "man_histeresis_cm": 16.135,
+    "man_pausa_s": 0.0,
+    "mx_grados_pulso": 9.044,
+    "e11_pred_margen_m": 0.07,
+    "atasco_reintento_s": 87.15
+   },
+   "costo": 1.001,
+   "por_esc": {
+    "invernadero": {
+     "recorrido_m": 1.79,
+     "celdas": 2.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "hileras": {
+     "recorrido_m": 1.74,
+     "celdas": 3.5,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "callejon": {
+     "recorrido_m": 2.92,
+     "celdas": 6.0,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "serpentina": {
+     "recorrido_m": 3.01,
+     "celdas": 6.5,
+     "plantas_pisadas": 4.5,
+     "colisiones": 0.0
+    },
+    "trampa_bucle": {
+     "recorrido_m": 2.83,
+     "celdas": 7.0,
+     "plantas_pisadas": 0.0,
+     "colisiones": 0.0
+    },
+    "campo_abierto": {
+     "recorrido_m": 6.22,
+     "celdas": 11.0,
+     "plantas_pisadas": 3.0,
+     "colisiones": 0.0
+    }
+   },
+   "gen": 4
+  }
+ ],
+ "generaciones": 6
+}

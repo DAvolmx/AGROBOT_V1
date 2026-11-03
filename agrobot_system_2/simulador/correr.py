@@ -22,6 +22,7 @@ import asyncio
 import csv
 import json
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -267,7 +268,9 @@ class Episodio:
         # 2026-10-02 (suelo_libre.py). Sin esto el simulador entrenaba con un
         # freno que ya no es el del robot y la pesa invisible lo chocaba.
         from suelo_libre import SueloLibre
-        self.suelo = SueloLibre(reloj=lambda: self.reloj.t)
+        self.suelo = SueloLibre(cfg={"metodo": os.environ.get("AGROBOT_SUELO_METODO", "apariencia"),
+                                     "umbral": self.cfg["autonomia"].get("suelo_umbral", 2.6), "textura": self.cfg["autonomia"].get("suelo_textura", 1.2)},  # como jetson_server (2026-10-22); antes: histograma
+                                reloj=lambda: self.reloj.t)
         self.lidar.hueco_camara = lambda: self.suelo.hueco_delante(
             self.cfg["slam"]["robot_ancho_cm"] / 100.0)
         self.costmap = CostmapLocal()
@@ -294,10 +297,26 @@ class Episodio:
 
         ctrl = self.cfg["control"]
         escala = self.cfg["autonomia"]["escala_velocidad"]
+        def distancias_fusionadas():
+            # El LIDAR montado alto no ve plantas bajas. Compartimos con el
+            # planificador la misma deteccion de suelo que usa el freno,
+            # convertida de distancia al centro a espacio libre desde el frente.
+            d = dict(self.lidar.distancias(self.cfg["slam"]))
+            if not self.cfg["autonomia"].get("camara_obstaculos", True):
+                return d                     # como jetson_server._distancias_explorador
+            suelo_m = self.suelo.hueco_delante(
+                self.cfg["slam"]["robot_ancho_cm"] / 100.0)
+            if suelo_m is not None:
+                libre_frente = max(0.0, suelo_m -
+                    self.cfg["slam"]["robot_largo_cm"] / 200.0)
+                actual = d.get("adelante")
+                d["adelante"] = libre_frente if actual is None else min(actual, libre_frente)
+            return d
+
         self.explorador = ExploradorReactivo(
-            distancias=lambda: self.lidar.distancias(self.cfg["slam"]),
+            distancias=distancias_fusionadas,
             get_pose=self.pose_para_el_software,
-            conducir=lambda accion, maniobra=True: self._conducir_filtrado(accion, maniobra),
+            conducir=lambda accion, maniobra=True, esc_dur=1.0: self._conducir_filtrado(accion, maniobra, esc_dur),
             parar=self.conductor.parar,
             escanear=self._escanear,
             on_event=lambda d: self.eventos.append({"t": round(self.reloj.t, 1), **d}),
@@ -310,11 +329,64 @@ class Episodio:
             politica=self.politica,
             get_costmap=lambda: self.costmap)
 
-    def _conducir_filtrado(self, accion, maniobra=True):
+        # Giro hasta un rumbo (2026-11-02): el MISMO bucle que el backend (giro_objetivo.girar_a_rumbo) sobre el giroscopio simulado y la pose del SLAM
+        # simulado. Sin esto el simulador no probaba `autonomia.giro_objetivo_activo` y el atasco escalonado caía siempre a los pulsos.
+        from giro_objetivo import girar_a_rumbo
+
+        async def girar_a_rumbo_cb(rumbo_deg):
+            ex = self.explorador
+            return await girar_a_rumbo(self.conductor, rumbo_deg, self.pose_para_el_software, self._gyro_dps, self.cfg["autonomia"],
+                                       lambda: ex.activo and not ex.pausado and not getattr(ex, "bloqueos", None))
+        self.explorador.girar_a_rumbo_cb = girar_a_rumbo_cb
+
+        # Scan para el explorador, como jetson_server._scan_explorador (hueco del giro, predictor E11, sonar). Antes el simulador no lo daba:
+        # todo lo que usa `scan_cb` estaba apagado en la simulación y encendido en el robot.
+        from camara_lidar import CamaraComoLidar
+        self.camara_lidar = CamaraComoLidar(reloj=lambda: self.reloj.t)
+
+        def scan_explorador():
+            scan = self.lidar.last_scan
+            aut = self.cfg["autonomia"]
+            if not aut.get("camara_como_lidar", False):
+                return scan
+            return self.camara_lidar.fusionar(scan, self.suelo.ultimo, self.cfg["slam"]["robot_largo_cm"] / 100.0,
+                                              bool(aut.get("camara_lidar_solo", False)))
+        self.explorador.scan_cb = scan_explorador
+
+    def _conducir_filtrado(self, accion, maniobra=True, esc_dur=1.0):
+        """Como `jetson_server._conducir_pulso`: `esc_dur` (pulsos de rumbo cortos) y, con `autonomia.giro_lazo_cerrado`, el pulso de giro es
+        «gira mx_grados_pulso» medido con el giroscopio. Antes el simulador no aceptaba `esc_dur` y el explorador REVENTABA en el primer pulso de
+        rumbo (TypeError, estado «detenido»), y giraba a tiempo fijo cuando el robot ya giraba por giroscopio."""
         ctrl, escala = self.cfg["control"], self.cfg["autonomia"]["escala_velocidad"]
         accion, maniobra = self.filtrar(accion, maniobra)
+        aut = self.cfg["autonomia"]
+        if accion in ("izquierda", "derecha") and aut.get("giro_lazo_cerrado", False):
+            grados = float(aut.get("mx_grados_pulso", 6.0))
+            w = None if aut.get("giro_fuerza_aprendida", False) else 0.6
+            if self.conductor.girar_grados(grados if accion == "izquierda" else -grados, self._gyro_dps, w_rps=w, t_max_s=2.0):
+                return
         self.conductor.ordenar(accion, v_max=ctrl["max_v_mps"] * escala,
-                               omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra)
+                               omega_max=ctrl["max_omega_rps"] * escala, maniobra=maniobra, esc_dur=esc_dur)
+
+    def _gyro_dps(self):
+        return math.degrees(self.robot.omega) + float(self.rng.normal(0.0, 0.5))
+
+    SUELO_PERIODO_S = 0.25     # 4 Hz de reloj virtual: renderizar cuesta
+
+    async def _bucle_suelo(self):
+        """Suelo libre por cámara, como `_bucle_suelo_libre` del backend:
+        solo con el servo quieto (si no, la geometría no vale)."""
+        while not self.parar_pedido:
+            await self.reloj._sleep(self.SUELO_PERIODO_S)
+            if not self.robot.servo_asentado:
+                self.suelo.ultimo = None
+                continue
+            try:
+                self.suelo.analizar(cv2, self.robot.frame(self.geometria()), self.geometria())
+            except Exception as exc:          # nunca debe tumbar el episodio
+                self.eventos.append({"t": round(self.reloj.t, 1), "evento": "suelo_error",
+                                     "error": f"{type(exc).__name__}: {exc}"})
+                await self.reloj._sleep(1.0)
 
     SUELO_PERIODO_S = 0.25     # 4 Hz de reloj virtual: renderizar cuesta
 

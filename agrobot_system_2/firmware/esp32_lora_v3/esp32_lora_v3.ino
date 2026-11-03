@@ -12,6 +12,7 @@
 #include "LoRaWan_APP.h"
 #include "esp_system.h"   // esp_reset_reason(): por que se reinicio la placa
 #include <Wire.h>
+#include "HT_SSD1306Wire.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
 // =============================================
@@ -28,6 +29,11 @@ bool wifi_connected = false;
 // =============================================
 #define I2C_SDA 41
 #define I2C_SCL 42
+// Los sensores van en el SEGUNDO controlador I2C (Wire1). El primero (Wire)
+// lo usa la pantalla OLED de la placa en SDA 17 / SCL 18: la libreria de
+// Heltec llama a Wire.begin(17, 18) al encenderla, y si los sensores siguieran
+// en Wire se quedarian sin bus.
+#define I2C_SENS Wire1
 // Direcciones I2C
 #define MPU6050_ADDR 0x68
 #define SCD40_ADDR 0x62
@@ -49,6 +55,17 @@ uint32_t devAddr = 0x00000000;
 // =============================================
 // ===== CONFIGURACIÓN LORAWAN =====
 // =============================================
+// PLAN AU915 (2026-11-03). En Ecuador 902–915 MHz es banda IMT y el uso libre
+// esta en 915–928 MHz (PNF de ARCOTEL v6.0, notas EQA.40 y EQA.45). La subida
+// de US915 canales 0–7 (902,3–903,7 MHz) quedaba fuera; la de AU915 canales
+// 0–7 (915,2–916,6 MHz) queda dentro. La mascara 0x00FF es la misma: lo que
+// cambia es la region, que la placa toma del menu de compilacion
+// (LORAWAN_REGION=4 -> -DREGION_AU915 -DACTIVE_REGION=LORAMAC_REGION_AU915).
+// El gateway (HT-M02) y ChirpStack (au915_0) tienen que estar en la misma
+// sub-banda, o el JoinRequest no lo escucha nadie.
+#ifndef REGION_AU915
+#error "Compilar con la region AU915: --fqbn esp32:esp32:heltec_wifi_lora_32_V3:LORAWAN_REGION=4"
+#endif
 uint16_t userChannelsMask[6] = { 0x00FF, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
 LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
 // CLASE C, no A. Un dispositivo Clase C escucha de forma CONTINUA, asi que
@@ -91,6 +108,7 @@ uint8_t confirmedNbTrials = 4;
 // ===== VARIABLES GLOBALES =====
 // =============================================
 int sendCount = 0;
+unsigned long ultimoTxMillis = 0;      // millis() del ultimo uplink (0 = ninguno), para la OLED
 uint32_t udpSeq = 0;        // secuencia propia del flujo UDP
 
 // Ritmos del lazo, independientes del ciclo LoRaWAN.
@@ -126,25 +144,25 @@ struct SensorData {
 // ===== FUNCIONES I2C BÁSICAS =====
 // =============================================
 void i2c_write(uint8_t addr, uint8_t reg, uint8_t value) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  Wire.write(value);
-  Wire.endTransmission();
+  I2C_SENS.beginTransmission(addr);
+  I2C_SENS.write(reg);
+  I2C_SENS.write(value);
+  I2C_SENS.endTransmission();
 }
 uint8_t i2c_read(uint8_t addr, uint8_t reg) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  Wire.endTransmission();
-  Wire.requestFrom(addr, (uint8_t)1);
-  return Wire.read();
+  I2C_SENS.beginTransmission(addr);
+  I2C_SENS.write(reg);
+  I2C_SENS.endTransmission();
+  I2C_SENS.requestFrom(addr, (uint8_t)1);
+  return I2C_SENS.read();
 }
 void i2c_read_bytes(uint8_t addr, uint8_t reg, uint8_t* buffer, uint8_t len) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  Wire.endTransmission();
-  Wire.requestFrom(addr, len);
+  I2C_SENS.beginTransmission(addr);
+  I2C_SENS.write(reg);
+  I2C_SENS.endTransmission();
+  I2C_SENS.requestFrom(addr, len);
   for(uint8_t i = 0; i < len; i++) {
-    buffer[i] = Wire.read();
+    buffer[i] = I2C_SENS.read();
   }
 }
 // =============================================
@@ -193,13 +211,13 @@ void mpu6050_read(float* accelX, float* accelY, float* accelZ,
 void scd40_init() {
   Serial.print("  🌡️  SCD40 (I2C)... ");
   // 2026-10-23: antes se marcaba OK sin mirar si el sensor respondía, y sin SCD40 se mandaban ceros como si fueran lecturas.
-  Wire.beginTransmission(SCD40_ADDR);
-  bool responde = (Wire.endTransmission() == 0);          // ¿hay algo en 0x62?
+  I2C_SENS.beginTransmission(SCD40_ADDR);
+  bool responde = (I2C_SENS.endTransmission() == 0);          // ¿hay algo en 0x62?
   if (responde) {
-    Wire.beginTransmission(SCD40_ADDR);
-    Wire.write(0x21);                                     // start_periodic_measurement (si ya medía, NACK: no pasa nada)
-    Wire.write(0xB1);
-    Wire.endTransmission();
+    I2C_SENS.beginTransmission(SCD40_ADDR);
+    I2C_SENS.write(0x21);                                     // start_periodic_measurement (si ya medía, NACK: no pasa nada)
+    I2C_SENS.write(0xB1);
+    I2C_SENS.endTransmission();
     delay(1000);
   }
   scd40_ok = responde;
@@ -215,22 +233,22 @@ void scd40_read(uint16_t* co2, float* temperature, float* humidity) {
   }
   if (!scd40_ok) return;
 
-  Wire.beginTransmission(SCD40_ADDR);
-  Wire.write(0xE4); Wire.write(0xB8);          // get_data_ready_status
-  if (Wire.endTransmission() != 0) return;
+  I2C_SENS.beginTransmission(SCD40_ADDR);
+  I2C_SENS.write(0xE4); I2C_SENS.write(0xB8);          // get_data_ready_status
+  if (I2C_SENS.endTransmission() != 0) return;
   delay(2);
-  if (Wire.requestFrom((uint8_t)SCD40_ADDR, (uint8_t)3) < 3) return;
+  if (I2C_SENS.requestFrom((uint8_t)SCD40_ADDR, (uint8_t)3) < 3) return;
   uint8_t st[3];
-  for (int i = 0; i < 3; i++) st[i] = Wire.read();
+  for (int i = 0; i < 3; i++) st[i] = I2C_SENS.read();
   if (((((uint16_t)st[0] << 8) | st[1]) & 0x07FF) == 0) return;
 
-  Wire.beginTransmission(SCD40_ADDR);
-  Wire.write(0xEC); Wire.write(0x05);          // read_measurement
-  if (Wire.endTransmission() != 0) return;
+  I2C_SENS.beginTransmission(SCD40_ADDR);
+  I2C_SENS.write(0xEC); I2C_SENS.write(0x05);          // read_measurement
+  if (I2C_SENS.endTransmission() != 0) return;
   delay(2);
-  if (Wire.requestFrom((uint8_t)SCD40_ADDR, (uint8_t)9) < 9) return;
+  if (I2C_SENS.requestFrom((uint8_t)SCD40_ADDR, (uint8_t)9) < 9) return;
   uint8_t data[9];
-  for (int i = 0; i < 9; i++) data[i] = Wire.read();
+  for (int i = 0; i < 9; i++) data[i] = I2C_SENS.read();
 
   uint16_t co2_raw = ((uint16_t)data[0] << 8) | data[1];
   if (co2_raw == 0) return;
@@ -247,7 +265,7 @@ void scd40_read(uint16_t* co2, float* temperature, float* humidity) {
 // =============================================
 void initSensors() {
   Serial.println("\n📡 Inicializando sensores (I2C directo)...\n");
-  Wire.begin(I2C_SDA, I2C_SCL);
+  I2C_SENS.begin(I2C_SDA, I2C_SCL);
   delay(500);
   mpu6050_init();
   scd40_init();
@@ -320,9 +338,9 @@ void connectToWiFi() {
   Serial.printf("📶 WiFi intento #%u...", wifiRetryCount);
   WiFi.mode(WIFI_STA);
   // Configurar timeout DHCP largo antes de conectar
-  WiFi.setAutoConnect(true);
+  // (setAutoConnect y setTimeout ya no existen en el core ESP32 3.x; la espera
+  // de 60 s la hace el bucle de abajo)
   WiFi.setAutoReconnect(true);
-  WiFi.setTimeout(WIFI_DHCP_TIMEOUT_MS);  // 60s timeout
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   // Esperar hasta WIFI_DHCP_TIMEOUT_MS ms
@@ -506,6 +524,7 @@ static void prepareTxFrame(uint8_t port) {
   buf[16] = (uint8_t)sensorData.humidity;
   appDataSize = 17;
   sendCount++;
+  ultimoTxMillis = millis();
   Serial.print("📤 [TX] Enviando #");
   Serial.print(sendCount);
   Serial.print(" (");
@@ -519,6 +538,68 @@ static void prepareTxFrame(uint8_t port) {
   Serial.printf("     🌡️  Temperatura:  %.2f°C (SCD)\n",
                 sensorData.temperature_scd);
   Serial.printf("     💧 Humedad:      %.1f%%\n", sensorData.humidity);
+}
+// =============================================
+// ===== PANTALLA OLED (128x64, integrada en la placa) =====
+// =============================================
+// Muestra lo que antes solo se veia con el cable USB: si el nodo esta unido a
+// la red, el WiFi a la Jetson, los envios LoRaWAN y la ultima lectura.
+// `display` lo define la libreria de Heltec (LoRaWan_APP.cpp) en Wire, con
+// SDA 17 / SCL 18 / RST 21; la alimenta Vext (GPIO 36, activo en BAJO).
+// Se redibuja una vez por segundo: cada refresco ocupa ~25 ms de I2C, y a
+// 20 Hz le robaria la mitad del tiempo al envio UDP del IMU.
+extern SSD1306Wire display;
+const unsigned long OLED_PERIODO_MS = 1000;
+unsigned long lastOledMillis = 0;
+bool oled_ok = false;
+
+bool redUnida() {
+  MibRequestConfirm_t mib;
+  mib.Type = MIB_NETWORK_JOINED;
+  return LoRaMacMibGetRequestConfirm(&mib) == LORAMAC_STATUS_OK && mib.Param.IsNetworkJoined;
+}
+
+void oledInit() {
+  pinMode(Vext, OUTPUT);
+  digitalWrite(Vext, LOW);            // enciende la OLED (en la V3, Vext se activa en BAJO)
+  delay(100);
+  oled_ok = display.init();
+  if (!oled_ok) { Serial.println("  🖥️  OLED ❌ (no responde en 0x3C)"); return; }
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.clear();
+  display.drawString(0, 0, "AgroBot - nodo LoRaWAN");
+  display.drawString(0, 14, "AU915  canales 0-7");
+  display.drawString(0, 26, "915,2 - 916,6 MHz");
+  display.drawString(0, 44, "Iniciando...");
+  display.display();
+  Serial.println("  🖥️  OLED ✅");
+}
+
+void oledActualizar() {
+  if (!oled_ok) return;
+  char l[40];
+  display.clear();
+  bool unida = redUnida();
+  snprintf(l, sizeof(l), "AU915  %s", unida ? "UNIDO" : "uniendo...");
+  display.drawString(0, 0, l);
+  if (wifi_connected) snprintf(l, sizeof(l), "WiFi %d dBm  UDP %lu", (int)WiFi.RSSI(), udpSeq);
+  else snprintf(l, sizeof(l), "WiFi: sin conexion");
+  display.drawString(0, 11, l);
+  if (ultimoTxMillis) snprintf(l, sizeof(l), "TX #%d hace %lus", sendCount, (millis() - ultimoTxMillis) / 1000);
+  else snprintf(l, sizeof(l), "TX: ninguno aun");
+  display.drawString(0, 22, l);
+  bool amb = scd40_ok && ultimaMedidaAmbiente != 0 && (millis() - ultimaMedidaAmbiente) < 15000;
+  if (amb) snprintf(l, sizeof(l), "%.1fC %.0f%% %uppm", sensorData.temperature_scd, sensorData.humidity, sensorData.co2);
+  else snprintf(l, sizeof(l), "SCD40: sin dato");
+  display.drawString(0, 33, l);
+  if (mpu_ok) snprintf(l, sizeof(l), "IMU z=%.2fg gz=%.0f", sensorData.accelZ, sensorData.gyroZ);
+  else snprintf(l, sizeof(l), "IMU: no responde");
+  display.drawString(0, 44, l);
+  if (cntDownlinks) snprintf(l, sizeof(l), "DL #%lu cmd 0x%02X", cntDownlinks, ultimoComando);
+  else snprintf(l, sizeof(l), "DL: ninguno");
+  display.drawString(0, 54, l);
+  display.display();
 }
 // =============================================
 // ===== MOTIVO DEL ULTIMO REINICIO =====
@@ -565,7 +646,7 @@ void setup() {
   Serial.println("\n╔═══════════════════════════════════════╗");
   Serial.println("║  🚗 CARRITO2 - OTAA + SENSORES      ║");
   Serial.println("║  I2C DIRECTO (SIN LIBRERÍAS)        ║");
-  Serial.println("║  MPU6050 + SCD40                    ║");
+  Serial.println("║  MPU6050 + SCD40 + OLED · AU915     ║");
   Serial.println("╚═══════════════════════════════════════╝\n");
   Serial.print("📋 DevEUI: ");
   for(int i = 0; i < 8; i++) {
@@ -581,6 +662,7 @@ void setup() {
   Serial.println("\n");
   Serial.println("🚀 Inicializando LoRaWAN...");
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
+  oledInit();
   // LoRaWAN.init() NO se llama aqui. Mirando LoRaWan_APP.cpp de Heltec, su
   // ultima linea es `deviceState = DEVICE_STATE_JOIN;` y antes reinicia la
   // pila entera con LoRaMacInitialization(). Y setup() se ejecuta en CADA
@@ -619,6 +701,11 @@ void loop() {
   if (millis() - lastAmbienteMillis >= AMBIENTE_PERIODO_MS) {
     lastAmbienteMillis = millis();
     readAmbiente();
+  }
+
+  if (millis() - lastOledMillis >= OLED_PERIODO_MS) {
+    lastOledMillis = millis();
+    oledActualizar();
   }
 
   if (millis() - lastSensorLog > 30000) {

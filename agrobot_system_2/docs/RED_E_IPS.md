@@ -103,12 +103,22 @@ Verificado el 2026-10-01: la Pi recibe sus estadísticas cada 30 s.
     de cable pasa a ser una red propia `192.168.4.1`. **No conectar ese
     cable al router**: pide IP al arrancar y después queda mudo.
 - Configuración vigente: Wi-Fi `LoRa_Wan`, IP estática `192.168.0.11/24`,
-  gateway `192.168.0.1`, UDP Packet Forwarder, US915 canales 0-7,64,
-  servidor `192.168.0.10`, puertos 1700/1700.
+  gateway `192.168.0.1`, UDP Packet Forwarder, **AU915 canales 0-7,64**
+  (desde el 2026-11-03; antes US915), servidor `192.168.0.20` (la Pi por
+  Wi-Fi; por cable es `192.168.0.10`), puertos 1700/1700.
+- Cambio de región por script: `POST /apply.php` con autenticación básica
+  y `{"apply":"setgateway","gwmod":"pkt","region":"AU915","subband":"0",
+  "freq1":915500000,"freq2":916200000,...}` (mismos valores que calcula la
+  página: radio 0 en 915,5 MHz y radio 1 en 916,2 MHz).
 
 ## 6. Raspberry Pi
 
-- SSH: `admin@192.168.0.10`. ChirpStack v4 en Docker (`~/chirpstack`).
+- SSH: `admin@192.168.0.10`. ChirpStack v4 en Docker: el que corre está en
+  `/root/chirpstack-docker` (`~/chirpstack` es una copia que no se usa).
+  Región `au915_0` desde el 2026-11-03: tema del puente
+  `au915_0/gateway/...` en `docker-compose.yml`, `enabled_regions` con
+  `au915_0` (y `us915_0` para volver atrás) y perfil `AU915_PROFILE`.
+  Respaldos `*.pre_au915_20261103` y `~/dp_pre_au915_20261103.json`.
 - Wi-Fi: perfil NetworkManager `LoRa-Wan` (antes decía `LoRa_Wan`, por eso
   no se conectaba sin cable), métrica 600 → el cable manda si está.
 

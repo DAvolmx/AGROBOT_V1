@@ -1,6 +1,6 @@
 // =============================================================================
 // Codec de ChirpStack para el AgroBot — pegar en:
-//   Device profiles -> US915_PROFILE -> pestana "Payload codec"
+//   Device profiles -> AU915_PROFILE (antes US915_PROFILE) -> pestana "Payload codec"
 //   -> Codec = "JavaScript functions"
 //
 // Reemplaza al codec que había, que pertenecía a OTRA versión del firmware:

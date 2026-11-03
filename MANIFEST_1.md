@@ -4983,3 +4983,21 @@ Detalle: sección «Ronda 2» de `agrobot_system_2/docs/AUTONOMIA_ROBUSTA_202611
 - **Plan LoRaWAN AU915 (decisión del operador, 2-nov 22:00):** la documentación, el video y los datos simulados pasan a AU915 (canales 0–7, 915,2–916,6 MHz). Fuente: PNF v6.0 de ARCOTEL; 902–915 MHz es IMT (EQA.40) y el uso libre está en 915–928 MHz (EQA.45). Copia en `docs/TESIS_COMPLEMENTO_20261102/fuentes_ARCOTEL_PNF_v6.0_2021.pdf`. **Los equipos siguen en US915 hasta que el operador los cambie:** `ACTIVE_REGION` del nodo, *Region* del HT-M02 y `au915_0` en ChirpStack. La etiqueta del panel de la Pi está fija en el HTML: la copia `rpi/dashboard/vivo_20261102/index.html` ya dice AU915 (falta copiarla a la Pi); las capturas y el clip la muestran en AU915.
 - **Resultado del entrenamiento de 7 h** (`~/.agrobot/aprendizaje/explorador_7h_20261102_2159/`; copia del informe y las gráficas en `docs/TESIS_COMPLEMENTO_20261102/figuras/`). Un corte de energía hacia las 00:30 del 3-nov lo interrumpió tras la generación 3; se añadió `--reanudar` a `entrenar_explorador_7h.py` y siguió desde el historial. La generación 5 se descartó (66/66 episodios con «sin datos del LIDAR» al arrancar, causa no hallada, pasajera). En entrenamiento el mejor candidato llegó a −4,22 frente a −2,88 de HOY, pero **en la validación con semillas nuevas ganó HOY** (−2,20 frente a −2,09 de top2 y −1,97 de top1). top1 (avance 50 cm, umbral 4,8) recorre 11,8 m en campo abierto frente a 3,6 m, pero pisa 5 veces más plantas. **No se cambia la configuración del robot.** El límite es la percepción (obstáculo a ~18 cm del frente). La prueba P2 de la tesis pasa a ser calibrar la cámara del simulador con el robot real. Sección 3.16 del complemento completada y video de defensa reconstruido con el resultado.
 - **Tras el corte:** `agrobot-backend` y `agrobot-ros` arrancaron solos al encender y se detuvieron a pedido del operador. Siguen habilitados al inicio, así que vuelven a arrancar si se repite un corte.
+
+### 2026-11-03 — Red LoRaWAN pasada a AU915 y nodo con pantalla OLED
+- **Nodo Heltec LoRa V3** (`firmware/esp32_lora_v3/esp32_lora_v3.ino`, flasheado por USB desde la Jetson con `arduino-cli`, core esp32 3.3.11 + librería «Heltec ESP32 Dev-Boards» 2.1.6). Compilar con `--fqbn esp32:esp32:heltec_wifi_lora_32_V3:LORAWAN_REGION=4,LORAWAN_DEVEUI=0`: el sketch da `#error` si no es AU915. Canales 0–7 (máscara 0x00FF).
+  - **Pantalla OLED** cada 1 s: unión real (`MIB_NETWORK_JOINED`), WiFi y datagramas UDP, último TX, ambiente, IMU y último downlink.
+  - **Sensores** pasados a `Wire1` (41/42), porque la OLED usa `Wire` (17/18).
+  - Quitados `setAutoConnect` y `setTimeout`, que no existen en el core 3.x.
+  - La placa tenía la v2 del 6-oct en US915, que marcaba el SCD40 como bien sin comprobarlo. **El MPU6050 y el SCD40 no responden en el bus**, así que los uplinks reales llegan con ceros.
+  - Respaldo: `esp32_lora_v3.pre_au915_oled.ino.bak`.
+- **Gateway HT-M02:** pasado a AU915 con los canales 0–7 y el 64. El servidor es `192.168.0.20`: la Pi está hoy por Wi-Fi.
+- **ChirpStack** (`/root/chirpstack-docker` en la Pi):
+  - Tema del puente: `au915_0`.
+  - `enabled_regions`: `au915_0` + `us915_0`.
+  - Perfil `AU915_PROFILE` (región AU915, `au915_0`).
+  - Respaldos: `*.pre_au915_20261103` y `~/dp_pre_au915_20261103.json`.
+- **Comprobado:** el nodo se unió por OTAA. Los uplinks llegan a 915,2 y 916,0 MHz a SF7, con −30 dBm a corta distancia, y se guardan en `agrobot_history.db` de la Pi.
+- **Panel de la Pi:** la etiqueta pasa a «LoRaWAN · AU915». Respaldo: `index.html.pre_au915_20261103`.
+- **Segundo gateway desconocido:** ChirpStack recibe estadísticas de un gateway `c0ba1ffffe03ebc8` que no está documentado. Si sigue en US915, no oirá al nodo.
+- **Tesis:** la inconsistencia I-1 y la prueba P8 (AU915) ya se pueden cerrar; falta la captura del gateway en AU915 para la figura 43.

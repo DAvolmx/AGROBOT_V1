@@ -57,7 +57,7 @@ def convertir(md: Path, salida: Path):
                 bloque.append(lineas[i]); i += 1
             tabla(doc, bloque); continue
         m = re.match(r"^(#{1,4})\s+(.*)", ln)
-        img = re.match(r"^!\[([^\]]*)\]\(([^)]+)\)", ln.strip())
+        img = re.match(r"^!\[(.*)\]\(([^)]+)\)$", ln.strip())   # (.*): el pie puede citar [10]
         if m:
             doc.add_heading(m.group(2).replace("**", ""), level=len(m.group(1)) - 1 if len(m.group(1)) > 1 else 0)
         elif img:

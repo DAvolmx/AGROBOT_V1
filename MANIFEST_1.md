@@ -5001,3 +5001,37 @@ Detalle: sección «Ronda 2» de `agrobot_system_2/docs/AUTONOMIA_ROBUSTA_202611
 - **Panel de la Pi:** la etiqueta pasa a «LoRaWAN · AU915». Respaldo: `index.html.pre_au915_20261103`.
 - **Segundo gateway desconocido:** ChirpStack recibe estadísticas de un gateway `c0ba1ffffe03ebc8` que no está documentado. Si sigue en US915, no oirá al nodo.
 - **Tesis:** la inconsistencia I-1 y la prueba P8 (AU915) ya se pueden cerrar; falta la captura del gateway en AU915 para la figura 43.
+
+### 2026-11-03 (2) — Enlace del robot y configuración para exterior
+
+- **Antena externa USB ignorada:** el adaptador actual es `0bda:8179` (RTL8188EUS) y los scripts del AP solo reconocían
+  `0bda:0179`. El AP JETSON_AP quedaba siempre en la radio interna (la misma que es cliente de LoRa_Wan). Corregidos
+  `/usr/local/sbin/agrobot-ap0-up.sh` y `agrobot-ap-watchdog.sh` (respaldos `.pre_8179_20261103`, copias en
+  `scripts/ap_usb/`) y NM excluye el driver `8188eu`. El adaptador estaba desenchufado desde las 13:19 (al conectar la LoRa V3).
+- **Exterior fijo:** `control.modo_manejo=exterior` con su perfil y `control.entorno_auto=false`: en las pruebas del 28 y
+  29-oct el entorno automático pasó a «interior» en plena huerta. Respaldo `~/.agrobot/agrobot_config.pre_exterior_20261103.json`.
+  Para volver: modo desde el dashboard o restaurar ese respaldo.
+- **Antena USB con mal contacto (16:00):** el adaptador entra y sale del bus (`error -71`, 28 intentos en el puerto 1-2.3), y
+  cada vez el vigilante movía el AP a él y caía con la C3 dentro. Ahora el vigilante solo pasa el AP al USB si el
+  adaptador lleva 60 s presente con el mismo número de dispositivo (respaldo `.pre_estable_20261103`). Hasta cambiar el
+  adaptador o su cable, el AP queda en la radio interna.
+
+### 2026-11-08 — AP caído al arrancar con la antena USB dañada
+`agrobot-ap0-up.sh` usaba `phy0` fijo. Si el adaptador USB aparece primero al arrancar, la Intel pasa a `phy1`; el adaptador
+se desconecta enseguida y ap0 no se podía crear: JETSON_AP desaparecía. Ahora el script toma el phy de `wlP1p1s0`
+(respaldo `.pre_phy_20261108`). La antena (0bda:8179) sigue sin funcionar: se desconecta al cargar el driver.
+
+### 2026-11-08 (2) — PLAGASX v9 lanzado en Kaggle (coles y coliflores)
+Versión 9 del kernel `davidgomez32/plagasx`: 12 clases (nueva `col_trips`, índice 11, desde IP102), yolo11m a 960 px con 2 GPU T4
+(hasta 8,5 h) y clasificador yolo11m-cls a 320 px (hasta 1,5 h). Más imágenes por clase. Notebook anterior en
+`tools/kaggle/plagasx/plagasx_v8_20261029.ipynb.bak`. Las fotos de trips no son de coles: medir aparte. No se despliega sin confirmación.
+
+### 2026-11-08 (3) — Etiquetado sin límite y fotos de la misión de dataset
+`jetson/backend/etiquetado.py` y `dashboard/etiquetar.html`: etiquetas ilimitadas en `~/.agrobot/etiquetas/plagas/clases.json` (solo crecen; se renombran,
+no se borran, porque el número de clase es su posición), fuente «Misión de dataset» (`~/.agrobot/dataset_plantas/`) con fotos nuevas cada 15 s, sin tope de
+3000 fotos, y exportación a disco en un hilo. API probada aparte; requiere reiniciar el backend. Modo exterior reaplicado por `/api/drive/mode`.
+
+### 2026-11-08 (4) — Anexos A, B, C y E de la tesis
+`agrobot_system_2/docs/ANEXOS_TESIS_20261108/`: cada anexo en .md, .docx y .pdf, y `ANEXOS_TESIS_AgroBot.pdf` con los cuatro. Anexo E con fichas I-1 a I-4, E-1 a E-3 y L-1,
+trazabilidad de resultados y huellas SHA-256 de los registros (los datos crudos siguen en la Jetson). `tools/md_a_docx.py` admite pies de figura con citas `[10]`.
+Sin credenciales. Falta material: planos acotados, PCB, cableado actual y fotos del montaje (Anexo A) y la sesión original de I-2.

@@ -5035,3 +5035,7 @@ no se borran, porque el número de clase es su posición), fuente «Misión de d
 `agrobot_system_2/docs/ANEXOS_TESIS_20261108/`: cada anexo en .md, .docx y .pdf, y `ANEXOS_TESIS_AgroBot.pdf` con los cuatro. Anexo E con fichas I-1 a I-4, E-1 a E-3 y L-1,
 trazabilidad de resultados y huellas SHA-256 de los registros (los datos crudos siguen en la Jetson). `tools/md_a_docx.py` admite pies de figura con citas `[10]`.
 Sin credenciales. Falta material: planos acotados, PCB, cableado actual y fotos del montaje (Anexo A) y la sesión original de I-2.
+
+## 2026-11-09 — Anexos de tesis acortados
+
+`agrobot_system_2/docs/ANEXOS_TESIS_20261108/`: A, B, C y E reescritos en versión corta y sencilla (.md, .docx, .pdf), máximo 3 páginas cada uno; PDF conjunto de 9 páginas. En `ANEXO_A.docx` las imágenes quedan a 10,5 cm (ajuste posterior a `md_a_docx.py`, que las pone a 15,5 cm). El Anexo E pasa de fichas completas a tablas resumen y deja de incluir las huellas SHA-256. La versión larga queda en el commit `4fef423`.

@@ -5225,3 +5225,18 @@ Sin credenciales. Falta material: planos acotados, PCB, cableado actual y fotos 
 - **LoRa durante la prueba:** 34 paquetes en la Pi (~1 cada 30 s, sin pérdidas), RSSI de −53 a −82 dBm.
 - Terminó con corte de corriente (última línea cortada); la Jetson volvió a arrancar a las 22:16:53.
 - **Informe:** `agrobot_system_2/docs/PRUEBA_COLES_EXTERIOR_20261111/informe.{html,pdf}` (5 páginas). Página publicada (privada): https://claude.ai/artifact/D4zxCKkvFNc5HfKU8gYbaU. Mapa de la misión 2: 13,8 × 9,1 m (46,9 m² libres), con una vuelta completa a los canteros. Muestra de 104 fotos: 51 planta, 6 persona, 2 animal (hoja seca); PLAGASX: 4 avisos débiles.
+
+## 2026-11-11 (13) — Subida a git e informe de las redes de visión
+- **Git:** subido a `origin/mejoras-auditoria-20261007`:
+  - `a018391`: todo lo del día;
+  - `0118ee7`: herramienta de etiquetado;
+  - `00d8f9f`: videos;
+  - `2a3e6c4`: pesos del robot y base;
+  - `5a1d1ba`: 33 pesos del simulador.
+  - CLIP ViT-B-32 (337 MB) va a `.gitignore` porque supera el límite de 100 MB de GitHub; `clip.load` lo descarga solo. Los `.npz` grandes de datasets no se subieron.
+- **Informe** `docs/MODELOS_VISION_20261111/informe.{html,pdf}` (7 páginas, más los JSON de datos). Página privada: https://claude.ai/artifact/EW6BCWaSzywmhrX2Ljopz8
+  - Solo hay 2 arquitecturas: YOLOv8s (PLAGASX, 11,14 M parámetros, 28,7 GFLOPs a 640) y YOLO11s (ARANDANOS y contexto, 9,43 M, 21,7 GFLOPs a 640; ARANDANOS a 960 px = 49,1 GFLOPs).
+  - Diagramas generados de las capas reales de cada `.pt`.
+  - Medido en la Jetson (FP32, 15 W, con el backend usando la GPU): contexto 640 = 63 ms; PLAGASX 480 = 41 ms; ARANDANOS 960 = 135 ms. FP16 en PyTorch casi no acelera (PyTorch sin núcleos para CC 8.7).
+  - ARANDANOS según el tamaño (test de frutos, 143 imágenes): mAP50 de 0,81 a 960 px, 0,70 a 640 y 0,59 a 480.
+  - TensorRT y ONNX no están instalados en JetPack R39: es la optimización n.º 1 pendiente.

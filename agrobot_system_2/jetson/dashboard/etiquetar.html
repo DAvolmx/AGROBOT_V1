@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Etiquetar plagas · AGROBOT</title>
+<title>Etiquetar plantas · AGROBOT</title>
 <style>
 :root {
   --bg: #e6f2e9; --panel: #ffffff; --panel-2: #f1f9f2; --line: #cfe3d2; --line-fuerte: #a8ccae;
@@ -27,7 +27,10 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; pa
 #lienzo-caja { overflow: auto; max-height: calc(100vh - 170px); border-radius: 10px; background: #1b2a20; touch-action: none; }
 canvas { display: block; width: 100%; cursor: crosshair; touch-action: none; }
 .barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
-.clases { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.clases { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 300px; overflow-y: auto; padding: 2px; }
+.nueva { display: flex; gap: 6px; margin-top: 8px; }
+.nueva input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--line-fuerte); border-radius: 10px; }
+.clase .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clase { display: flex; align-items: center; gap: 6px; text-align: left; padding: 6px 8px; font-size: 13px; }
 .clase .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 .clase.activa { outline: 2px solid var(--ink); }
@@ -47,11 +50,13 @@ li.caja button { margin-left: auto; padding: 2px 8px; }
 </head>
 <body>
 <header>
-  <h1>Etiquetar plagas</h1>
-  <label>Fotos <select id="fuente"><option value="usuario">Mis fotos</option><option value="capturas">Capturas del robot</option><option value="campo">Recolección de campo</option></select></label>
+  <h1>Etiquetar plantas</h1>
+  <label>Fotos <select id="fuente"><option value="mision">Misión de dataset</option><option value="usuario">Mis fotos</option><option value="capturas">Capturas del robot</option><option value="campo">Recolección de campo</option></select></label>
   <label><input type="checkbox" id="solo-pend"> Solo sin revisar</label>
   <span class="sp"></span>
   <span id="resumen" class="ayuda"></span>
+  <input id="archivo-subir" type="file" multiple accept=".zip,image/*" hidden>
+  <button id="btn-subir" onclick="document.getElementById('archivo-subir').click()">Subir dataset</button>
   <a href="/api/etiquetado/exportar"><button>Exportar zip</button></a>
 </header>
 <main>
@@ -69,7 +74,10 @@ li.caja button { margin-left: auto; padding: 2px 8px; }
   </section>
   <aside class="panel">
     <h2 style="margin-top:0">Clase (tecla)</h2>
+    <input id="buscar-clase" placeholder="Buscar etiqueta…" style="width:100%;font:inherit;padding:6px 8px;margin-bottom:6px;border:1px solid var(--line-fuerte);border-radius:10px">
     <div class="clases" id="clases"></div>
+    <div class="nueva"><input id="nueva-clase" maxlength="60" placeholder="Nueva etiqueta"><button id="agregar-clase">Añadir</button></div>
+    <button id="renombrar-clase" style="margin-top:6px">Renombrar la seleccionada</button>
     <h2>Cajas en esta foto</h2>
     <ul id="lista"></ul>
     <p class="ayuda">Arrastra sobre la foto para dibujar una caja ajustada a la plaga o al daño (una colonia de pulgón = una caja; hojas comidas = una caja por zona).
@@ -78,7 +86,8 @@ li.caja button { margin-left: auto; padding: 2px 8px; }
   </aside>
 </main>
 <script>
-const COLORES = ["#2e9e4f","#e0b400","#8a5a2b","#ff2d3f","#7d5fff","#ff7a00","#5a3d2b","#00a3ee","#d63fd0","#00b8a4","#222"];
+const PALETA = ["#2e9e4f","#e0b400","#8a5a2b","#ff2d3f","#7d5fff","#ff7a00","#5a3d2b","#00a3ee","#d63fd0","#00b8a4","#222"];
+const color = (i) => PALETA[i] || `hsl(${(i * 137.5) % 360} 75% 42%)`;   // etiquetas sin límite: cada una con su tono
 const TECLAS = ["1","2","3","4","5","6","7","8","9","0","-"];
 let clases = [], fotos = [], idx = 0, cajas = [], clase = 3, sel = -1, img = new Image(), zoom = 1, sucio = false;
 const cv = document.getElementById("lienzo"), ctx = cv.getContext("2d");
@@ -88,7 +97,7 @@ async function api(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw
 
 async function cargarLista() {
   const d = await api("/api/etiquetado/lista?fuente=" + $("fuente").value);
-  clases = d.clases;
+  clases = d.clases; if (clase >= clases.length) clase = 0;
   fotos = $("solo-pend").checked ? d.fotos.filter(f => !f.revisada) : d.fotos;
   pintarClases(); pintarTiras(); idx = 0;
   if (fotos.length) await abrir(0); else { $("estado").textContent = "No hay fotos en esta fuente."; ctx.clearRect(0,0,cv.width,cv.height); }
@@ -96,10 +105,14 @@ async function cargarLista() {
 }
 function pintarClases() {
   $("clases").innerHTML = "";
+  const q = $("buscar-clase").value.trim().toLowerCase();
   clases.forEach((n, i) => {
-    const b = document.createElement("button"); b.className = "clase" + (i === clase ? " activa" : "");
-    b.innerHTML = `<span class="sw" style="background:${COLORES[i]}"></span>${n.replace("col_","")}<kbd>${TECLAS[i]}</kbd>`;
-    b.onclick = () => elegirClase(i); $("clases").appendChild(b);
+    if (q && !n.includes(q)) return;
+    const b = document.createElement("button"); b.className = "clase" + (i === clase ? " activa" : ""); b.title = n;
+    const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = color(i);
+    const nom = document.createElement("span"); nom.className = "nom"; nom.textContent = n.replace("col_","");
+    const k = document.createElement("kbd"); k.textContent = TECLAS[i] || "";
+    b.append(sw, nom, k); b.onclick = () => elegirClase(i); $("clases").appendChild(b);
   });
 }
 function elegirClase(i) {
@@ -132,9 +145,9 @@ function dibujar(tmp) {
   const lw = Math.max(2, cv.width / 400);
   cajas.concat(tmp ? [tmp] : []).forEach((b, i) => {
     const x = (b.x - b.w / 2) * cv.width, y = (b.y - b.h / 2) * cv.height;
-    ctx.lineWidth = i === sel ? lw * 2 : lw; ctx.strokeStyle = COLORES[b.c];
+    ctx.lineWidth = i === sel ? lw * 2 : lw; ctx.strokeStyle = color(b.c);
     ctx.strokeRect(x, y, b.w * cv.width, b.h * cv.height);
-    ctx.fillStyle = COLORES[b.c]; ctx.font = `${Math.max(14, cv.width / 60)}px system-ui`;
+    ctx.fillStyle = color(b.c); ctx.font = `${Math.max(14, cv.width / 60)}px system-ui`;
     ctx.fillText(clases[b.c].replace("col_", ""), x + 3, Math.max(14, y - 4));
   });
 }
@@ -142,7 +155,8 @@ function pintarLista() {
   $("lista").innerHTML = cajas.length ? "" : '<li class="ayuda">Ninguna todavía.</li>';
   cajas.forEach((b, i) => {
     const li = document.createElement("li"); li.className = "caja" + (i === sel ? " sel" : "");
-    li.innerHTML = `<span class="sw" style="width:10px;height:10px;border-radius:3px;background:${COLORES[b.c]}"></span>${clases[b.c].replace("col_","")}`;
+    const sw = document.createElement("span"); sw.style.cssText = `width:10px;height:10px;border-radius:3px;background:${color(b.c)}`;
+    li.append(sw, clases[b.c].replace("col_",""));
     const del = document.createElement("button"); del.textContent = "Borrar"; del.className = "peligro";
     del.onclick = () => { cajas.splice(i, 1); sel = -1; sucio = true; dibujar(); pintarLista(); };
     li.onclick = (e) => { if (e.target !== del) { sel = i; dibujar(); pintarLista(); } };
@@ -182,8 +196,37 @@ $("sana").onclick = async () => { cajas = []; await guardar(true); if (idx + 1 <
 $("zoom-mas").onclick = () => { zoom = Math.min(4, zoom + 0.5); aplicarZoom(); };
 $("zoom-menos").onclick = () => { zoom = Math.max(1, zoom - 0.5); aplicarZoom(); };
 $("fuente").onchange = cargarLista; $("solo-pend").onchange = cargarLista;
+$("buscar-clase").oninput = pintarClases;
+async function agregarClase() {
+  const nombre = $("nueva-clase").value; if (!nombre.trim()) return;
+  try {
+    const d = await api("/api/etiquetado/clases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
+    clases = d.clases; $("nueva-clase").value = ""; $("buscar-clase").value = ""; elegirClase(d.indice);
+    $("estado").textContent = d.ya_existia ? "Esa etiqueta ya existía: la dejé seleccionada." : `Etiqueta añadida: ${clases[d.indice]}`;
+  } catch (e) { $("estado").textContent = "No se pudo añadir: " + e.message; }
+}
+$("agregar-clase").onclick = agregarClase;
+$("nueva-clase").addEventListener("keydown", (e) => { if (e.key === "Enter") agregarClase(); });
+$("renombrar-clase").onclick = async () => {
+  const nombre = prompt("Nuevo nombre para «" + clases[clase] + "». Las cajas ya dibujadas conservan la etiqueta.", clases[clase]);
+  if (!nombre) return;
+  try {
+    const d = await api("/api/etiquetado/clases/renombrar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indice: clase, nombre }) });
+    clases = d.clases; pintarClases(); dibujar(); pintarLista();
+  } catch (e) { $("estado").textContent = "No se pudo renombrar: " + e.message; }
+};
+// Las fotos de la misión aparecen solas mientras el robot las toma.
+setInterval(async () => {
+  try {
+    const d = await api("/api/etiquetado/lista?fuente=" + $("fuente").value), vistas = new Set(fotos.map(f => f.id));
+    const nuevas = d.fotos.filter(f => !vistas.has(f.id) && !f.revisada);
+    if (!nuevas.length) return;
+    const habia = fotos.length; fotos.push(...nuevas); pintarTiras();
+    if (!habia) await abrir(0); else $("estado").textContent = `${nuevas.length} foto(s) nueva(s) al final de la lista.`;
+  } catch (e) {}
+}, 15000);
 document.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+  if (["SELECT", "INPUT"].includes(e.target.tagName)) return;
   const k = TECLAS.indexOf(e.key); if (k >= 0 && k < clases.length) { elegirClase(k); return; }
   if ((e.key === "Delete" || e.key === "Backspace") && sel >= 0) { cajas.splice(sel, 1); sel = -1; sucio = true; dibujar(); pintarLista(); e.preventDefault(); }
   if (e.key === "ArrowRight" || e.key === "Enter") $("sig").click();
@@ -193,8 +236,23 @@ window.addEventListener("beforeunload", (e) => { if (sucio) { e.preventDefault()
 async function resumen() {
   try { const r = await api("/api/etiquetado/resumen");
     const tot = Object.values(r.cajas_por_clase).reduce((a, b) => a + b, 0);
-    $("resumen").textContent = `${r.revisadas} fotos revisadas · ${tot} cajas · ${r.cajas_por_clase.col_pulgon} de pulgón`; } catch (e) {}
+    $("resumen").textContent = `${r.revisadas} fotos revisadas · ${tot} cajas · ${clases.length} etiquetas`; } catch (e) {}
 }
+$("archivo-subir").onchange = () => {
+  const lista = $("archivo-subir").files; if (!lista.length) return;
+  const nombre = prompt("Nombre del dataset", "dataset"); if (nombre === null) { $("archivo-subir").value = ""; return; }
+  const form = new FormData(); form.append("nombre", nombre); for (const f of lista) form.append("archivos", f, f.name);
+  const x = new XMLHttpRequest(), b = $("btn-subir"); b.disabled = true;
+  x.upload.onprogress = e => { if (e.lengthComputable) { const p = Math.round(100 * e.loaded / e.total); b.textContent = p < 100 ? `Subiendo ${p} %` : "Procesando…"; } };
+  x.onloadend = () => {
+    b.disabled = false; b.textContent = "Subir dataset"; $("archivo-subir").value = "";
+    let r = {}; try { r = JSON.parse(x.responseText); } catch (e) {}
+    if (x.status !== 200) { alert("No se pudo subir: " + (r.error || x.status)); return; }
+    alert(`Listo: ${r.fotos} fotos, ${r.con_etiqueta} ya etiquetadas, ${r.cajas} cajas.` + (r.sin_nombres_de_clase ? ` ${r.sin_nombres_de_clase} etiquetas no se usaron porque el zip no trae los nombres de las clases.` : ""));
+    $("fuente").value = "usuario"; cargarLista();
+  };
+  x.open("POST", "/api/etiquetado/subir"); x.send(form);
+};
 cargarLista().catch(e => $("estado").textContent = "Error: " + e.message);
 </script>
 </body>

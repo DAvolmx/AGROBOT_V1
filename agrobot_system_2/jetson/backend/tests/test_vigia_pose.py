@@ -150,3 +150,36 @@ def test_giro_con_ancla_rotada():
     assert r["estado"] == OK
     assert abs(r["pose"]["theta_deg"] - 90.0) < 1e-6
     assert math.isclose(r["pose"]["y"], 1.9, abs_tol=1e-6)
+
+
+def _quieto(v, n, mapa, odom, *, t0, dt=0.1):
+    return [v.paso(t0 + k * dt, _p(*mapa), _p(*odom)) for k in range(n)]
+
+
+def test_reinicio_de_ros_adopta_el_slam_nuevo():
+    """11-nov: al reiniciar ROS se corta la odometría (→ perdida) y el SLAM arranca un mapa nuevo con el robot a
+    ~1,8 m y 36° de la pose conservada. Antes quedaba perdida para siempre; ahora adopta el SLAM estable."""
+    v = VigiaPose(aceptar_s=2.0)
+    _quieto(v, 20, (1.62, -0.32, 192.0), (1.62, -0.32, 192.0), t0=0.0)
+    assert v.paso(5.0, _p(1.62, -0.32, 192.0), None)["estado"] == PERDIDA       # corte de 3 s
+    r = _quieto(v, 15, (-0.01, 0.41, 228.0), (0.0, 0.0, 0.0), t0=5.1)           # EKF y SLAM desde cero
+    assert r[-1]["estado"] == PERDIDA                                            # aún no lleva 2 s estable
+    r = _quieto(v, 15, (-0.01, 0.41, 228.0), (0.0, 0.0, 0.0), t0=6.6)
+    assert r[-1]["estado"] == OK
+    assert abs(r[-1]["pose"]["x"] + 0.01) < 1e-6 and abs(r[-1]["pose"]["theta_deg"] - 228.0) < 1e-6
+
+
+def test_reinicio_no_adopta_un_slam_que_sigue_saltando():
+    v = VigiaPose(aceptar_s=2.0)
+    _quieto(v, 20, (1.0, 0.0, 0.0), (1.0, 0.0, 0.0), t0=0.0)
+    v.paso(5.0, _p(1.0, 0.0), None)
+    for k in range(60):                                                          # el mapa nuevo aún se acomoda
+        r = v.paso(5.1 + k * 0.1, _p(0.3 * (k % 2), 0.0), _p(0.0, 0.0))
+    assert r["estado"] == PERDIDA
+
+
+def test_sin_corte_un_salto_grande_sigue_sin_aceptarse():
+    """El alivio es SOLO tras un corte de odometría: un salto de 30 m del SLAM en el mismo mapa sigue bloqueado."""
+    v = VigiaPose(aceptar_s=1.0, max_anclada_m=0.5)
+    r = _recorrido(v, 200, salto_mapa={10: (30.0, 0.0)})
+    assert r[-1]["estado"] == PERDIDA

@@ -5039,3 +5039,189 @@ Sin credenciales. Falta material: planos acotados, PCB, cableado actual y fotos 
 ## 2026-11-09 — Anexos de tesis acortados
 
 `agrobot_system_2/docs/ANEXOS_TESIS_20261108/`: A, B, C y E reescritos en versión corta y sencilla (.md, .docx, .pdf), máximo 3 páginas cada uno; PDF conjunto de 9 páginas. En `ANEXO_A.docx` las imágenes quedan a 10,5 cm (ajuste posterior a `md_a_docx.py`, que las pone a 15,5 cm). El Anexo E pasa de fichas completas a tablas resumen y deja de incluir las huellas SHA-256. La versión larga queda en el commit `4fef423`.
+
+## 2026-11-09 (2) — Preparación del reajuste de PLAGASX con fotos del robot
+
+`agrobot_system_2/tools/kaggle/plagasx/ajuste/`: `elegir_lote.py`, `preparar_ajuste.py`, `metricas_ajuste.py`, `crear_notebook.py`, `LEEME.md` y `publicar/` (kernel privado `davidgomez32/plagasx-ajuste`, sin lanzar). Lote creado en `~/.agrobot/datos_usuario/lote_p6_20261109/` (150 fotos). Probado con etiquetas ficticias: reparto, métricas y armado del dataset. El entrenamiento y la comparación completa no se han ejecutado. Las fotos son lejanas y de 640×480: no sirven para medir pulgones o trips.
+
+## 2026-11-09 (3) — Subida de datasets al etiquetador
+
+`jetson/backend/etiquetado.py`: POST `/api/etiquetado/subir` acepta fotos sueltas y zips, con o sin cajas YOLO; las clases nuevas se añaden por nombre. `jetson/dashboard/etiquetar.html`: botón «Subir dataset». Límites: 8 GB de subida, 30 GB descomprimidos y 200 000 archivos. Lo subido queda en `~/.agrobot/datos_usuario/subidas/` y `preparar_ajuste.py` lo excluye del reajuste de plagas. Probado de forma aislada; requiere reiniciar el backend. Respaldo previo: `~/.agrobot/respaldos/modelos_20261109/modelos.tar`.
+
+## 2026-11-09 (4) — Preparación del modelo de contexto
+
+`agrobot_system_2/tools/kaggle/contexto/`: preparación, notebook privado `davidgomez32/agrobot-contexto` y `LEEME.md`, sin lanzar. Clases: planta, col, cogollo, maceta, persona, animal, obstaculo, vehiculo y borde_bajo. Armado de datos probado con un COCO en miniatura; entrenamiento sin ejecutar. Hoy solo hay 13 fotos de evaluación con cajas `planta` y el mínimo es 15.
+
+## 2026-11-09 (5) — Entrenamientos de la jornada (sin desplegar)
+
+- **Contexto (Kaggle, `davidgomez32/agrobot-contexto`, privado):** `~/.agrobot/aprendizaje/contexto_20261109/agrobot_contexto.pt` + `comparacion_contexto.json`. En 13 fotos de evaluación del robot (27 plantas; se usó `--min-eval 13`, por debajo del mínimo de 15, muestra pequeña): 15-16/27 plantas (55-59 %, precisión ~50 %) frente a 0-2/27 de maceta+col. mAP50 validación: planta 0,195; col 0,835; maceta 0,853. No desplegado.
+- **PLAGASX v9:** detector en `~/.agrobot/aprendizaje/plagasx_v9/coles_det_best.pt`, mAP50 test 0,808. El clasificador no se entrenó: falló la descarga de `yolo11m-cls.pt` (504). Salida bajada con el cuaderno privado auxiliar `davidgomez32/plagasx-v9-modelos` porque Kaggle devolvía 429 al listar miles de archivos.
+- **Reajuste con fotos del operador:** dataset privado `davidgomez32/agrobot-ajuste-operador`; cuaderno `davidgomez32/plagasx-ajuste` lanzado a las 17:30 UTC.
+- **Manejo (simulador fiel, 9 generaciones, `~/.agrobot/aprendizaje/explorador_7h_20261109_1210/`):** en validación ningún candidato mejora a la configuración actual (HOY -2,073; top2 -2,018; top1 -1,18; top3 -0,79; menor es mejor). No hay parámetros que aplicar.
+- **Resultado del reajuste (20:35 UTC, `~/.agrobot/aprendizaje/plagasx_ajuste_20261109/`):** en 49 fotos del robot (56 cajas de plaga, conf 0,45): v8 y v9 detectan 0/56; ajuste 1/56, precisión 1/5, 0 falsos avisos en 27 fotos sin plaga. No sirve para desplegar: las fotos son lejanas (640x480).
+- **Modelo de contexto INSTALADO (confirmado por el operador, 2026-11-09 23:20 UTC):** `jetson/backend/models/agrobot_contexto.pt`. `camera.py`: `_modelo_contexto()` y `MAPA_CONTEXTO` (planta→planta, col→col_planta, cogollo→col_cogollo, maceta→maceta); con `detection.usar_contexto` sustituye a los detectores de macetas y coles, y si falla vuelven ellos. Persona, animal, obstáculo, vehículo y borde bajo se descartan por ahora (fuera de `clases_planta` contarían como plaga). `planta` añadida a `clases_planta` y como referencia de CLIP en el filtro de especie. Config: `usar_contexto` true, `contexto_conf` 0,40, `contexto_imgsz` 640 (~80 ms por foto en GPU). Respaldo: `~/.agrobot/respaldos/modelos_20261109/agrobot_config.pre_contexto.json`; para volver, `usar_contexto: false`. Efecto esperado: la visión activa y el escaneo por detección reaccionan a cualquier planta, no solo a macetas y coles; precisión medida ~50 %, así que habrá escaneos de más. Sin probar con el robot en movimiento.
+
+## 2026-11-10 — Contexto solo de agronomía y manejo
+
+- Por pedido del operador, `tools/kaggle/contexto/{contexto_kaggle.py,preparar_contexto.py,LEEME.md}` pasan a 6 clases: planta, col, cogollo, maceta, obstaculo, borde_bajo. COCO ya no aporta personas, animales ni vehículos (quedan como fondo). Notebook regenerado; solo compilado, sin entrenar. El dataset publicado `agrobot-contexto-robot` sigue valiendo (las cajas a mano son solo `planta`, índice 0), pero su `pesos/CLASES.json` es el viejo y no se usa: volver a correr `preparar_contexto.py` antes de publicar una versión nueva.
+- El modelo instalado aún tiene 9 clases; `camera.py` ya descartaba persona/animal/vehículo, así que el comportamiento del robot no cambia hasta reentrenar. `obstaculo` y `borde_bajo` todavía no están conectados al manejo.
+- **Más ejemplos para el contexto (pedido del operador):** Claude etiquetó 127 fotos del robot (243 cajas: 132 planta, 111 maceta; 47 sin plantas; 33 dudosas descartadas) revisando visualmente las propuestas del modelo, en `~/.agrobot/etiquetas/contexto_claude/` con `decisiones.jsonl` y `LEEME.json`. Solo entrenan (5 repeticiones), elegidas a >60 s de las fotos de evaluación. `preparar_contexto.py --claude` las copia a `claude_train/`; `contexto_kaggle.py` añade las secciones 6 (Claude) y 7 (`cubeai/crop-weed-detection-for-yolov8`, crop → planta, maleza sin marcar, tope 1200/150). Dataset nuevo armado en `~/.agrobot/kaggle_contexto_20261110/` y prueba en seco del cuaderno superada (maleza descartada, crop → planta, 635 cuadros de Claude). Surcos no van como cajas: los cubre la segmentación del sendero. Sin publicar ni entrenar.
+
+### 2026-11-10 07:28 UTC — Resultado del contexto v2 (6 clases, sin instalar)
+- Kernel `davidgomez32/agrobot-contexto` v2 terminado. Pesos en `~/.agrobot/aprendizaje/contexto_20261110/agrobot_contexto.pt` (sha256 62590f3f2fc806e9…).
+- 13 fotos de evaluación, 27 plantas: encuentra 19/27 (70 %) a conf 0,15/0,25/0,40, con precisión 0,56/0,61/0,63. El v1 instalado encontraba 16/27 (59 %) con ~0,50; los detectores viejos maceta+col, 2/27.
+- mAP50 de validación: planta 0,341 (v1 0,195), col 0,833, cogollo 0,811, maceta 0,863, obstáculo 0,487, borde_bajo 0,897.
+- No está instalado: el robot sigue con el v1 de 9 clases. `camera.py` filtra por nombre, así que es compatible.
+
+## 2026-11-11 — Modelo de arándanos (frutos y plagas) para la prueba en invernadero
+- **Búsqueda:** no existe un modelo público de plagas de arándano. Hay datos de frutos con cajas (madurez) y de enfermedades sin imágenes publicadas. El RT-DETR de `cnavarrete` en HuggingFace no se usó: es un `.pt` (pickle) de terceros sin documentación.
+- **YOLO-World descartado:** con `yolov8s-worldv2.pt` y clases de arándano por texto, sin entrenar, marcaba los maduros como "verde" y, con las clases unidas, casi no detectaba (1 caja en 4 fotos). No se instaló.
+- **Notebook `tools/kaggle/arandanos/arandanos.py`** (+ `publicar/` con el `.ipynb` y la metadata). Kernel `davidgomez32/arandanos` v1 lanzado a las ~10:30 UTC, privado, GPU, `time=5.0` h. YOLO11s a 960 px y 10 clases: arandano_maduro, arandano_inmaduro, pulgon, trips, aranita_roja, chanchito_blanco, conchuela, oruga, mosca_blanca, mosca_fruta.
+  - Frutos: `zhengkunli3969/blueberry-detection-dataset` (solo HANDset_20230207_split; los subconjuntos de una sola clase se omiten), `raulcabrerasoles/visual-computer-blueberry` y `cnavarrete/blueberry_dataset` (descargado desde HF dentro del notebook).
+  - **La madurez se asigna por el tono de cada clase de origen, no por el nombre:** en HANDset la clase `0` es verde y `immature` es azul pálido con pruina (nombres cruzados en Roboflow, verificado a ojo con recortes). Regla: H ≤ 45 o H > 150 → inmaduro; si no, maduro.
+  - Las fotos de frutos se deduplican por hash y la partición sale del hash, porque los subconjuntos repiten fotos.
+  - Plagas: índices del IP102 (`cubeai/insect-pest-detection-for-yolo`) agrupados. Las fotos con otros insectos se descartan.
+  - Fondo: `Blueberry___healthy` de PlantVillage y los senderos propios.
+  - Prueba en seco superada con los datos reales de frutos (1244 imágenes) y datos de juguete para IP102, PlantVillage y senderos.
+- **Robot:** `modelos_preset.py` incluye el perfil `arandano` (`agrobot_arandanos_det.pt`), desactivado hasta que se copie el modelo, que debe confirmar el operador. La nota del perfil `exterior` (IP102) indica que sirve para pulgón, trips, arañita roja, chanchito blanco y mosca blanca. Se reinició solo el backend; ROS no se tocó. El modelo activo sigue siendo PLAGASX v8 (coles).
+- **Límites:** ninguna foto es del invernadero propio. No hay *Drosophila suzukii* (mosca_fruta son Bactrocera/Dacus). Las enfermedades (botrytis, roya, antracnosis) no tienen datos con cajas y no están.
+
+## 2026-11-11 (2) — Adaptador WiFi USB nuevo RTL8188FTV (0bda:f179) con JETSON_AP
+- Driver `rtl8xxxu` compilado desde el código del kernel 6.8 (el kernel tegra no lo trae), con el firmware `rtl8188fufw` descomprimido. Los scripts `scripts/ap_usb/{agrobot-ap0-up,agrobot-ap-watchdog,agrobot-ap0-down,verificar_ap_usb}.sh` aceptan `f179` y `rtl8xxxu`, y NetworkManager lo excluye. Detalle en `scripts/ap_usb/LEEME.md`.
+- JETSON_AP funciona sobre la antena nueva: 11/11 comprobaciones OK, C3 a -34 dBm y 0 % de pérdida. La radio interna queda solo para LoRa_Wan.
+- Visto de paso: desde el reinicio automático de ROS de las 09:46 (vigía del reloj), `filtro_scan_slam` no existe y `slam_toolbox` no publica `/map` (salud "slam err"; modo localización). No se tocó ROS.
+- **Después (mismo día):** se reinició ROS con OK del operador y el SLAM volvió (`filtro_scan_slam` presente, `/scan_slam` a 10 Hz, salud en verde).
+
+## 2026-11-11 (3) — ARANDANOS v1 instalado
+- El kernel terminó a las ~13:13 UTC: 157 épocas de 251 (cortó por el tope de 5 h). Mejor época 116: validación mAP50 0,79, mAP50-95 0,46, P 0,74, R 0,80. Salidas en `~/.agrobot/aprendizaje/arandanos_20261111/`. `kaggle kernels output` se cuelga con la carpeta del dataset; las métricas se leyeron de `train_results` del `.pt`.
+- **Prueba en la Jetson** con las imágenes del test que se bajaron:
+  - Frutos (141 imágenes, 7279 frutos): maduro mAP50 0,91 e inmaduro 0,71.
+  - Plagas: en 160/162 fotos del IP102 detectó alguna plaga. No se pudo medir por clase porque faltan las etiquetas locales.
+  - **0/40 hojas sanas con falsa alarma** (conf 0,35).
+  - Velocidad: ~125 ms de inferencia y ~170 ms por imagen.
+- **Fotos de campo** que no se usaron para entrenar (4 DSCN): los frutos verdes y rosados salen como inmaduros y los azul oscuro como maduros, sin falsos positivos en el suelo ni en la manguera.
+- **Instalado** como `jetson/backend/models/agrobot_arandanos_det.pt` (sha256 5277a41a…), con confirmación del operador. El perfil "Arándano" queda disponible. Se probó la carga por `/api/models/load` y se volvió a dejar activo **PLAGASX** (coles). En el invernadero hay que elegir el perfil "Arándano" en el dashboard.
+
+## 2026-11-11 (4) — Prueba de alcance LoRa en el huerto de arándano (2-3 km)
+- Nuevo `tools/medir_alcance_lora.py`. Registra los uplinks del nodo real que llegan a la Pi, por Tailscale o por LAN, con RSSI/SNR/SF. También mira la salud `lora_v3` para saber si el nodo estaba vivo. Al final da recibidos/esperados (cada 30 s). Con `--recuperar` completa una medición hecha sin VPN. Probado en seco.
+- La checklist está en `docs/PRUEBA_ALCANCE_LORA_20261111.md`.
+- Verificado:
+  - El dashboard del robot responde por Tailscale (100.82.220.28:8080, pide login).
+  - El HT-M02 responde en LAN.
+- **La Pi `lora-server-pi` no responde** (LAN .10/.20 ni Tailscale; vista por última vez ~14:28). No se pudo verificar ChirpStack ni el dashboard :8092.
+- La Jetson no tiene un perfil de hotspot para tener internet en el huerto.
+- **Después:** el operador encendió la Pi a las ~14:42; volvió por Wi-Fi (.20) y Tailscale (el cable .10 no está conectado). Cadena completa verificada: nodo → HT-M02 → ChirpStack → Pi `:8092` por VPN, un uplink cada ~30 s. Referencia en casa con `medir_alcance_lora.py` (2 min): 4/4 uplinks (100 %), RSSI −41 dBm, SNR 13,8 dB, **SF7** (ADR). CSV en `~/.agrobot/pruebas/alcance_lora_20261111/`.
+
+## 2026-11-11 (5) — El robot no se movía en autónomo: vigía de pose trabado tras reiniciar ROS
+- **Causa:** el reinicio de ROS cortó la odometría y el vigía (`vigia_pose.py`) pasó a «perdida». El SLAM arrancó un mapa nuevo con el robot a ~1,8 m y 36° de la pose conservada. El vigía solo acepta el SLAM si la diferencia es ≤ 0,25 m, o ≤ 1 m y 30° estable, así que quedó bloqueado para siempre. La misión seguía activa pero esperando.
+- **Desbloqueo inmediato:** `POST /api/localizacion` con la pose actual del SLAM. El vigía volvió a «ok» y el explorador siguió.
+- **Arreglo en `vigia_pose.py`:** si la pérdida vino de un **corte de odometría** (`_perdida_por_corte`), adopta el SLAM nuevo cuando se mantiene estable `aceptar_s` (10 s), sin el límite de distancia. Los saltos del SLAM dentro del mismo mapa (caso de 30 m del 27-oct) siguen sin aceptarse. Hay 3 tests nuevos en `tests/test_vigia_pose.py` y el backend pasa 441 tests (los 2 de hardware se excluyen). Respaldo: `~/.agrobot/vigia_pose.pre_corte_20261111.py`. **Se activa en el próximo reinicio del backend**: no se reinició para no cortar la misión en curso.
+- **Gateway HT-M02 fuera de la red desde ~14:53:** no responde en 192.168.0.11, su MAC no aparece en la LAN y no emite red propia. El último uplink en la Pi es de las 14:53. El nodo sigue vivo (UDP al robot). Hay que revisarlo físicamente (alimentación / reinicio).
+
+## 2026-11-11 (6) — Revisión de la sesión de la tarde y minimapa
+- **Sesión `~/.agrobot/datos/20261111_152950`** (22 min tras el reinicio de la Jetson a las ~15:29): 3 misiones de plantas, 5 plantas escaneadas (1 col p 0,97; 4 «otra»), 4 inspecciones fallidas («sin objetivo tras girar toda la vuelta»). Mapas en `maps/mision_20261111_{1541,1552,1554}`.
+- **Vigía:** 1 salto del SLAM y 65 «saltos» de odometría de 1–7 cm. Estos últimos se resincronizan al instante; parecen falsos positivos del límite de velocidad (`v_imposible`) con muestras muy juntas. Quedó en «perdida» desde t=92 s (salto de reloj de +381 s tras el arranque) hasta que se reubicó a mano.
+- **Metas Nav2 (desde `logs/ros.log`):** 8 enviadas → 1 lograda («Reached the goal», 2,1 m en 39 s), 2 fallidas, 3 canceladas, 2 reemplazadas. **El resultado de cada meta NO se registra** en los datos de la sesión: `ros_bridge._guardar_resultado` solo lo deja en memoria. Además, `x,y` de `telemetria.csv` no coincide con la pose de Nav2 (otro marco), así que no sirve para medir a cuánto quedó.
+- **Minimapa/LIDAR sobre la cámara** (`dashboard/index.html`): ~25 % más chicos y limitados por altura (`min(15cqw, 24vh)`), semitransparentes, y un botón «Ocultar mapas» que se recuerda por navegador. Respaldo en `index.html.bak_minimapa_20261111`. Se verificó con capturas a 390×844, 1024×600 y 1366×768.
+- El gateway HT-M02 sigue sin responder a las 16:00.
+- **Después: el resultado de cada meta de Nav2 queda registrado.**
+  - `ros_bridge._BridgeNode` guarda cada meta: objetivo, pose en `map` al enviarla y al terminar, duración, `dist_inicio_m`/`dist_fin_m` y resultado (`exito`, `abortada`, `cancelada`, `reemplazada` o `rechazada`).
+  - `_bucle_metas_nav` del backend lo emite como evento `nav_meta`: el grabador lo guarda en `eventos.jsonl` y sale un aviso con el resultado y a cuánto quedó.
+  - Cubre las metas de la patrulla, de la misión y del clic en el mapa.
+  - Tests nuevos en `tests/test_metas_nav_registro.py`: 3, con ROS cargado. La suite da 441 ok.
+  - Respaldos en `~/.agrobot/{ros_bridge,jetson_server}.pre_metas_20261111.py`.
+  - **Se activa al reiniciar el backend**, junto con el arreglo del vigía.
+- **Activado:** el backend se reinició con OK del operador a las 16:13 UTC, con el robot libre. Salud en verde (la C3 tardó ~40 s en volver por Wi-Fi). Vigía «ok». Modelo activo: PLAGASX. ROS no se tocó.
+- **Aviso confuso corregido:** el título «Nav2 no llegó a la meta» se leía como «llegó». Ahora dice «✓ META ALCANZADA», «✗ META FALLIDA», «META CANCELADA» o «✗ META RECHAZADA», y el texto aclara «el robot quedó a X m de la meta». Falta reiniciar el backend para que tome efecto.
+- En la sesión `20261111_161236` hubo 17 metas: 0 alcanzadas, 9 fallidas, 2 canceladas y 6 reemplazadas, igual que lo que registra Nav2. Causas en `ros.log`:
+  - el planner no encuentra ruta (199×, «Failed to create plan with tolerance»);
+  - DWB «No valid trajectories» (126×);
+  - spin/backup fallidos (81×);
+  - meta fuera del mapa (8×).
+  Es un problema de configuración de Nav2 en espacios estrechos (inflado y tolerancia), no del registro.
+- **Activado:** el backend se reinició con OK del operador a las 16:22 UTC, con el robot libre. Salud en verde y vigía «ok».
+
+## 2026-11-11 (7) — Gateway HT-M02 no enciende
+- Fuera de la red desde ~14:53. El corte de luz de ~15:29 reinició también la Jetson y el router.
+- No aparece en las IP entregadas ni en las estaciones Wi-Fi del D-Link: la reserva 192.168.0.11 existe, pero el gateway nunca la pidió.
+- Conectado por cable directo a la Jetson: hay enlace a 1000 Mb/s, pero 0 paquetes recibidos, no hay DHCP y nadie responde ARP en 15 IP habituales. Al reiniciarlo, el enlace bajó y subió.
+- El operador dice que **no enciende** y no se ve por USB. Lo más probable es la alimentación (fuente o inyector PoE dañados en el corte). El enlace de 1 Gb/s sugiere que lo que contesta en el cable es un switch o inyector intermedio, no el gateway.
+- **Sin gateway no hay LoRa:** la prueba de alcance en el huerto no se puede hacer hasta que vuelva.
+- La Jetson quedó con `enP8p1s0` desconectado de NetworkManager (para que un DHCP del gateway no le quite la ruta a internet) y con IP manual 192.168.4.250/24, que no sobrevive un reinicio. Para volver a lo normal: `sudo ip addr del 192.168.4.250/24 dev enP8p1s0; sudo nmcli dev connect enP8p1s0`.
+- **Más tarde:** con la fuente original tampoco se enciende el LED SYS: el sistema no arranca (eMMC/bootloader). Queda pendiente medir la fuente, leer la consola UART interna (adaptador USB-serie de 3,3 V) o reinstalar con microSD la imagen de Heltec, o pedir garantía/soporte a Heltec.
+
+## 2026-11-11 (8) — Robot listo para la misión de arándanos
+- **Problema encontrado:** los filtros de detección estaban pensados para coles y con ARANDANOS descartaban casi todo.
+  - `plaga_solo_en_col` exige que CLIP vea una col: en arándano suprimía todas las plagas.
+  - Los frutos no estaban en `clases_planta`, así que pasaban por el filtro de «verde» y un fruto azul no lo pasa.
+  - Se inferia a 480 px y el modelo se entrenó a 960.
+- **Arreglo:** perfiles de filtros por modelo en `modelos_preset.py` (`DETECCION_ARANDANO` / `DETECCION_COLES`). `/api/models/load` los aplica solos al cargar cada modelo.
+  - Arándano: frutos como clases de planta, sin filtro de especie, sin el detector de coles, conf 0,35, imgsz 960.
+  - Coles: vuelven los valores de siempre (480 px, conf 0,3, filtro de col).
+- **Medido** con 20 fotos de test escaladas a 640×480:
+  - filtros de coles: 668 de 929 frutos pasan los filtros, y después CLIP descarta el resto;
+  - perfil de arándano: 1144 de 1144 pasan, a 136 ms por cuadro.
+- **En vivo:** cámara a 17,5 fps, inferencia a 3,4 Hz (93 ms) y 133 GB libres para la recolección de campo.
+- Tests nuevos en `tests/test_perfil_deteccion.py`: 3. La suite da 444 ok.
+- Respaldos en `~/.agrobot/{modelos_preset,jetson_server}.pre_perfiles_20261111.py`.
+- **Modelo activo ahora: ARANDANOS.** Para las coles hay que elegir el perfil «Coles: enfermedades (PLAGASX)», que restaura sus filtros.
+- La Jetson se reinició sola otra vez hacia las 18:47 (corte de corriente sin apagado normal). Es la segunda vez hoy: revisar la batería y las conexiones.
+- **Apagado limpio** a pedido del operador a las 19:00 UTC. Al arrancar quedan: servicios habilitados (backend, ROS, AP USB, Tailscale), modelo ARANDANOS con su perfil (960 px, sin filtro de col) y vigía de pose activo.
+
+## 2026-11-11 (9) — Mini prueba en el vivero de arándano (Vitro Plantas) y gateway de vuelta
+- **Gateway HT-M02 de vuelta:** se conectó al router a las 21:00:33 UTC (16:00 en Ecuador), tras ~6 h 7 min caído desde ~14:53 UTC.
+  - Su configuración está intacta: AU915, sub-banda 0, servidor 192.168.0.20:1700, GWID 065F31FFFE49B5A6.
+  - **Oye al nodo:** Join Request de DevEUI f59d08345985b27d, DevNonce 402, 916,0 MHz, SF12, RSSI −31. **Nunca llega el Join Accept.**
+  - Causa: el **puerto UDP 1700 de la Pi no responde** a PUSH_DATA ni a PULL_DATA (ni por LAN ni por VPN), aunque la web de ChirpStack (8080) y la API (8090) sí responden. El Gateway Bridge de ChirpStack no está recibiendo; probablemente no arrancó tras el reinicio de la Pi a las 15:31 UTC (corte de luz).
+  - Sin la clave SSH de la Pi no se pudo revisar. Falta `cd /root/chirpstack-docker && sudo docker compose ps` y `sudo docker compose up -d`.
+- **Mini prueba (sesión `datos/20261111_190208`, 4,5 min):** sin internet en el campo, así que el reloj arrancó en la hora del apagado (19:01 UTC) y las horas son relativas. La misión se lanzó y se paró 5 s después. Se guardó el mapa `maps/mision_20261111_1905` con 31 puntos y 0 plantas. Al final se cortó la corriente sin apagado normal.
+- **Guardado:**
+  - `campo/20261111_190547_1a875c`: 117 fotos legibles (1 dañada), video AVI de 56 s (564 cuadros, legible), `variables.jsonl` y `frames.jsonl`; 35 MB en total.
+  - Sesión `datos/…190208`: 158 cuadros de cámara, scans y eventos (13 MB).
+  - 2 capturas «oruga» en `jetson/backend/captures/`.
+- **Inferencias: todas falsos positivos.** El lugar era un vivero de plantas jóvenes en bandejas, sin fruto. En vivo hubo 62 maceta (contexto), 46 oruga y 21 arandano_inmaduro.
+  - Reprocesando las 117 fotos: oruga ×5 y pulgón ×6 son cajas de casi toda la imagen (suelo, zapato, bandejas).
+  - arandano_inmaduro ×13 son hojas nuevas redondas y rosadas.
+  - `plaga_caja_max_frac` solo afecta al dibujo, no filtra: con ARANDANOS deja pasar esas cajas gigantes.
+  - Las fotos del vivero sirven como **negativos** para la v2.
+- **Después:** con la clave de la Pi que dio el operador, el SSH igual falla: acepta la conexión TCP y la corta antes de mandar el banner (`kex_exchange_identification: Connection reset by peer`), por LAN y por VPN. El sshd de la Pi está roto; tras dos cortes de luz se sospecha la microSD. Sí responden: dashboard 8092, MQTT 1883, ChirpStack 8080/8090. No responde: UDP 1700 (Gateway Bridge). Hace falta acceso físico (monitor y teclado, o reinicio).
+- **Resuelto (21:25 UTC):** el operador reinició la Pi; el SSH volvió, los 7 contenedores de ChirpStack están arriba y el bridge responde PULL_ACK en UDP 1700. La microSD no tiene errores (solo un orphan cleanup del corte). El nodo f59d08345985b27d hizo OTAA (Join Accept bajó) y los uplinks volvieron a la Pi (SF7, RSSI ~−31). La cadena LoRa completa funciona.
+- **Filtro de cajas gigantes (después):**
+  - Nueva clave `plaga_caja_max_frac_descartar` en `camera.py`: descarta una plaga (clase fuera de `clases_planta`) cuya caja supera esa fracción del cuadro. 0 = apagado.
+  - Perfiles: arándano 0,25; coles 0, porque PLAGASX da cajas de imagen completa a propósito.
+  - Medido: en el vivero las 11 plagas falsas (todas ≥ 47 % del cuadro) bajan a 0, y los 1273 frutos reales de test pasan todos. Siguen los 13 «arandano_inmaduro» falsos sobre hojas nuevas: eso se arregla reentrenando con las fotos del vivero como negativos.
+  - Test nuevo; la suite da 445 ok. Respaldo `~/.agrobot/camera.pre_cajamax_20261111.py`. Backend reiniciado y ARANDANOS recargado con el filtro.
+
+## 2026-11-11 (10) — Informe de la misión de fotos en arándano
+- `docs/MISION_FOTOS_ARANDANO_20261111/informe.{html,pdf}` (5 páginas). Todas las cifras son reales:
+  - sesión de 4,5 min;
+  - recorrido SLAM de ~7,5 m a 1 Hz (10,7 m crudo, inflado por el ruido de pose), neto 2,5 m, 212° de giro acumulado;
+  - mapa de 9,5 × 12,1 m con 32,4 m² libres;
+  - video de 56 s: 16 inmaduro y 3 maduro, 0 plagas con el filtro nuevo; contexto: 25 maceta, 23 obstáculo, 15 persona;
+  - inferencias en 44 fotos del operador.
+  - Las fotos del celular van rotuladas como «fotos del operador», no como del robot. No se inventaron métricas.
+- **Fotos del operador** (`~/.agrobot/pruebas/invernadero_arandano_20261111/`, sin entrar al repo):
+  - 12 positivos para etiquetar;
+  - 6 negativos difíciles (follaje lejano: 505 «maduro» falsos; fruto rojo de otro árbol);
+  - 11 negativos del vivero;
+  - 15 que no sirven;
+  - 64 negativos de la cámara del robot.
+- ARANDANOS acierta el fruto verde de cerca, pero llena de «maduro» el follaje denso lejano. Ver `inferencias/` y `para_entrenamiento/clasificacion.json`.
+
+## 2026-11-11 (11) — Listo para la prueba en exterior con coles
+- Se cargó PLAGASX por su perfil; volvieron los filtros de coles (480 px, conf 0,3, filtro de col activo, sin descarte por tamaño).
+- Salud en verde. Cámara a 24 fps, inferencia de PLAGASX + col + contexto a ~10 Hz configurado. 133 GB libres. LoRa llega a la Pi (RSSI −59, SF7). Gateway arriba.
+- La Jetson arrancó a las 22:00 UTC (tercer arranque del día; el journal no conserva los intermedios, así que no se sabe si fue un corte o si el operador la prendió). Al arrancar, el vigía quedó «perdida: sin odometría» y **se recuperó solo** con el arreglo de la mañana («tras el corte de odometría se adopta el SLAM nuevo»). La diferencia que registró (14 948 696 m) era basura de la odometría tras el arranque.
+
+## 2026-11-11 (12) — Datos de la prueba de coles en exterior (22:00–22:16 UTC)
+- **Ojo:** la sesión quedó como `datos/19700101_000140` porque el robot arrancó con el reloj en 1970 (sin RTC). Los `t_unix` posteriores son reales (22:00:45 → 22:16:31).
+- **Sesión:** 15,8 min, 87 MB, 835 cuadros de cámara. Recorrido ~41 m a 1 Hz (sin 2 saltos imposibles; incluye ruido de pose), área de ~7 × 4 m, giro acumulado de 2107°.
+  - 2 misiones de plantas (90 s y 34 s), las dos paradas por el operador, con 0 plantas; mapas `maps/mision_20261111_{2205,2210}`.
+  - 2 paradas de emergencia del operador (5 avisos: el mismo clic llega por HTTP y por WebSocket), 2 de anticolisión y 923 eventos de manejo asistido; se aprendieron 2 correcciones.
+  - Ninguna meta Nav2.
+- **Detecciones:** 201 planta y 2 maceta (contexto); de PLAGASX, 4 col_amarillamiento, 2 col_mildiu_velloso y 1 col_pulgon, todas con confianza ≤ 0,42. Ninguna captura guardada (umbral 0,5).
+- **Vigía:** al arrancar, la odometría saltó 13 m y después hubo un corte. Quedó «perdida» a los 91 s y se recuperó sola a los 119 s con el arreglo nuevo.
+- **Recolección de campo** `campo/20261111_220339_4908f5` (745 MB, zip verificado sin errores): 3687 muestras, 0 perdidas, 1237 fotos y 2 videos legibles (5,2 + 5,8 min).
+- **LoRa durante la prueba:** 34 paquetes en la Pi (~1 cada 30 s, sin pérdidas), RSSI de −53 a −82 dBm.
+- Terminó con corte de corriente (última línea cortada); la Jetson volvió a arrancar a las 22:16:53.
+- **Informe:** `agrobot_system_2/docs/PRUEBA_COLES_EXTERIOR_20261111/informe.{html,pdf}` (5 páginas). Página publicada (privada): https://claude.ai/artifact/D4zxCKkvFNc5HfKU8gYbaU. Mapa de la misión 2: 13,8 × 9,1 m (46,9 m² libres), con una vuelta completa a los canteros. Muestra de 104 fotos: 51 planta, 6 persona, 2 animal (hoja seca); PLAGASX: 4 avisos débiles.

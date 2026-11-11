@@ -1,0 +1,24 @@
+{
+ "id": "davidgomez32/arandanos",
+ "title": "ARANDANOS",
+ "code_file": "arandanos.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_tpu": false,
+ "enable_internet": true,
+ "keywords": [
+  "gpu"
+ ],
+ "dataset_sources": [
+  "zhengkunli3969/blueberry-detection-dataset",
+  "raulcabrerasoles/visual-computer-blueberry",
+  "cubeai/insect-pest-detection-for-yolo",
+  "mohitsingh1804/plantvillage",
+  "davidgomez32/navegacion"
+ ],
+ "kernel_sources": [],
+ "competition_sources": [],
+ "model_sources": []
+}

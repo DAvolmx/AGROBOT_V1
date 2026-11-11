@@ -3644,11 +3644,17 @@ async def models_load_handler(request: web.Request):
         camera.set_model(modelo)
 
     config_store.update_section("ai", {"active_model": name})
+    # Filtros de detección del perfil de este modelo (arándano / coles): ver modelos_preset.perfil_deteccion.
+    import modelos_preset
+    perfil = modelos_preset.perfil_deteccion(name)
+    if perfil:
+        config_store.update_section("detection", perfil)
     state.config = config_store.load()
     await state.broadcast({"type": "toast", "data": {
-        "kind": "success", "title": "Modelo cargado", "message": name,
+        "kind": "success", "title": "Modelo cargado",
+        "message": name + (" · filtros de detección ajustados a este cultivo" if perfil else ""),
     }})
-    return web.json_response({"ok": True, "active_model": name})
+    return web.json_response({"ok": True, "active_model": name, "filtros": perfil})
 
 
 # =============================================
@@ -3947,6 +3953,30 @@ async def health_handler(request: web.Request):
 # =============================================
 # ===== NAVEGACIÓN (Nav2 vía ros_bridge.py) =====
 # =============================================
+# Títulos sin ambigüedad: «Nav2 no llegó a la meta» se leía como «llegó» (11-nov).
+NAV_RESULTADO_TXT = {"exito": ("success", "✓ META ALCANZADA (Nav2)"), "abortada": ("warning", "✗ META FALLIDA (Nav2)"),
+                     "cancelada": ("info", "META CANCELADA (Nav2)"), "reemplazada": ("info", "Meta reemplazada (Nav2)"),
+                     "rechazada": ("error", "✗ META RECHAZADA (Nav2)")}
+
+
+async def _bucle_metas_nav():
+    """2026-11-11: guarda el resultado de CADA meta de Nav2 (de la patrulla, la misión o el clic en el mapa).
+    Antes solo quedaba «Meta enviada» y el resultado se perdía. Va al grabador como evento `nav_meta`."""
+    while True:
+        try:
+            for reg in ros_bridge.metas_terminadas():
+                await state.broadcast({"type": "nav_meta", "data": reg})
+                kind, titulo = NAV_RESULTADO_TXT.get(reg["resultado"], ("info", f"Meta de Nav2: {reg['resultado']}"))
+                if reg["resultado"] != "reemplazada":
+                    d = reg.get("dist_fin_m")
+                    await state.broadcast({"type": "toast", "data": {"kind": kind, "title": titulo, "message":
+                        f"meta x={reg['x']:.2f} y={reg['y']:.2f} · {reg['duracion_s']:.0f} s"
+                        + ("" if d is None else f" · el robot quedó a {d:.2f} m de la meta")}})
+        except Exception as exc:
+            print(f"[metas nav] {type(exc).__name__}: {exc}", flush=True)
+        await asyncio.sleep(0.5)
+
+
 async def nav_set_goal_handler(request: web.Request):
     """
     POST /api/nav/set_goal  {"x": .., "y": .., "theta_deg": ..}
@@ -4744,6 +4774,7 @@ async def start_background(app: web.Application):
     app["servo_macetas_task"] = asyncio.create_task(_bucle_servo_macetas())
     app["zoom_auto_task"] = asyncio.create_task(_bucle_zoom_auto())
     app["zupt_task"] = asyncio.create_task(_bucle_zupt())
+    app["metas_nav_task"] = asyncio.create_task(_bucle_metas_nav())
     app["modo_seguro_task"] = asyncio.create_task(_bucle_modo_seguro())
     global entorno
     entorno = entorno_auto.EntornoAuto(modelo=entorno_auto.cargar_modelo())

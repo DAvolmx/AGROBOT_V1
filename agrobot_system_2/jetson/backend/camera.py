@@ -408,6 +408,29 @@ class CameraWorker:
                 return None
         return self._col_mod
 
+    def _modelo_contexto(self, cfg):
+        """Carga perezosa del MODELO DE CONTEXTO (detection.modelo_contexto, 2026-11-09): un solo detector entrenado con la vista baja del robot para
+        planta/col/cogollo/maceta (y persona, animal, obstáculo, vehículo, borde bajo, que aún no se usan). Con `usar_contexto` sustituye a los detectores
+        de macetas y de coles: en 13 fotos del robot halló 15/27 plantas a conf 0,40 frente a 0/27 de esos dos. None si no está o falló."""
+        nombre = cfg.get("modelo_contexto", "agrobot_contexto.pt")
+        if not nombre or getattr(self, "_ctx_mod", None) is False:
+            return None
+        if getattr(self, "_ctx_mod", None) is None or getattr(self, "_ctx_nombre", None) != nombre:
+            from pathlib import Path
+            ruta = Path(__file__).resolve().parent / "models" / nombre
+            if not ruta.exists():
+                self._ctx_mod = False
+                return None
+            try:
+                from ultralytics import YOLO
+                self._ctx_mod, self._ctx_nombre = YOLO(str(ruta)), nombre
+                print(f"[camara] modelo de contexto cargado: {nombre}", flush=True)
+            except Exception as exc:
+                print(f"[camara] no se pudo cargar {nombre}: {exc}", flush=True)
+                self._ctx_mod = False
+                return None
+        return self._ctx_mod
+
     def _bucle_inferencia(self):
         while not self._stop.is_set():
             modelo = self.modelo
@@ -472,13 +495,39 @@ class CameraWorker:
                 if nombre not in cfg.get("clases_planta", []) and \
                         textura_bordes(frame, (x1, y1, x2, y2)) > float(cfg.get("plaga_bordes_max", 0.30)):
                     continue                       # textura de pasto (hojas finas por todas partes), no hojas de col
+                # 2026-11-11: una PLAGA que tapa media imagen no es un insecto visto desde el robot (vivero: suelo, zapato y
+                # bandejas como «oruga»/«pulgón», todas ≥ 47 % del cuadro). 0 = apagado (PLAGASX da cajas de imagen completa a propósito).
+                frac_max = float(cfg.get("plaga_caja_max_frac_descartar", 0) or 0)
+                if frac_max > 0 and nombre not in cfg.get("clases_planta", []):
+                    h_img, w_img = frame.shape[:2]
+                    if (x2 - x1) * (y2 - y1) > frac_max * w_img * h_img:
+                        continue
                 cajas.append({"class": nombre, "confidence": conf,
                               "xyxy": (x1, y1, x2, y2)})
                 nuevas.append((nombre, conf))
 
             # Segundo modelo: DETECTOR DE MACETAS (2026-10-22, Kaggle agrobot-macetas: 20/20 cuadros de la cámara del robot con la col en
             # maceta y 0/30 sin maceta). Sus cajas se suman a las del modelo activo con la clase «maceta» (para la visión activa y la misión).
-            mod_mac = self._modelo_maceta(cfg)
+            # Modelo de contexto (2026-11-09): si está activo y cargó, da planta/col/cogollo/maceta y se saltan los detectores de macetas y coles.
+            # Solo se pasan las clases de planta: persona, animal, etc. todavía no las usa nadie y, fuera de clases_planta, se tratarían como plaga.
+            mod_ctx = self._modelo_contexto(cfg) if cfg.get("usar_contexto", False) else None
+            if mod_ctx is not None:
+                try:
+                    kw = {} if self._device is None else {"device": self._device}
+                    rx = mod_ctx(frame, imgsz=int(cfg.get("contexto_imgsz", 640)), conf=float(cfg.get("contexto_conf", 0.40)), verbose=False, **kw)[0]
+                    for box in rx.boxes:
+                        nom = MAPA_CONTEXTO.get(mod_ctx.names[int(box.cls[0])])
+                        if nom is None:
+                            continue
+                        x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
+                        cajas.append({"class": nom, "confidence": float(box.conf[0]), "xyxy": (x1, y1, x2, y2)})
+                        nuevas.append((nom, float(box.conf[0])))
+                except Exception as exc:
+                    print(f"[camara] modelo de contexto desactivado, vuelvo a macetas y coles: {exc}", flush=True)
+                    self._ctx_mod = False
+                    mod_ctx = None
+
+            mod_mac = self._modelo_maceta(cfg) if mod_ctx is None else None
             if mod_mac is not None:
                 try:
                     kw = {} if self._device is None else {"device": self._device}
@@ -492,7 +541,7 @@ class CameraWorker:
                     self._maceta_mod = False
 
             # Tercer modelo: detector de COLES (col_planta/col_cogollo), referencia de CLIP donde no hay macetas (huerta con coles sembradas).
-            mod_col = self._modelo_col(cfg) if cfg.get("plaga_usar_plantas", True) else None
+            mod_col = self._modelo_col(cfg) if cfg.get("plaga_usar_plantas", True) and mod_ctx is None else None
             if mod_col is not None:
                 try:
                     kw = {} if self._device is None else {"device": self._device}
@@ -556,6 +605,10 @@ class CameraWorker:
 ZOOM_MAX = 4.0
 
 
+# Clases del modelo de contexto -> nombres que ya usan el resto del backend (misión de macetas, visión activa, filtro de especie).
+MAPA_CONTEXTO = {"planta": "planta", "col": "col_planta", "cogollo": "col_cogollo", "maceta": "maceta"}
+
+
 def filtrar_plagas_por_especie(frame, cajas, nuevas, clases_planta, clasificar, cache, ahora, p_col_min: float = 0.5, vigencia_s: float = 4.0, sin_maceta: str = "permitir", usar_plantas: bool = False):
     """Los avisos de plaga solo valen sobre COLES (2026-10-28): el detector PLAGASX solo conoce enfermedades de col y a cualquier planta le pone una (en la prueba de
     exterior salieron 22 avisos sobre suculentas). Si en el cuadro hay una maceta detectada, se pregunta a CLIP (`clasificar(frame, caja)` -> {"p_col": ...}) qué planta es:
@@ -568,7 +621,7 @@ def filtrar_plagas_por_especie(frame, cajas, nuevas, clases_planta, clasificar, 
         return cajas, nuevas
     macetas = sorted((c for c in cajas if c["class"] == "maceta"), key=lambda c: -c["confidence"])[:2]
     if not macetas and usar_plantas:                                   # campo abierto, coles sembradas: se pregunta a CLIP por la planta detectada
-        macetas = sorted((c for c in cajas if c["class"] in ("col_planta", "col_cogollo")), key=lambda c: -c["confidence"])[:2]
+        macetas = sorted((c for c in cajas if c["class"] in ("col_planta", "col_cogollo", "planta")), key=lambda c: -c["confidence"])[:2]
     if not macetas:
         if sin_maceta == "suprimir":
             return ([c for c in cajas if c["class"] in clases_planta], [(n, c) for n, c in nuevas if n in clases_planta])

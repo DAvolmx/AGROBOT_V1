@@ -756,9 +756,17 @@ html[data-theme="hud"] .hud-reticula { opacity: .55; }
 .hud-reticula i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
 
 .hud-mini, .hud-lidar {
-  --hud-d: clamp(128px, 20vw, 232px); --hud-d: clamp(128px, 21cqw, 232px);
+  /* 2026-11-11: más chicos y limitados también por la ALTURA: en pantallas bajas o en el celular tapaban la cámara */
+  --hud-d: clamp(92px, min(14vw, 24vh), 184px); --hud-d: clamp(92px, min(15cqw, 24vh), 184px);
   position: absolute; z-index: 6; width: var(--hud-d);
+  opacity: .82; transition: opacity .15s;
 }
+.hud-mini:hover, .hud-lidar:hover, .hud-mini:focus-within, .hud-lidar:focus-within { opacity: 1; }
+/* Botón para ocultar minimapa y LIDAR y ver la cámara entera (se recuerda por navegador) */
+.hud-ocultar { position: absolute; z-index: 7; left: 14px; top: 50px; font-size: 11.5px; padding: 4px 8px; cursor: pointer;
+  background: rgba(2, 14, 8, .78); color: #8dffb8; border: 1px solid rgba(35, 135, 79, .8); border-radius: 2px; letter-spacing: .04em; }
+.hud-ocultar:hover { border-color: var(--accent); }
+.video-wrap.hud-sin-mapas .hud-mini, .video-wrap.hud-sin-mapas .hud-lidar { display: none; }
 .hud-mini { left: 14px; bottom: 14px; } .hud-lidar { right: 14px; top: 14px; }       /* el STOP flotante vive abajo a la derecha: el LIDAR va arriba */
 html[data-theme] .hud-lidar .hud-lidar-wrap { border-radius: 50%; }
 .hud-mini canvas { display: block; width: var(--hud-d); height: var(--hud-d); border-radius: 50%; cursor: pointer; }
@@ -780,8 +788,11 @@ html[data-theme="hud"] .hud-lidar .hud-lidar-wrap::after {
 .cam-radar .cam-card .video-badge { top: 12px; left: 14px; border-radius: 2px; border: 1px solid var(--line-fuerte); }
 @media (max-width: 900px) {
   .cam-radar .cam-card .video-wrap { height: auto; aspect-ratio: 4 / 3; max-height: none; }
-  .hud-mini, .hud-lidar { --hud-d: clamp(84px, 26vw, 140px); }
+  .hud-mini, .hud-lidar { --hud-d: clamp(72px, 21vw, 112px); }
   .hud-mini { left: 8px; bottom: 8px; } .hud-lidar { right: 8px; top: 8px; }
+  .hud-ocultar { left: 8px; top: 42px; font-size: 11px; padding: 3px 6px; }
+  .hud-mini-ctl { margin-top: 3px; gap: 3px; } .hud-mini-ctl button { width: 20px; height: 18px; font-size: 13px; }
+  .hud-mini-ctl span { min-width: 28px; font-size: 11px; }
   .hud-lidar .lidar-caption { display: none; }                      /* el deslizador del alcance se queda: sin él no se puede acercar el radar en pantallas chicas */
   .hud-lidar-ctl { margin-top: 4px; gap: 4px; }
   .hud-lidar-ctl span { min-width: 30px; font-size: 11px; }
@@ -927,6 +938,7 @@ html[data-theme="hud"] nav.sidebar, html[data-theme="hud"] .toast-container .toa
             <img id="video" alt="video en vivo de la cámara del robot">
             <div class="hud-stage-fx" aria-hidden="true"></div>
             <div class="hud-reticula" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <button type="button" class="hud-ocultar" id="hud-ocultar" aria-pressed="false" title="Ocultar o mostrar el minimapa y el LIDAR sobre la cámara">Ocultar mapas</button>
             <div class="hud-mini" id="hud-minimap" title="Minimapa · clic: alternar «rumbo arriba» / «norte arriba»">
               <canvas id="minimap-canvas" width="232" height="232" aria-label="Minimapa del robot"></canvas>
               <div class="hud-mini-ctl"><button type="button" id="mini-zoom-out" aria-label="Alejar el minimapa">−</button><span class="mono" id="mini-escala">6 m</span><button type="button" id="mini-zoom-in" aria-label="Acercar el minimapa">+</button></div>
@@ -2437,6 +2449,26 @@ html[data-theme="hud"] nav.sidebar, html[data-theme="hud"] .toast-container .toa
     miniRumboArriba = localStorage.getItem("agrobot-mini-norte") !== "1";
   } catch (_) {}
   const cssv = (n, r) => CSSVAR(n, r);
+
+  // Ocultar/mostrar minimapa y LIDAR sobre la cámara (2026-11-11)
+  (function () {
+    const btn = $("hud-ocultar"), wrap = $("video-wrap");
+    if (!btn || !wrap) return;
+    const aplicar = (ocultos) => {
+      wrap.classList.toggle("hud-sin-mapas", ocultos);
+      btn.textContent = ocultos ? "Mostrar mapas" : "Ocultar mapas";
+      btn.setAttribute("aria-pressed", String(ocultos));
+      if (!ocultos) requestAnimationFrame(() => { resizeMini(); drawMiniMapa(); if (typeof resizeRadarDash === "function") resizeRadarDash(); });
+    };
+    let ocultos = false;
+    try { ocultos = localStorage.getItem("agrobot-hud-sin-mapas") === "1"; } catch (_) {}
+    aplicar(ocultos);
+    btn.addEventListener("click", () => {
+      ocultos = !wrap.classList.contains("hud-sin-mapas");
+      try { localStorage.setItem("agrobot-hud-sin-mapas", ocultos ? "1" : "0"); } catch (_) {}
+      aplicar(ocultos);
+    });
+  })();
 
   function resizeMini() {
     if (!miniCanvas) return;

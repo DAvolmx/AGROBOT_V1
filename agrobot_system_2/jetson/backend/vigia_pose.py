@@ -78,6 +78,11 @@ class VigiaPose:
         self._t_prev = None
         self._t_odom = None                # último instante con odometría válida
         self.pose = None                   # última pose servida (x, y, th)
+        # 2026-11-11: perdida por CORTE de odometría (reinicio de ROS/EKF). El marco odom y el mapa del SLAM
+        # empiezan de cero, así que la pose conservada ya no se puede comparar con el SLAM nuevo: se acepta el
+        # SLAM en cuanto se mantiene estable `aceptar_s`, sin el límite de `aceptar_max_m` (que protege de saltos
+        # del SLAM dentro del MISMO mapa, como el de 30 m del 27-oct).
+        self._perdida_por_corte = False
         self._sospecha_hasta = -1.0
         self._anclada_desde = None
         self._anclada_m = 0.0
@@ -136,8 +141,10 @@ class VigiaPose:
                     self._anclada_m += d_m
             self._odom_prev, self._t_odom = o, mono
         elif self._t_odom is None or mono - self._t_odom > self.odom_vieja_s:
-            if self.estado != SIN_DATOS and self.estado != PERDIDA and self.ancla is not None:
-                self._a_perdida(mono, "sin odometría")
+            if self.estado != SIN_DATOS and self.ancla is not None:
+                if self.estado != PERDIDA:
+                    self._a_perdida(mono, "sin odometría")
+                self._perdida_por_corte = True
             elif self.ancla is None:
                 self.estado, self.motivo = SIN_DATOS, "sin odometría"
             return self._salida()
@@ -183,6 +190,10 @@ class VigiaPose:
                         self.ancla = a_slam
                         self.cuenta["reubicadas"] += 1
                         self._a_ok(mono, f"el SLAM se reubicó ({dif_m:.2f} m) y se mantuvo {self.aceptar_s:.0f} s")
+                    elif self._perdida_por_corte and self.estado == PERDIDA and mono - self._cand_desde >= self.aceptar_s:
+                        self.ancla = a_slam
+                        self.cuenta["reubicadas"] += 1
+                        self._a_ok(mono, f"tras el corte de odometría se adopta el SLAM nuevo ({dif_m:.2f} m), estable {self.aceptar_s:.0f} s")
 
         # 4) demasiado tiempo / distancia a ciegas
         if self.estado == ANCLADA:
@@ -207,6 +218,7 @@ class VigiaPose:
 
     def _a_ok(self, mono, motivo):
         self._anclada_desde, self._anclada_m, self._cand, self._cand_desde = None, 0.0, None, None
+        self._perdida_por_corte = False
         self._cambiar(mono, OK, motivo)
 
     def _a_anclada(self, mono, motivo):

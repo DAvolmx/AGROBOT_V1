@@ -3,8 +3,8 @@
 ok=0; mal=0
 chk() { if eval "$2" >/dev/null 2>&1; then echo "  OK   $1"; ok=$((ok+1)); else echo "  FALLA $1"; mal=$((mal+1)); fi; }
 echo "Verificación AP en adaptador USB — $(date '+%F %H:%M') (arranque hace $(uptime -p))"
-chk "módulo 8188eu cargado"              "lsmod | grep -q '^8188eu'"
-chk "ap0 existe y es el adaptador USB"   "[ \"\$(basename \$(readlink -f /sys/class/net/ap0/device/driver))\" = 8188eu ]"
+chk "módulo 8188eu o rtl8xxxu cargado"   "lsmod | grep -qE '^(8188eu|rtl8xxxu) '"
+chk "ap0 existe y es el adaptador USB"   "[[ \"\$(basename \$(readlink -f /sys/class/net/ap0/device/driver))\" =~ ^(8188eu|rtl8xxxu)$ ]]"
 chk "ap0 en modo AP con SSID JETSON_AP"  "iw dev ap0 info | grep -q 'ssid JETSON_AP'"
 chk "ap0 tiene 192.168.12.1/24"          "ip -4 -br addr show ap0 | grep -q '192.168.12.1/24'"
 chk "potencia 20 dBm"                    "iw dev ap0 info | grep -q 'txpower 20'"

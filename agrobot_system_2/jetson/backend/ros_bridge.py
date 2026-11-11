@@ -30,6 +30,7 @@ funcionando con el PoseEstimator/LidarReactive caseros de slam.py como
 antes — así el mismo jetson_server.py corre con o sin ROS instalado.
 """
 import base64
+import collections
 import math
 import threading
 import time
@@ -205,6 +206,17 @@ class AgroBotROSBridge:
         if self.available:
             self._node.cancel_nav_goal()
 
+    def metas_terminadas(self) -> list[dict]:
+        """Saca las metas de Nav2 que ya terminaron (éxito, fallo, cancelada, reemplazada o rechazada).
+        Cada una con su objetivo, la pose del robot al enviarla y al terminar (marco `map`) y la duración."""
+        if not self.available:
+            return []
+        out = []
+        cola = self._node.metas_terminadas
+        while cola:
+            out.append(cola.popleft())
+        return out
+
     def estado_meta(self) -> str:
         """Cómo va la última meta enviada a Nav2 (ver _BridgeNode.estado_meta)."""
         if not self.available:
@@ -306,6 +318,9 @@ if ROS_AVAILABLE:
             self._meta_id = 0
             # "sin_meta" | "enviada" | "en_curso" | "exito" | "abortada" | "cancelada" | "rechazada"
             self.estado_meta = "sin_meta"
+            # 2026-11-11: registro de cada meta (antes el resultado solo quedaba en `estado_meta` y se perdía).
+            self._meta_reg = None
+            self.metas_terminadas = collections.deque(maxlen=200)
 
             # ---- TF: pose en el marco `map` para la patrulla ----
             # /odometry/filtered está en `odom`, pero las metas de Nav2 van
@@ -489,8 +504,12 @@ if ROS_AVAILABLE:
             # y Nav2 seguía publicando /cmd_vel después de "cancelar".
             # Cada meta lleva un número: los callbacks de una meta vieja (ya
             # reemplazada) no deben pisar el estado de la actual.
+            if self._meta_reg is not None:
+                self._terminar_meta("reemplazada")
             self._meta_id += 1
             meta_id = self._meta_id
+            self._meta_reg = {"meta_id": meta_id, "x": float(x), "y": float(y), "theta_deg": float(theta_deg),
+                              "t_envio": time.time(), "pose_inicio": self.pose_en_mapa()}
             self.estado_meta = "enviada"
             futuro = self._nav_client.send_goal_async(goal)
             futuro.add_done_callback(lambda f: self._guardar_goal_handle(f, meta_id))
@@ -505,10 +524,12 @@ if ROS_AVAILABLE:
                 self.get_logger().warn(f"Nav2 rechazó la meta: {exc}")
                 self._goal_handle = None
                 self.estado_meta = "rechazada"
+                self._terminar_meta("rechazada")
                 return
             if not handle.accepted:
                 self._goal_handle = None
                 self.estado_meta = "rechazada"
+                self._terminar_meta("rechazada")
                 return
             self._goal_handle = handle
             self.estado_meta = "en_curso"
@@ -526,6 +547,19 @@ if ROS_AVAILABLE:
                 GoalStatus.STATUS_SUCCEEDED: "exito",
                 GoalStatus.STATUS_CANCELED: "cancelada",
             }.get(status, "abortada")
+            self._terminar_meta(self.estado_meta)
+
+        def _terminar_meta(self, resultado: str):
+            """Cierra el registro de la meta actual y lo deja en `metas_terminadas` (lo vacía el backend)."""
+            reg, self._meta_reg = self._meta_reg, None
+            if reg is None:
+                return
+            fin = self.pose_en_mapa()
+            reg.update(resultado=resultado, t_fin=time.time(), pose_fin=fin)
+            reg["duracion_s"] = round(reg["t_fin"] - reg["t_envio"], 1)
+            for k, p in (("dist_inicio_m", reg["pose_inicio"]), ("dist_fin_m", fin)):
+                reg[k] = None if p is None else round(math.hypot(p["x"] - reg["x"], p["y"] - reg["y"]), 2)
+            self.metas_terminadas.append(reg)
 
         def publish_zupt(self):
             msg = Odometry()

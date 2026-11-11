@@ -44,8 +44,13 @@
       "col_planta",
       "col_cogollo",
       "maceta_planta",
-      "maceta"
+      "maceta",
+      "planta"
     ],
+    "usar_contexto": true,
+    "modelo_contexto": "agrobot_contexto.pt",
+    "contexto_conf": 0.4,
+    "contexto_imgsz": 640,
     "modelo_maceta": "agrobot_maceta_det.pt",
     "maceta_conf": 0.3,
     "escanear_al_detectar": "siempre"
@@ -76,6 +81,13 @@
     "prioridad_adelante": true,
     "mx_giro_comp": 0,
     "giro_lazo_cerrado": true,
+    "vigia_pose_activo": true,
+    "giro_objetivo_activo": true,
+    "giro_objetivo_tol_deg": 6.0,
+    "giro_objetivo_tramo_deg": 30.0,
+    "giro_fuerza_aprendida": true,
+    "atasco_escalado": true,
+    "atasco_reintento_s": 90.0,
     "man_retroceso_cm": 29.8,
     "man_atras_pulsos": 2,
     "mx_hueco": false,
@@ -112,7 +124,7 @@
     "guardian_tol_deg": 6.0,
     "guardian_usar_memoria": false,
     "escala_velocidad": 0.5,
-    "distancia_puntos_cm": 490,
+    "distancia_puntos_cm": 290,
     "avance_libre_cm": 100,
     "lado_libre_cm": 60,
     "retroceso_libre_cm": 30,
@@ -143,13 +155,7 @@
     "suelo_modelo": "",
     "camara_como_lidar": true,
     "camara_lidar_solo": false,
-    "camara_obstaculos": true,
-    "vigia_pose_activo": true,
-    "giro_objetivo_activo": true,
-    "giro_objetivo_tol_deg": 6.0,
-    "giro_objetivo_tramo_deg": 30.0,
-    "giro_fuerza_aprendida": true,
-    "atasco_escalado": true
+    "camara_obstaculos": true
   },
   "odometria_webcam": {
     "habilitada": true,
@@ -164,8 +170,8 @@
     "max_omega_rps": 2.0,
     "suavidad_duty": 0.65,
     "suavidad_periodo_s": 0.423,
-    "modo_manejo": "preciso",
-    "entorno_auto": true,
+    "modo_manejo": "exterior",
+    "entorno_auto": false,
     "invertir_giro": true,
     "nav2_v_max_mps": 0.25,
     "nav2_w_max_rps": 0.6,
@@ -176,6 +182,7 @@
   },
   "safety": {
     "freno_lidar_autonomo": false,
+    "vuelco_detector": false,
     "anticolision_activa": true,
     "anticolision_disparo_m": 0.2,
     "anticolision_retroceso_m": 0.08,
@@ -194,8 +201,8 @@
     "mode": "localization",
     "map_name": "agrobot_map",
     "last_goal": {
-      "x": 2.025384970675368,
-      "y": -0.5212364908072127,
+      "x": 0.2420851930717891,
+      "y": -0.12737049960462699,
       "theta_deg": 0.0
     }
   },

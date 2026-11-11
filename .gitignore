@@ -72,3 +72,8 @@ agrobot_system_2/jetson/backend/models/weights/
 # Fotos personales de la casa/huerta (negativos duros): se suben a Kaggle privado, NO a git
 agrobot_system_2/tools/kaggle/plagasx/publicar_negativos/images/
 agrobot_system_2/tools/kaggle/plagasx/publicar_negativos/labels/
+
+# CLIP ViT-B/32 de OpenAI (337 MB): supera el límite de 100 MB por archivo de GitHub. Es público y
+# `especie_clip.py` lo descarga solo con `clip.load("ViT-B/32")` si falta.
+agrobot_system_2/jetson/backend/weights/clip/
+agrobot_system_2/tools/kaggle/macetas/weights/clip/

@@ -1,0 +1,2 @@
+plagasx/: fotos de campo del 12-nov-2026 (col con mosca blanca, col con pudrición) en formato YOLO con 12 aumentaciones por foto de entrenamiento. Índices de clase de PLAGASX: 6 col_pudricion, 7 col_mosca_blanca.
+arandano_negativos/: vivero de Vitro Plantas sin fruto ni plaga (negativos para ARANDANOS v2).

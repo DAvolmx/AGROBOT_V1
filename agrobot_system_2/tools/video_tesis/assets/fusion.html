@@ -1,0 +1,25 @@
+<html><body style="margin:0;background:#fff;font-family:'DejaVu Sans',sans-serif">
+<svg width="1600" height="860" viewBox="0 0 1600 860" xmlns="http://www.w3.org/2000/svg">
+<style>.s{fill:#eef3f8;stroke:#1f4e79;stroke-width:2}.p{fill:#fff4e0;stroke:#b26b00;stroke-width:2}.o{fill:#e8f5ec;stroke:#2e7d4f;stroke-width:2}.t{font:600 22px 'DejaVu Sans';fill:#13324f}.m{font:17px 'DejaVu Sans';fill:#33465a}.h{font:700 26px 'DejaVu Sans';fill:#1f4e79}.a{stroke:#4d6278;stroke-width:2.2;fill:none;marker-end:url(#k)}</style>
+<defs><marker id="k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#4d6278"/></marker></defs>
+<text x="40" y="44" class="h">Sensores</text><text x="560" y="44" class="h">Fusión y estimación</text><text x="1150" y="44" class="h">Uso</text>
+<rect x="30" y="70" width="430" height="88" rx="10" class="s"/><text x="48" y="104" class="t">LIDAR 2D RPLIDAR C1 (10 Hz)</text><text x="48" y="134" class="m">360°, alcance hasta ~12 m</text>
+<rect x="30" y="180" width="430" height="88" rx="10" class="s"/><text x="48" y="214" class="t">IMU MPU6050 (nodo Heltec V3)</text><text x="48" y="244" class="m">giroscopio Z a 20 Hz por UDP</text>
+<rect x="30" y="290" width="430" height="88" rx="10" class="s"/><text x="48" y="324" class="t">Cámara NexiGo N60</text><text x="48" y="354" class="m">640×480 · flujo óptico + visión</text>
+<rect x="30" y="400" width="430" height="88" rx="10" class="s"/><text x="48" y="434" class="t">Órdenes a motores (ESP32-C3)</text><text x="48" y="464" class="m">velocidad pedida (no medida)</text>
+<rect x="30" y="510" width="430" height="88" rx="10" class="s"/><text x="48" y="544" class="t">Detector de reposo (ZUPT)</text><text x="48" y="574" class="m">velocidad cero si está quieto</text>
+<rect x="30" y="660" width="430" height="88" rx="10" class="s"/><text x="48" y="694" class="t">Nodo LoRa (Heltec V3)</text><text x="48" y="724" class="m">telemetría → gateway → Pi</text>
+<rect x="540" y="70" width="500" height="88" rx="10" class="p"/><text x="558" y="104" class="t">rf2o: odometría láser</text><text x="558" y="134" class="m">velocidad de avance vx</text>
+<rect x="540" y="220" width="500" height="250" rx="10" class="p"/><text x="558" y="256" class="t">EKF (robot_localization, 20 Hz)</text>
+<text x="558" y="290" class="m">vx ← rf2o, cámara, ZUPT</text><text x="558" y="318" class="m">ω (giro) ← IMU, cámara, órdenes, ZUPT</text><text x="558" y="346" class="m">modo 2D · publica odom → base_link</text><text x="558" y="386" class="m">pose continua y suave, deriva</text><text x="558" y="412" class="m">lenta que corrige el SLAM</text>
+<rect x="540" y="510" width="500" height="120" rx="10" class="p"/><text x="558" y="546" class="t">slam_toolbox + filtro de scan</text><text x="558" y="578" class="m">mapa de ocupación y map → odom</text><text x="558" y="606" class="m">cierre de bucle</text>
+<rect x="1120" y="70" width="450" height="110" rx="10" class="o"/><text x="1138" y="106" class="t">Vigía de pose</text><text x="1138" y="138" class="m">descarta saltos del SLAM/EKF</text><text x="1138" y="164" class="m">se reubica tras un reinicio</text>
+<rect x="1120" y="220" width="450" height="110" rx="10" class="o"/><text x="1138" y="256" class="t">Explorador y anticolisión</text><text x="1138" y="288" class="m">huecos del LIDAR + sendero (cámara)</text>
+<rect x="1120" y="370" width="450" height="110" rx="10" class="o"/><text x="1138" y="406" class="t">Nav2 (metas en el mapa)</text><text x="1138" y="438" class="m">planificador + DWB</text>
+<rect x="1120" y="520" width="450" height="110" rx="10" class="o"/><text x="1138" y="556" class="t">Visión: plantas y plagas</text><text x="1138" y="588" class="m">YOLO en la Jetson</text>
+<rect x="1120" y="660" width="450" height="88" rx="10" class="o"/><text x="1138" y="694" class="t">Dashboard Pi + alertas</text><text x="1138" y="724" class="m">ChirpStack AU915</text>
+<path d="M460,114 L540,114" class="a"/><path d="M460,124 C500,124 500,560 540,560" class="a"/>
+<path d="M790,158 L790,220" class="a"/><path d="M460,224 L540,300" class="a"/><path d="M460,334 L540,330" class="a"/><path d="M460,444 L540,380" class="a"/><path d="M460,554 L540,430" class="a"/>
+<path d="M790,470 L790,510" class="a"/><path d="M1040,345 C1080,345 1080,125 1120,125" class="a"/><path d="M1040,570 C1080,570 1080,140 1120,140" class="a"/>
+<path d="M1345,180 L1345,220" class="a"/><path d="M1345,330 L1345,370" class="a"/><path d="M460,350 L495,350 L495,645 L1085,645 L1085,580 L1120,580" class="a"/><path d="M460,704 L1120,704" class="a"/>
+</svg></body></html>

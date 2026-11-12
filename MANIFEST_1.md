@@ -5240,3 +5240,25 @@ Sin credenciales. Falta material: planos acotados, PCB, cableado actual y fotos 
   - Medido en la Jetson (FP32, 15 W, con el backend usando la GPU): contexto 640 = 63 ms; PLAGASX 480 = 41 ms; ARANDANOS 960 = 135 ms. FP16 en PyTorch casi no acelera (PyTorch sin núcleos para CC 8.7).
   - ARANDANOS según el tamaño (test de frutos, 143 imágenes): mAP50 de 0,81 a 960 px, 0,70 a 640 y 0,59 a 480.
   - TensorRT y ONNX no están instalados en JetPack R39: es la optimización n.º 1 pendiente.
+
+## 2026-11-12 — Fotos de plagas, reentrenamiento con aumentación, presentación, video e informe final
+- **Fotos del operador (12-nov)** en `~/.agrobot/pruebas/fotos_plagas_20261112/`:
+  - 1–3: col con mosca blanca;
+  - 4: acelga con manchas café (probable cercospora);
+  - 5: col con pudrición.
+  - PLAGASX v8 se equivoca en todas: dice «mildiu» en las 1–3 (mosca blanca solo 0,21 en una), «amarillamiento» en la 4 y «pulgón» en la 5. El clasificador dice mildiu en las 5.
+- **Filtro top-hat para mosca blanca** (`filtro/`, prototipo): resalta las colonias, pero no separa las clases (fotos con mosca blanca 24–72 colonias; sin ella 0–73, por brillos en hojas mojadas). Sirve como apoyo visual y para pre-etiquetar; no como detector ni como entrada a YOLO.
+- **Dataset Kaggle nuevo `davidgomez32/agrobot-campo-20261112`** (código en `tools/kaggle/campo_20261112/`):
+  - `plagasx/`: fotos 1–3 como col_mosca_blanca (7) y la 5 como col_pudricion (6), con 12 aumentaciones por foto de entrenamiento; la 3 va a validación. La acelga queda fuera.
+  - `arandano_negativos/`: 81 negativos de Vitro Plantas.
+- **PLAGASX v10** (versión 10 del kernel `plagasx`, lanzada a las 14:1x UTC): lee las fotos de campo y usa aumentación más fuerte (mixup 0,15, degrees 10, translate 0,12, scale 0,5, shear 2, perspective 0,0005, erasing 0,3). Respaldo del notebook en `~/.agrobot/plagasx.ipynb.pre_v10_20261112`.
+- **ARANDANOS v2** (en cola): agrega los negativos de Vitro ×3 (1 de cada 5 a test, para medir falsos positivos en el vivero real), aumentación más fuerte, y borra el dataset de `/kaggle/working` al terminar. Respaldo en `~/.agrobot/arandanos.py.pre_v2_20261112`.
+- **Cola** `~/.agrobot/colas/cola_entrenos_20261112.sh` (log `.log`): espera a PLAGASX → baja salidas a `~/.agrobot/aprendizaje/plagasx_v10_20261112` → lanza ARANDANOS v2 → baja a `arandanos_v2_20261112`. Si la Jetson se reinicia, la cola muere y hay que relanzarla.
+- **Presentación y video** (`~/video_ldz/build4.py`, salida en `~/video_ldz/salida4/`):
+  - `AgroBot_presentacion_final.pptx`: 17 diapositivas, logo UTA (versión actual de uta.edu.ec), guion en las notas y clips incrustados.
+  - `guion.md`.
+  - `AgroBot_video_tesis.mp4`: voz Piper es_MX, subtítulos y clips reales (robot en Vitro, simulador, inferencias de coles y Vitro).
+  - Gráficos en `~/video_ldz/p4/assets/`: fusión de sensores, redes YOLO11s y YOLOv8s, precisión según resolución, RSSI LoRa y mapas.
+- **Informe final** `docs/INFORME_FINAL_TESIS_20261112/Informe_final_AgroBot.{docx,pdf}` (11 páginas, generado por `generar_informe.py`). La tabla 8 de reentrenamiento se llena cuando exista `metricas_reentrenamiento.json`.
+- Nota: la Jetson arrancó a las 13:52 UTC del 12-nov (otro reinicio). Se perdieron los archivos de la sesión anterior que estaban en `/tmp`.
+- **Video terminado:** 7 min 15 s (435 s), 1920×1080 con audio, 40 MB. Copiado a `docs/INFORME_FINAL_TESIS_20261112/` junto con la presentación (PPTX de 104 MB, que supera el límite de 100 MB de GitHub: no se puede subir así), su PDF, el guion y los subtítulos.

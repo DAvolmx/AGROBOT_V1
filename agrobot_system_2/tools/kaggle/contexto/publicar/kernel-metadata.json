@@ -1,0 +1,20 @@
+{
+ "id": "davidgomez32/agrobot-contexto",
+ "title": "agrobot-contexto",
+ "code_file": "agrobot_contexto.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_tpu": false,
+ "enable_internet": true,
+ "dataset_sources": [
+  "awsaf49/coco-2017-dataset",
+  "davidgomez32/agrobot-yolo-sintetico",
+  "davidgomez32/agrobot-contexto-robot",
+  "cubeai/crop-weed-detection-for-yolov8"
+ ],
+ "kernel_sources": [],
+ "competition_sources": [],
+ "model_sources": []
+}

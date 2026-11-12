@@ -1,0 +1,40 @@
+{
+ "tarea": "plagas",
+ "imgsz": 640,
+ "epocas": 60,
+ "batch": 32,
+ "segundos": 1257,
+ "val": {
+  "mAP50": 0.9473,
+  "mAP50_95": 0.6974,
+  "precision": 0.9431,
+  "recall": 0.9075,
+  "por_clase_mAP50": {
+   "pulgon": 0.8649,
+   "oruga": 0.9936,
+   "escarabajo": 0.9834
+  }
+ },
+ "test": {
+  "mAP50": 0.9273,
+  "mAP50_95": 0.6816,
+  "precision": 0.9312,
+  "recall": 0.8998,
+  "por_clase_mAP50": {
+   "pulgon": 0.8403,
+   "oruga": 0.9941,
+   "escarabajo": 0.9475
+  }
+ },
+ "test_nuevo": {
+  "mAP50": 0.9432,
+  "mAP50_95": 0.6773,
+  "precision": 0.9246,
+  "recall": 0.9135,
+  "por_clase_mAP50": {
+   "pulgon": 0.8532,
+   "oruga": 0.9947,
+   "escarabajo": 0.9815
+  }
+ }
+}

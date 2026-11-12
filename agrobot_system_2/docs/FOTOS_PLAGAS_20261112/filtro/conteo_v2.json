@@ -1,0 +1,92 @@
+{
+ "1.webp": {
+  "puntos": 640,
+  "colonias": 72,
+  "moscas_en_colonias": 539,
+  "densidad": 68.5
+ },
+ "2.webp": {
+  "puntos": 248,
+  "colonias": 24,
+  "moscas_en_colonias": 151,
+  "densidad": 48.3
+ },
+ "3.webp": {
+  "puntos": 495,
+  "colonias": 50,
+  "moscas_en_colonias": 337,
+  "densidad": 51.1
+ },
+ "4.webp": {
+  "puntos": 626,
+  "colonias": 73,
+  "moscas_en_colonias": 537,
+  "densidad": 91.7
+ },
+ "5.webp": {
+  "puntos": 583,
+  "colonias": 68,
+  "moscas_en_colonias": 521,
+  "densidad": 193.1
+ },
+ "10007_1794434965.223222.jpg": {
+  "puntos": 108,
+  "colonias": 14,
+  "moscas_en_colonias": 101,
+  "densidad": 917.5
+ },
+ "11184_1794435026.149758.jpg": {
+  "puntos": 272,
+  "colonias": 31,
+  "moscas_en_colonias": 218,
+  "densidad": 277.0
+ },
+ "12368_1794435088.049160.jpg": {
+  "puntos": 254,
+  "colonias": 27,
+  "moscas_en_colonias": 220,
+  "densidad": 540.6
+ },
+ "13558_1794435149.309678.jpg": {
+  "puntos": 122,
+  "colonias": 15,
+  "moscas_en_colonias": 110,
+  "densidad": 957.1
+ },
+ "14763_1794435211.577525.jpg": {
+  "puntos": 68,
+  "colonias": 6,
+  "moscas_en_colonias": 36,
+  "densidad": 128.4
+ },
+ "15942_1794435272.949275.jpg": {
+  "puntos": 482,
+  "colonias": 61,
+  "moscas_en_colonias": 428,
+  "densidad": 506.5
+ },
+ "17133_1794435334.890746.jpg": {
+  "puntos": 207,
+  "colonias": 24,
+  "moscas_en_colonias": 144,
+  "densidad": 399.5
+ },
+ "3606_1794434635.655341.jpg": {
+  "puntos": 0,
+  "colonias": 0,
+  "moscas_en_colonias": 0,
+  "densidad": 0.0
+ },
+ "4845_1794434699.158700.jpg": {
+  "puntos": 81,
+  "colonias": 9,
+  "moscas_en_colonias": 53,
+  "densidad": 285.8
+ },
+ "6028_1794434759.813561.jpg": {
+  "puntos": 209,
+  "colonias": 26,
+  "moscas_en_colonias": 167,
+  "densidad": 755.5
+ }
+}

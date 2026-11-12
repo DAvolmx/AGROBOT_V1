@@ -1,0 +1,149 @@
+[
+ {
+  "foto": "1.webp",
+  "det": [
+   [
+    "col_mildiu_velloso",
+    0.22
+   ]
+  ],
+  "cls": [
+   [
+    "col_mildiu_velloso",
+    0.96
+   ],
+   [
+    "col_dano_insecto",
+    0.02
+   ],
+   [
+    "col_amarillamiento",
+    0.02
+   ]
+  ],
+  "ctx": [
+   [
+    "planta",
+    0.4
+   ]
+  ]
+ },
+ {
+  "foto": "2.webp",
+  "det": [
+   [
+    "col_mildiu_velloso",
+    0.76
+   ]
+  ],
+  "cls": [
+   [
+    "col_mildiu_velloso",
+    0.98
+   ],
+   [
+    "col_dano_insecto",
+    0.01
+   ],
+   [
+    "col_malformacion",
+    0.01
+   ]
+  ],
+  "ctx": []
+ },
+ {
+  "foto": "3.webp",
+  "det": [
+   [
+    "col_mildiu_velloso",
+    0.34
+   ],
+   [
+    "col_dano_insecto",
+    0.33
+   ],
+   [
+    "col_mosca_blanca",
+    0.21
+   ]
+  ],
+  "cls": [
+   [
+    "col_mildiu_velloso",
+    0.99
+   ],
+   [
+    "col_amarillamiento",
+    0.01
+   ],
+   [
+    "col_dano_insecto",
+    0.0
+   ]
+  ],
+  "ctx": []
+ },
+ {
+  "foto": "4.webp",
+  "det": [
+   [
+    "col_amarillamiento",
+    0.69
+   ]
+  ],
+  "cls": [
+   [
+    "col_mildiu_velloso",
+    1.0
+   ],
+   [
+    "col_dano_insecto",
+    0.0
+   ],
+   [
+    "col_amarillamiento",
+    0.0
+   ]
+  ],
+  "ctx": [
+   [
+    "planta",
+    0.78
+   ],
+   [
+    "planta",
+    0.58
+   ]
+  ]
+ },
+ {
+  "foto": "5.webp",
+  "det": [
+   [
+    "col_pulgon",
+    0.42
+   ]
+  ],
+  "cls": [
+   [
+    "col_mildiu_velloso",
+    1.0
+   ],
+   [
+    "col_amarillamiento",
+    0.0
+   ],
+   [
+    "col_dano_insecto",
+    0.0
+   ]
+  ],
+  "ctx": [
+   [
+    "planta",
+    0.48
+   ]
+  ]
+ }
+]

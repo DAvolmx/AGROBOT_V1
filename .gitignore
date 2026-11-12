@@ -77,3 +77,14 @@ agrobot_system_2/tools/kaggle/plagasx/publicar_negativos/labels/
 # `especie_clip.py` lo descarga solo con `clip.load("ViT-B/32")` si falta.
 agrobot_system_2/jetson/backend/weights/clip/
 agrobot_system_2/tools/kaggle/macetas/weights/clip/
+
+# Presentación con videos incrustados (104 MB) y su PDF: superan los 100 MB de GitHub. Se regeneran con tools/video_tesis/build4.py.
+agrobot_system_2/docs/INFORME_FINAL_TESIS_20261112/AgroBot_presentacion_final.pptx
+agrobot_system_2/docs/INFORME_FINAL_TESIS_20261112/AgroBot_presentacion_final.pdf
+# Copia temporal para subir el dataset a Kaggle (duplica datos/)
+agrobot_system_2/tools/kaggle/campo_20261112/subir_v1/
+# Datasets .npz de más de 100 MB (límite de GitHub): quedan en la Jetson y en Kaggle.
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/datos/real/real.npz
+agrobot_system_2/simulador_pasivo/percepcion_sintetica/datos/real/sendero.npz
+agrobot_system_2/tools/kaggle/sendero/dataset/sendero.npz
+agrobot_system_2/tools/kaggle/sendero/dataset/sintetico.npz

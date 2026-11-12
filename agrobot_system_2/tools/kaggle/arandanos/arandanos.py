@@ -187,6 +187,21 @@ if nav is not None:
         img = leer_redim(f)
         if img is not None: guardar(img, "val" if j % 5 == 0 else "train", f"sendero_{j:04d}", [], "fondo:sendero")
 
+# ---------------- 3b) NEGATIVOS DE CAMPO: vivero de Vitro Plantas (11-nov, sin fruto ni plaga) ----------------
+# v2 (12-nov): en campo el modelo marcaba hojas nuevas y follaje lejano como fruto. Estas fotos entran como fondo (etiqueta vacía),
+# x3 en entrenamiento (original + espejo + brillo distinto). 1 de cada 5 va a test para medir falsos positivos en el vivero real.
+vitro = next((p for p in sorted(ENTRADA.rglob("arandano_negativos")) if p.is_dir() and (p / "images").is_dir()), None)
+print("negativos de Vitro Plantas:", vitro)
+if vitro is not None:
+    for j, f in enumerate(sorted((vitro / "images").glob("*.jpg"))):
+        img = leer_redim(f)
+        if img is None: continue
+        if j % 5 == 0:
+            guardar(img, "test", f"vitro_{j:04d}", [], "fondo:vitro"); continue
+        guardar(img, "train", f"vitro_{j:04d}", [], "fondo:vitro")
+        guardar(cv2.flip(img, 1), "train", f"vitro_{j:04d}_f", [], "fondo:vitro")
+        guardar(cv2.convertScaleAbs(img, alpha=1.15 if j % 2 else 0.85, beta=10 if j % 2 else -10), "train", f"vitro_{j:04d}_b", [], "fondo:vitro")
+
 # ---------------- resumen del dataset ----------------
 df = pd.DataFrame([{"split": s, "origen": o, "imagen": n, **{CLASES[k]: v for k, v in c.items()}} for s, o, n, c in registro]).fillna(0)
 print("\nimágenes por origen y partición:"); display(pd.crosstab(df.origen, df.split, margins=True))
@@ -206,7 +221,8 @@ print("GPUs:", ngpu)
 det = YOLO("yolo11s.pt")
 det.train(data=str(SALIDA / "dataset.yaml"), epochs=250, time=5.0, imgsz=960, batch=16 * max(1, ngpu), patience=40, close_mosaic=15,
           device=dev, project=str(RES / "runs"), name="det", exist_ok=True, verbose=False,
-          hsv_h=.015, hsv_s=.6, hsv_v=.4, fliplr=.5, flipud=.0, mosaic=1.0, mixup=.05, scale=.6)
+          hsv_h=.015, hsv_s=.6, hsv_v=.4, fliplr=.5, flipud=.0, mosaic=1.0, mixup=.1, scale=.6,
+          degrees=8, translate=.12, shear=2, perspective=.0005, erasing=.3)   # v2 (12-nov): aumentación más fuerte
 shutil.copy(RES / "runs" / "det" / "weights" / "best.pt", RES / "arandanos_det_best.pt")     # a salvo antes de evaluar
 mdet = det.val(data=str(SALIDA / "dataset.yaml"), split="test", imgsz=960, project=str(RES / "runs"), name="det_test", exist_ok=True)
 tabla = pd.DataFrame({"clase": [CLASES[int(i)] for i in mdet.box.ap_class_index], "mAP50": mdet.box.ap50.round(3),
@@ -217,6 +233,9 @@ print("\nDETECTOR (test) · mAP50:", round(float(mdet.box.map50), 3), "· mAP50-
 fondos = sorted((SALIDA / "images" / "test").glob("hoja_*.jpg"))
 fp = sum(1 for f in fondos if any(float(b) >= 0.45 for r in det.predict(str(f), verbose=False, conf=0.25, imgsz=960) for b in r.boxes.conf))
 print(f"falsos positivos en {len(fondos)} hojas sanas de test: {fp}")
+vit = sorted((SALIDA / "images" / "test").glob("vitro_*.jpg"))
+fp_vitro = sum(1 for f in vit if any(float(b) >= 0.35 for r in det.predict(str(f), verbose=False, conf=0.25, imgsz=960) for b in r.boxes.conf))
+print(f"fotos del vivero de Vitro Plantas (test) con alguna detección >= 0.35: {fp_vitro}/{len(vit)}")
 # muestra visual
 muestras = [f for f in sorted((SALIDA / "images" / "test").glob("fr_*.jpg"))][:6] + [f for f in sorted((SALIDA / "images" / "test").glob("ip_*.jpg"))][:6]
 fig, axs = plt.subplots(3, 4, figsize=(18, 12))
@@ -226,6 +245,10 @@ fig.tight_layout(); fig.savefig(RES / "02_ejemplos_test.png", dpi=90); plt.show(
 
 (RES / "resumen.json").write_text(json.dumps({"version": "arandanos_v1_20261111", "clases": CLASES, "imgsz": 960,
     "det_map50_test": float(mdet.box.map50), "det_map50_95_test": float(mdet.box.map), "por_clase": tabla.to_dict("records"),
-    "fp_hojas_sanas": [fp, len(fondos)], "imagenes": {f"{s}|{o}": int(n) for (s, o), n in df.groupby(["split", "origen"]).size().items()}},
+    "fp_hojas_sanas": [fp, len(fondos)], "fp_vitro": [fp_vitro, len(vit)], "imagenes": {f"{s}|{o}": int(n) for (s, o), n in df.groupby(["split", "origen"]).size().items()}},
     ensure_ascii=False, indent=1))
 print("\nHECHO. arandanos_det_best.pt, resumen.json y gráficas en", RES)
+
+
+# v2: no dejar el dataset armado en /kaggle/working (con él, `kaggle kernels output` tardaba horas y se colgaba)
+shutil.rmtree(SALIDA, ignore_errors=True)

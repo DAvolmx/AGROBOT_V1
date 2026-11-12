@@ -5262,3 +5262,16 @@ Sin credenciales. Falta material: planos acotados, PCB, cableado actual y fotos 
 - **Informe final** `docs/INFORME_FINAL_TESIS_20261112/Informe_final_AgroBot.{docx,pdf}` (11 páginas, generado por `generar_informe.py`). La tabla 8 de reentrenamiento se llena cuando exista `metricas_reentrenamiento.json`.
 - Nota: la Jetson arrancó a las 13:52 UTC del 12-nov (otro reinicio). Se perdieron los archivos de la sesión anterior que estaban en `/tmp`.
 - **Video terminado:** 7 min 15 s (435 s), 1920×1080 con audio, 40 MB. Copiado a `docs/INFORME_FINAL_TESIS_20261112/` junto con la presentación (PPTX de 104 MB, que supera el límite de 100 MB de GitHub: no se puede subir así), su PDF, el guion y los subtítulos.
+
+## 2026-11-12 (2) — Anexos A–G de la tesis (1 página cada uno)
+- `docs/ANEXOS_TESIS_20261112/`: `ANEXO_{A..G}.{docx,pdf}` y `ANEXOS_AgroBot_A-G.pdf` (7 páginas), generados por `generar_anexos.py`. Cada anexo se armó con tablas y figuras de datos reales.
+- **Revisión frente a los anexos del 8-nov:**
+  - B: el MPU6050 sí funciona (solo el SCD40 está dañado); se agregaron el adaptador USB del AP y los enlaces con su seguridad ante fallas.
+  - C: ARANDANOS, contexto, PLAGASX v10, aumentación y fotos de campo.
+  - E: E-4, E-5, L-2 y L-3.
+  - D, F y G son nuevos: simulación, trazabilidad con commits y sha256, radio y normativa.
+- Las tablas usan anchos fijos y las filas no se parten entre páginas (LibreOffice ignoraba los anchos de python-docx).
+- **Pendientes que los anexos declaran:**
+  - A: plano acotado, PCB, cableado actual y masa real.
+  - C: métricas de v10.
+  - G: norma de ARCOTEL sobre potencia UDBL y medición a 2–3 km.
